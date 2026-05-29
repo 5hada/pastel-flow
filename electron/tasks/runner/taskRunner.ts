@@ -23,6 +23,10 @@ export function createTaskRunner({
     async runTask(id) {
       const task = await taskStore.getTask(id)
       const adapter = adapterRegistry.getAdapter(task.type)
+      let resolveRunStateSaved: () => void = () => undefined
+      const runStateSaved = new Promise<void>((resolve) => {
+        resolveRunStateSaved = resolve
+      })
 
       try {
         await adapter.validateConfig(task.config)
@@ -30,23 +34,39 @@ export function createTaskRunner({
           task,
           deviceId,
           dataDir,
+          async updateState(state) {
+            await runStateSaved
+            const currentTask = await taskStore.getTask(task.id)
+            await taskStore.updateTask(task.id, {
+              state: {
+                ...currentTask.state,
+                ...(state as Partial<TaskState>),
+              },
+            })
+          },
         })
         const resultState = result.state as Partial<TaskState>
 
-        return taskStore.updateTask(task.id, {
+        const updatedTask = await taskStore.updateTask(task.id, {
           state: {
             ...task.state,
             ...resultState,
           },
         })
+        resolveRunStateSaved()
+
+        return updatedTask
       } catch (error) {
-        return taskStore.updateTask(task.id, {
+        const updatedTask = await taskStore.updateTask(task.id, {
           state: {
             ...task.state,
             status: 'failed',
             lastError: getErrorMessage(error),
           },
         })
+        resolveRunStateSaved()
+
+        return updatedTask
       }
     },
   }

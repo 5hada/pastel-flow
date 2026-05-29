@@ -8,7 +8,7 @@
 - Renderer: React + TypeScript
 - 번들러/개발 서버: Vite
 - 초기 저장 방식: Electron `userData` 경로의 `tasks.json`
-- 현재 MVP: 브라우저 탭 그룹 템플릿 생성, 수정, 삭제, 저장, 목록 표시
+- 현재 MVP: 브라우저 탭 그룹 템플릿 생성, 수정, 삭제, 저장, 실행, 목록 표시
 - 현재 브라우저 실행 기본값: `dedicated_profile`
 
 ## 2. 책임 경계
@@ -52,7 +52,8 @@ electron/
   tasks/
     adapters/
       taskAdapter.ts              작업 adapter 공통 인터페이스
-      browserTabGroupAdapter.ts   브라우저 탭 그룹 adapter 자리
+      browserExecutableFinder.ts  Chrome, Edge, Chromium 실행 파일 탐색
+      browserTabGroupAdapter.ts   전용 프로필 디렉터리 준비와 브라우저 프로세스 실행
       taskAdapterRegistry.ts      작업 타입별 adapter 조회
     ipc/
       taskIpc.ts                  tasks:list/create/update/delete IPC 등록
@@ -91,7 +92,9 @@ App.tsx
   -> Electron userData/tasks.json
 ```
 
-현재 UI는 브라우저 탭 그룹 생성, 수정, 삭제, 실행, 목록 표시를 지원한다. 이름, 브라우저 종류, 실행 방식, 초기 URL 목록을 renderer에서 편집하고 `tasks.json`에 저장한다. 실행은 아직 실제 브라우저 프로세스를 열지 않고, `dedicated_profile` 실행 방식에서 전용 프로필 디렉터리 생성과 상태 저장까지만 처리한다.
+현재 UI는 브라우저 탭 그룹 생성, 수정, 삭제, 실행, 목록 표시를 지원한다. 이름, 브라우저 종류, 실행 방식, 초기 URL 목록을 renderer에서 편집하고 `tasks.json`에 저장한다. `dedicated_profile` 실행 방식에서는 전용 프로필 디렉터리를 만든 뒤 Chrome, Edge, Chromium 실행 파일을 찾아 `--user-data-dir` 인자로 브라우저 프로세스를 연다. 초기 URL이 있으면 브라우저 실행 인자로 같이 전달한다.
+
+작업 adapter는 `TaskRunContext.updateState`를 통해 실행 이후의 비동기 상태 변화를 저장할 수 있다. 브라우저 탭 그룹 adapter는 브라우저 프로세스 종료 이벤트를 감지해 정상 종료 시 `idle`, 비정상 종료 시 `failed`와 오류 메시지를 저장한다. renderer는 별도 Node/Electron API를 쓰지 않고, 저장된 상태를 목록 재조회 또는 작업 실행 결과로 표시한다.
 
 ## 5. 다음 구현 위치
 

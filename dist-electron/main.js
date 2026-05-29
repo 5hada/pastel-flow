@@ -1,7 +1,9 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { mkdir, writeFile, readFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile, access } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { constants } from "node:fs";
 import { randomUUID } from "node:crypto";
 function registerAppSettingsIpc(ipcMain2, appSettingsStore) {
   ipcMain2.handle("settings:get", () => appSettingsStore.getSnapshot());
@@ -101,6 +103,153 @@ function isRestorePolicy(value) {
 function isBrowserRunMode(value) {
   return value === "dedicated_profile" || value === "extension_controlled" || value === "default_browser_deeplink";
 }
+async function findBrowserExecutable(browserKind) {
+  const displayName = getBrowserDisplayName(browserKind);
+  const candidates = dedupe([
+    ...getKnownBrowserPaths(browserKind),
+    ...getPathBrowserCandidates(browserKind)
+  ]);
+  for (const candidate of candidates) {
+    if (await pathExists(candidate)) {
+      return {
+        displayName,
+        path: candidate
+      };
+    }
+  }
+  throw new Error(
+    `${displayName} 실행 파일을 찾지 못했습니다. 브라우저가 설치되어 있는지 확인하거나 작업의 브라우저 종류를 변경해 주세요.`
+  );
+}
+function getBrowserDisplayName(browserKind) {
+  switch (browserKind) {
+    case "chrome":
+      return "Chrome";
+    case "edge":
+      return "Edge";
+    case "chromium":
+      return "Chromium";
+  }
+}
+function getKnownBrowserPaths(browserKind) {
+  if (process.platform === "win32") {
+    return getWindowsBrowserPaths(browserKind);
+  }
+  if (process.platform === "darwin") {
+    return getMacBrowserPaths(browserKind);
+  }
+  return getLinuxBrowserPaths(browserKind);
+}
+function getWindowsBrowserPaths(browserKind) {
+  const localAppData = process.env["LOCALAPPDATA"];
+  const programFiles = process.env["ProgramFiles"];
+  const programFilesX86 = process.env["ProgramFiles(x86)"];
+  switch (browserKind) {
+    case "chrome":
+      return joinExistingRoots(
+        [localAppData, programFiles, programFilesX86],
+        "Google\\Chrome\\Application\\chrome.exe"
+      );
+    case "edge":
+      return joinExistingRoots(
+        [programFilesX86, programFiles, localAppData],
+        "Microsoft\\Edge\\Application\\msedge.exe"
+      );
+    case "chromium":
+      return joinExistingRoots(
+        [localAppData, programFiles, programFilesX86],
+        "Chromium\\Application\\chrome.exe"
+      );
+  }
+}
+function getMacBrowserPaths(browserKind) {
+  switch (browserKind) {
+    case "chrome":
+      return [
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        path.join(
+          process.env["HOME"] ?? "",
+          "Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        )
+      ];
+    case "edge":
+      return [
+        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+        path.join(
+          process.env["HOME"] ?? "",
+          "Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+        )
+      ];
+    case "chromium":
+      return [
+        "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        path.join(
+          process.env["HOME"] ?? "",
+          "Applications/Chromium.app/Contents/MacOS/Chromium"
+        )
+      ];
+  }
+}
+function getLinuxBrowserPaths(browserKind) {
+  switch (browserKind) {
+    case "chrome":
+      return [
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/snap/bin/chromium"
+      ];
+    case "edge":
+      return [
+        "/usr/bin/microsoft-edge",
+        "/usr/bin/microsoft-edge-stable"
+      ];
+    case "chromium":
+      return [
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/snap/bin/chromium"
+      ];
+  }
+}
+function getPathBrowserCandidates(browserKind) {
+  const pathDirectories = (process.env["PATH"] ?? "").split(path.delimiter).filter(Boolean);
+  const executableNames = getBrowserExecutableNames(browserKind);
+  return pathDirectories.flatMap(
+    (directory) => executableNames.map((executableName) => path.join(directory, executableName))
+  );
+}
+function getBrowserExecutableNames(browserKind) {
+  const extensionSuffixes = process.platform === "win32" ? (process.env["PATHEXT"] ?? ".EXE").split(";").filter(Boolean).map((extension) => extension.toLowerCase()) : [""];
+  const baseNames = (() => {
+    switch (browserKind) {
+      case "chrome":
+        return ["chrome", "google-chrome", "google-chrome-stable"];
+      case "edge":
+        return ["msedge", "microsoft-edge", "microsoft-edge-stable"];
+      case "chromium":
+        return ["chromium", "chromium-browser", "chrome"];
+    }
+  })();
+  return baseNames.flatMap(
+    (baseName) => extensionSuffixes.map(
+      (extension) => baseName.toLowerCase().endsWith(extension) ? baseName : `${baseName}${extension}`
+    )
+  );
+}
+function joinExistingRoots(roots, leaf) {
+  return roots.filter((root) => Boolean(root)).map((root) => path.join(root, leaf));
+}
+function dedupe(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+async function pathExists(value) {
+  try {
+    await access(value, constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
 const browserTabGroupAdapter = {
   type: "browser_tab_group",
   validateConfig(config) {
@@ -109,7 +258,7 @@ const browserTabGroupAdapter = {
       throw new Error("Browser tab group tasks require a profileId.");
     }
   },
-  async run({ dataDir, task }) {
+  async run({ dataDir, task, updateState }) {
     const config = normalizeBrowserTabGroupConfig(task.config);
     if (config.runMode !== "dedicated_profile") {
       throw new Error(
@@ -122,6 +271,18 @@ const browserTabGroupAdapter = {
       config.profileId
     );
     await mkdir(localProfilePath, { recursive: true });
+    const browserExecutable = await findBrowserExecutable(config.browserKind);
+    const browserProcess = await launchBrowser(browserExecutable.path, [
+      `--user-data-dir=${localProfilePath}`,
+      "--no-first-run",
+      "--new-window",
+      ...config.initialUrls
+    ]);
+    browserProcess.once("exit", (code, signal) => {
+      void updateState(
+        getBrowserExitState(browserExecutable.displayName, code, signal)
+      );
+    });
     return {
       state: {
         ...task.state,
@@ -130,10 +291,40 @@ const browserTabGroupAdapter = {
         lastError: void 0,
         localProfilePath
       },
-      message: "브라우저 프로필 디렉터리를 준비했습니다."
+      message: `${browserExecutable.displayName}을 전용 프로필로 실행했습니다.`
     };
   }
 };
+async function launchBrowser(executablePath, args) {
+  const browserProcess = spawn(executablePath, args, {
+    detached: true,
+    stdio: "ignore"
+  });
+  await new Promise((resolve, reject) => {
+    browserProcess.once("error", reject);
+    browserProcess.once("spawn", resolve);
+  });
+  browserProcess.unref();
+  return browserProcess;
+}
+function getBrowserExitState(displayName, code, signal) {
+  if (signal) {
+    return {
+      status: "failed",
+      lastError: `${displayName} 프로세스가 ${signal} 신호로 종료되었습니다.`
+    };
+  }
+  if (code === null || code === 0) {
+    return {
+      status: "idle",
+      lastError: void 0
+    };
+  }
+  return {
+    status: "failed",
+    lastError: `${displayName} 프로세스가 오류 코드 ${code}로 종료되었습니다.`
+  };
+}
 function createTaskAdapterRegistry(adapters) {
   const adaptersByType = /* @__PURE__ */ new Map();
   for (const adapter of adapters) {
@@ -169,28 +360,46 @@ function createTaskRunner({
     async runTask(id) {
       const task = await taskStore.getTask(id);
       const adapter = adapterRegistry.getAdapter(task.type);
+      let resolveRunStateSaved = () => void 0;
+      const runStateSaved = new Promise((resolve) => {
+        resolveRunStateSaved = resolve;
+      });
       try {
         await adapter.validateConfig(task.config);
         const result = await adapter.run({
           task,
           deviceId,
-          dataDir
+          dataDir,
+          async updateState(state) {
+            await runStateSaved;
+            const currentTask = await taskStore.getTask(task.id);
+            await taskStore.updateTask(task.id, {
+              state: {
+                ...currentTask.state,
+                ...state
+              }
+            });
+          }
         });
         const resultState = result.state;
-        return taskStore.updateTask(task.id, {
+        const updatedTask = await taskStore.updateTask(task.id, {
           state: {
             ...task.state,
             ...resultState
           }
         });
+        resolveRunStateSaved();
+        return updatedTask;
       } catch (error) {
-        return taskStore.updateTask(task.id, {
+        const updatedTask = await taskStore.updateTask(task.id, {
           state: {
             ...task.state,
             status: "failed",
             lastError: getErrorMessage(error)
           }
         });
+        resolveRunStateSaved();
+        return updatedTask;
       }
     }
   };

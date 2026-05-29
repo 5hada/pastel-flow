@@ -4,6 +4,7 @@ export type TaskRunContext<TConfig = unknown, TState = unknown> = {
   task: TaskTemplate<TConfig, TState>
   deviceId: string
   dataDir: string
+  updateState(state: Partial<TState>): Promise<void>
 }
 
 export type TaskRunResult<TState = unknown> = {

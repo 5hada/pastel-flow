@@ -14,6 +14,35 @@
   box-sizing: border-box;
 }
 
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-muted, #687386) 46%, transparent)
+    transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background:
+    color-mix(in srgb, var(--text-muted, #687386) 38%, transparent)
+    padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background:
+    color-mix(in srgb, var(--text-muted, #687386) 58%, transparent)
+    padding-box;
+}
+
 body {
   min-width: 320px;
   min-height: 100vh;

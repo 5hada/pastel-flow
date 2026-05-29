@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, safeStorage, ipcMain } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -20,7 +20,7 @@ function createDeviceStore({ dataDir }) {
       }
       return null;
     } catch (error) {
-      if (isNodeError$3(error) && error.code === "ENOENT") {
+      if (isNodeError$4(error) && error.code === "ENOENT") {
         return null;
       }
       throw error;
@@ -50,24 +50,48 @@ function createDeviceStore({ dataDir }) {
     }
   };
 }
-function isNodeError$3(error) {
+function isNodeError$4(error) {
   return error instanceof Error && "code" in error;
 }
-function registerSecretIpc(ipcMain2, secretStore) {
+function registerSecretIpc(ipcMain2, secretStore, taskStore) {
   ipcMain2.handle("secrets:list", () => secretStore.listSecrets());
   ipcMain2.handle(
     "secrets:create",
     (_event, input) => secretStore.createSecret(input)
   );
-  ipcMain2.handle(
-    "secrets:delete",
-    (_event, id) => secretStore.deleteSecret(id)
+  ipcMain2.handle("secrets:delete", async (_event, id) => {
+    await secretStore.deleteSecret(id);
+    await removeSecretRefsFromTasks(taskStore, id);
+  });
+}
+async function removeSecretRefsFromTasks(taskStore, secretId) {
+  const tasks = await taskStore.listTasks();
+  await Promise.all(
+    tasks.map(async (task) => {
+      var _a, _b;
+      const secretRefs = (_a = task.permissions.secretRefs) == null ? void 0 : _a.filter(
+        (secretRef) => secretRef.id !== secretId
+      );
+      if ((secretRefs == null ? void 0 : secretRefs.length) === ((_b = task.permissions.secretRefs) == null ? void 0 : _b.length)) {
+        return;
+      }
+      await taskStore.updateTask(task.id, {
+        permissions: {
+          ...task.permissions,
+          secretRefs
+        }
+      });
+    })
   );
 }
 function normalizeLocalSecretName(value) {
   return value.trim();
 }
-function createSecretStore({ dataDir }) {
+function createSecretStore({
+  dataDir,
+  encrypt,
+  encryptionAvailable
+}) {
   const secretsFilePath = path.join(dataDir, "secrets.json");
   async function readSecretFile() {
     try {
@@ -77,7 +101,7 @@ function createSecretStore({ dataDir }) {
         secrets: Array.isArray(parsed.secrets) ? parsed.secrets : []
       };
     } catch (error) {
-      if (isNodeError$2(error) && error.code === "ENOENT") {
+      if (isNodeError$3(error) && error.code === "ENOENT") {
         return { secrets: [] };
       }
       throw error;
@@ -92,9 +116,33 @@ function createSecretStore({ dataDir }) {
       "utf8"
     );
   }
+  async function readMigratedSecretFile() {
+    const secretFile = await readSecretFile();
+    if (!encryptionAvailable) {
+      return secretFile;
+    }
+    let didMigrate = false;
+    const secrets = secretFile.secrets.map((secret) => {
+      if (!secret.value || secret.encryptedValue) {
+        return secret;
+      }
+      didMigrate = true;
+      return {
+        ...secret,
+        value: void 0,
+        encryptedValue: encrypt(secret.value),
+        storage: "electron_safe_storage",
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    });
+    if (didMigrate) {
+      await writeSecretFile({ secrets });
+    }
+    return { secrets };
+  }
   return {
     async listSecrets() {
-      const secretFile = await readSecretFile();
+      const secretFile = await readMigratedSecretFile();
       return secretFile.secrets.map(toMetadata);
     },
     async createSecret(input) {
@@ -104,23 +152,29 @@ function createSecretStore({ dataDir }) {
       if (!name || !value) {
         throw new Error("Secret 이름과 값이 필요합니다.");
       }
+      if (!encryptionAvailable) {
+        throw new Error(
+          "이 기기에서는 Secret 암호화 저장을 사용할 수 없습니다."
+        );
+      }
       const now = (/* @__PURE__ */ new Date()).toISOString();
       const secret = {
         id: randomUUID(),
         name,
-        value,
+        encryptedValue: encrypt(value),
+        storage: "electron_safe_storage",
         description: ((_a = input.description) == null ? void 0 : _a.trim()) || void 0,
         createdAt: now,
         updatedAt: now
       };
-      const secretFile = await readSecretFile();
+      const secretFile = await readMigratedSecretFile();
       await writeSecretFile({
         secrets: [...secretFile.secrets, secret]
       });
       return toMetadata(secret);
     },
     async deleteSecret(id) {
-      const secretFile = await readSecretFile();
+      const secretFile = await readMigratedSecretFile();
       await writeSecretFile({
         secrets: secretFile.secrets.filter((secret) => secret.id !== id)
       });
@@ -136,7 +190,7 @@ function toMetadata(secret) {
     updatedAt: secret.updatedAt
   };
 }
-function isNodeError$2(error) {
+function isNodeError$3(error) {
   return error instanceof Error && "code" in error;
 }
 function registerAppSettingsIpc(ipcMain2, appSettingsStore, deviceStore) {
@@ -176,6 +230,7 @@ const defaultAppSettings = {
   defaultBrowserKind: "chrome",
   defaultTaskName: "새 브라우저 작업",
   initialUrlInputMode: "line",
+  taskListDisplayMode: "grid",
   browserExecutablePaths: {},
   linkedDevices: []
 };
@@ -185,6 +240,7 @@ function normalizeAppSettings(settings) {
     defaultBrowserKind: isBrowserKind$1(settings == null ? void 0 : settings.defaultBrowserKind) ? settings.defaultBrowserKind : defaultAppSettings.defaultBrowserKind,
     defaultTaskName: typeof (settings == null ? void 0 : settings.defaultTaskName) === "string" && settings.defaultTaskName.trim() ? settings.defaultTaskName.trim() : defaultAppSettings.defaultTaskName,
     initialUrlInputMode: (settings == null ? void 0 : settings.initialUrlInputMode) === "line" ? settings.initialUrlInputMode : defaultAppSettings.initialUrlInputMode,
+    taskListDisplayMode: isTaskListDisplayMode(settings == null ? void 0 : settings.taskListDisplayMode) ? settings.taskListDisplayMode : defaultAppSettings.taskListDisplayMode,
     browserExecutablePaths: normalizeBrowserExecutablePaths(
       settings == null ? void 0 : settings.browserExecutablePaths
     ),
@@ -220,6 +276,9 @@ function isThemeMode(value) {
 function isBrowserKind$1(value) {
   return value === "chrome" || value === "edge" || value === "chromium";
 }
+function isTaskListDisplayMode(value) {
+  return value === "grid" || value === "list";
+}
 function createAppSettingsStore({
   dataDir
 }) {
@@ -230,7 +289,7 @@ function createAppSettingsStore({
       const parsed = JSON.parse(raw);
       return normalizeAppSettings(parsed.settings);
     } catch (error) {
-      if (isNodeError$1(error) && error.code === "ENOENT") {
+      if (isNodeError$2(error) && error.code === "ENOENT") {
         return defaultAppSettings;
       }
       throw error;
@@ -262,7 +321,7 @@ function createAppSettingsStore({
     }
   };
 }
-function isNodeError$1(error) {
+function isNodeError$2(error) {
   return error instanceof Error && "code" in error;
 }
 const defaultDevicePolicy = {
@@ -273,13 +332,15 @@ const defaultTaskState = {
   status: "idle"
 };
 const defaultBrowserRunMode = "dedicated_profile";
+const defaultDynamicTemplateUpdates = false;
 function normalizeBrowserTabGroupConfig(config) {
   return {
     profileId: config.profileId ?? "",
     initialUrls: Array.isArray(config.initialUrls) ? config.initialUrls : [],
     browserKind: isBrowserKind(config.browserKind) ? config.browserKind : "chrome",
     restorePolicy: isRestorePolicy(config.restorePolicy) ? config.restorePolicy : "browser_profile",
-    runMode: isBrowserRunMode(config.runMode) ? config.runMode : defaultBrowserRunMode
+    runMode: isBrowserRunMode(config.runMode) ? config.runMode : defaultBrowserRunMode,
+    dynamicTemplateUpdates: typeof config.dynamicTemplateUpdates === "boolean" ? config.dynamicTemplateUpdates : defaultDynamicTemplateUpdates
   };
 }
 function normalizeDevicePolicy(policy) {
@@ -377,7 +438,7 @@ async function findBrowserExecutable(browserKind, executablePaths = {}) {
       `${displayName} 실행 파일 경로가 올바르지 않습니다: ${configuredPath}`
     );
   }
-  const candidates = dedupe([
+  const candidates = dedupe$1([
     ...getKnownBrowserPaths(browserKind),
     ...getPathBrowserCandidates(browserKind)
   ]);
@@ -511,7 +572,7 @@ function getBrowserExecutableNames(browserKind) {
 function joinExistingRoots(roots, leaf) {
   return roots.filter((root) => Boolean(root)).map((root) => path.join(root, leaf));
 }
-function dedupe(values) {
+function dedupe$1(values) {
   return [...new Set(values.filter(Boolean))];
 }
 async function pathExists(value) {
@@ -530,7 +591,7 @@ const browserTabGroupAdapter = {
       throw new Error("Browser tab group tasks require a profileId.");
     }
   },
-  async run({ appSettings, dataDir, task, updateState }) {
+  async run({ appSettings, dataDir, task, updateConfig, updateState }) {
     const config = normalizeBrowserTabGroupConfig(task.config);
     if (config.runMode !== "dedicated_profile") {
       throw new Error(
@@ -547,16 +608,31 @@ const browserTabGroupAdapter = {
       config.browserKind,
       appSettings.browserExecutablePaths
     );
+    const remoteDebuggingPort = config.dynamicTemplateUpdates ? getRemoteDebuggingPort(task.id) : null;
     const browserProcess = await launchBrowser(browserExecutable.path, [
       `--user-data-dir=${localProfilePath}`,
       "--no-first-run",
       "--new-window",
+      ...remoteDebuggingPort ? [`--remote-debugging-port=${remoteDebuggingPort}`] : [],
       ...config.initialUrls
     ]);
+    const tabUrlSnapshotter = remoteDebuggingPort ? startTabUrlSnapshotter(remoteDebuggingPort) : null;
     browserProcess.once("exit", (code, signal) => {
-      void updateState(
-        getBrowserExitState(browserExecutable.displayName, code, signal)
-      );
+      void (async () => {
+        const openUrls = (tabUrlSnapshotter == null ? void 0 : tabUrlSnapshotter.stop()) ?? [];
+        const nextState = getBrowserExitState(
+          browserExecutable.displayName,
+          code,
+          signal
+        );
+        if (openUrls.length > 0 && nextState.status !== "failed") {
+          await updateConfig({
+            ...config,
+            initialUrls: openUrls
+          });
+        }
+        await updateState(nextState);
+      })();
     });
     return {
       state: {
@@ -600,6 +676,52 @@ function getBrowserExitState(displayName, code, signal) {
     lastError: `${displayName} 프로세스가 오류 코드 ${code}로 종료되었습니다.`
   };
 }
+function getRemoteDebuggingPort(taskId) {
+  const hash = [...taskId].reduce(
+    (currentHash, character) => (currentHash * 31 + character.charCodeAt(0)) % 1e3,
+    0
+  );
+  return 9200 + hash;
+}
+function startTabUrlSnapshotter(port) {
+  let latestUrls = [];
+  const interval = setInterval(() => {
+    void readOpenTabUrls(port).then((urls) => {
+      if (urls.length > 0) {
+        latestUrls = urls;
+      }
+    });
+  }, 2e3);
+  return {
+    stop() {
+      clearInterval(interval);
+      return latestUrls;
+    }
+  };
+}
+async function readOpenTabUrls(port) {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/json/list`);
+    if (!response.ok) {
+      return [];
+    }
+    const targets = await response.json();
+    return dedupe(
+      targets.filter((target) => target.type === "page").map((target) => {
+        var _a;
+        return ((_a = target.url) == null ? void 0 : _a.trim()) ?? "";
+      }).filter(isTemplateUrl)
+    );
+  } catch {
+    return [];
+  }
+}
+function isTemplateUrl(value) {
+  return Boolean(value) && !value.startsWith("devtools://") && !value.startsWith("chrome://") && !value.startsWith("edge://") && value !== "about:blank";
+}
+function dedupe(values) {
+  return [...new Set(values)];
+}
 function createTaskAdapterRegistry(adapters) {
   const adaptersByType = /* @__PURE__ */ new Map();
   for (const adapter of adapters) {
@@ -615,7 +737,7 @@ function createTaskAdapterRegistry(adapters) {
     }
   };
 }
-function registerTaskIpc(ipcMain2, taskStore, taskRunner, appSettingsStore, deviceStore) {
+function registerTaskIpc(ipcMain2, taskStore, taskRunner, taskRunEventStore, appSettingsStore, deviceStore) {
   ipcMain2.handle("tasks:list", async () => {
     const [tasks, currentDevice, appSettingsSnapshot] = await Promise.all([
       taskStore.listTasks(),
@@ -629,6 +751,27 @@ function registerTaskIpc(ipcMain2, taskStore, taskRunner, appSettingsStore, devi
         appSettingsSnapshot.settings.linkedDevices
       )
     );
+  });
+  ipcMain2.handle("tasks:list-events", async (_event, taskId) => {
+    const [tasks, currentDevice, appSettingsSnapshot] = await Promise.all([
+      taskStore.listTasks(),
+      deviceStore.getCurrentDevice(),
+      appSettingsStore.getSnapshot()
+    ]);
+    const visibleTaskIds = new Set(
+      tasks.filter(
+        (task) => canViewTaskOnDevice(
+          task,
+          currentDevice,
+          appSettingsSnapshot.settings.linkedDevices
+        )
+      ).map((task) => task.id)
+    );
+    if (taskId && !visibleTaskIds.has(taskId)) {
+      return [];
+    }
+    const events = await taskRunEventStore.listEvents(taskId);
+    return events.filter((event) => visibleTaskIds.has(event.taskId));
   });
   ipcMain2.handle("tasks:create", async (_event, input) => {
     const currentDevice = await deviceStore.getCurrentDevice();
@@ -685,6 +828,7 @@ function registerTaskIpc(ipcMain2, taskStore, taskRunner, appSettingsStore, devi
 }
 function createTaskRunner({
   taskStore,
+  taskRunEventStore,
   appSettingsStore,
   adapterRegistry,
   dataDir,
@@ -700,6 +844,12 @@ function createTaskRunner({
         resolveRunStateSaved = resolve;
       });
       try {
+        await taskRunEventStore.appendEvent({
+          taskId: task.id,
+          deviceId,
+          status: "running",
+          message: "작업 실행을 시작했습니다."
+        });
         await adapter.validateConfig(task.config);
         const appSettingsSnapshot = await appSettingsStore.getSnapshot();
         const result = await adapter.run({
@@ -707,6 +857,19 @@ function createTaskRunner({
           deviceId,
           dataDir,
           appSettings: appSettingsSnapshot.settings,
+          async updateConfig(config) {
+            await runStateSaved;
+            const updatedTask2 = await taskStore.updateTask(task.id, {
+              config
+            });
+            await taskRunEventStore.appendEvent({
+              taskId: task.id,
+              deviceId,
+              status: updatedTask2.state.status,
+              message: "브라우저 탭 변경사항을 템플릿에 반영했습니다."
+            });
+            onTaskUpdated == null ? void 0 : onTaskUpdated(updatedTask2);
+          },
           async updateState(state) {
             await runStateSaved;
             const currentTask = await taskStore.getTask(task.id);
@@ -715,6 +878,12 @@ function createTaskRunner({
                 ...currentTask.state,
                 ...state
               }
+            });
+            await taskRunEventStore.appendEvent({
+              taskId: task.id,
+              deviceId,
+              status: updatedTask2.state.status,
+              message: updatedTask2.state.lastError ?? "작업 상태가 변경되었습니다."
             });
             onTaskUpdated == null ? void 0 : onTaskUpdated(updatedTask2);
           }
@@ -726,16 +895,29 @@ function createTaskRunner({
             ...resultState
           }
         });
+        await taskRunEventStore.appendEvent({
+          taskId: task.id,
+          deviceId,
+          status: updatedTask.state.status,
+          message: result.message ?? "작업 실행 요청을 처리했습니다."
+        });
         resolveRunStateSaved();
         onTaskUpdated == null ? void 0 : onTaskUpdated(updatedTask);
         return updatedTask;
       } catch (error) {
+        const message = getErrorMessage(error);
         const updatedTask = await taskStore.updateTask(task.id, {
           state: {
             ...task.state,
             status: "failed",
-            lastError: getErrorMessage(error)
+            lastError: message
           }
+        });
+        await taskRunEventStore.appendEvent({
+          taskId: task.id,
+          deviceId,
+          status: "failed",
+          message
         });
         resolveRunStateSaved();
         onTaskUpdated == null ? void 0 : onTaskUpdated(updatedTask);
@@ -749,6 +931,58 @@ function getErrorMessage(error) {
     return error.message;
   }
   return "알 수 없는 실행 오류가 발생했습니다.";
+}
+function createTaskRunEventStore({
+  dataDir
+}) {
+  const eventsFilePath = path.join(dataDir, "taskRunEvents.json");
+  async function readEventFile() {
+    try {
+      const raw = await readFile(eventsFilePath, "utf8");
+      const parsed = JSON.parse(raw);
+      return {
+        events: Array.isArray(parsed.events) ? parsed.events : []
+      };
+    } catch (error) {
+      if (isNodeError$1(error) && error.code === "ENOENT") {
+        return { events: [] };
+      }
+      throw error;
+    }
+  }
+  async function writeEventFile(eventFile) {
+    await mkdir(dataDir, { recursive: true });
+    await writeFile(
+      eventsFilePath,
+      `${JSON.stringify(eventFile, null, 2)}
+`,
+      "utf8"
+    );
+  }
+  return {
+    async listEvents(taskId) {
+      const eventFile = await readEventFile();
+      return eventFile.events.filter((event) => !taskId || event.taskId === taskId).sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, 50);
+    },
+    async appendEvent(input) {
+      const event = {
+        id: randomUUID(),
+        taskId: input.taskId,
+        deviceId: input.deviceId,
+        status: input.status,
+        message: input.message,
+        createdAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      const eventFile = await readEventFile();
+      await writeEventFile({
+        events: [...eventFile.events, event].slice(-300)
+      });
+      return event;
+    }
+  };
+}
+function isNodeError$1(error) {
+  return error instanceof Error && "code" in error;
 }
 function createTaskStore({ dataDir }) {
   const tasksFilePath = path.join(dataDir, "tasks.json");
@@ -885,12 +1119,20 @@ app.whenReady().then(async () => {
   const taskStore = createTaskStore({
     dataDir
   });
-  const secretStore = createSecretStore({
+  const taskRunEventStore = createTaskRunEventStore({
     dataDir
+  });
+  const secretStore = createSecretStore({
+    dataDir,
+    encryptionAvailable: safeStorage.isEncryptionAvailable(),
+    encrypt(value) {
+      return safeStorage.encryptString(value).toString("base64");
+    }
   });
   const adapterRegistry = createTaskAdapterRegistry([browserTabGroupAdapter]);
   const taskRunner = createTaskRunner({
     taskStore,
+    taskRunEventStore,
     appSettingsStore,
     adapterRegistry,
     dataDir,
@@ -913,8 +1155,15 @@ app.whenReady().then(async () => {
     }
   });
   registerAppSettingsIpc(ipcMain, appSettingsStore, deviceStore);
-  registerSecretIpc(ipcMain, secretStore);
-  registerTaskIpc(ipcMain, taskStore, taskRunner, appSettingsStore, deviceStore);
+  registerSecretIpc(ipcMain, secretStore, taskStore);
+  registerTaskIpc(
+    ipcMain,
+    taskStore,
+    taskRunner,
+    taskRunEventStore,
+    appSettingsStore,
+    deviceStore
+  );
   createWindow();
 });
 export {

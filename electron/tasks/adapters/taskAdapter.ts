@@ -6,6 +6,7 @@ export type TaskRunContext<TConfig = unknown, TState = unknown> = {
   deviceId: string
   dataDir: string
   appSettings: AppSettings
+  updateConfig(config: TConfig): Promise<void>
   updateState(state: Partial<TState>): Promise<void>
 }
 

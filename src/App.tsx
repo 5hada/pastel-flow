@@ -8,6 +8,7 @@ import {
 import {
   defaultAppSettings,
   type AppSettings,
+  type TaskListDisplayMode,
   type ThemeMode,
 } from './shared/settings'
 import {
@@ -28,6 +29,7 @@ import {
   type TaskTemplate,
 } from './shared/tasks'
 import type { LocalSecretMetadata } from './shared/secrets'
+import type { TaskRunEvent } from './shared/taskRunEvents'
 import type { CreateBrowserTabGroupTaskInput } from './renderer/api/tasksApi'
 import './App.css'
 
@@ -35,6 +37,7 @@ type BrowserTaskFormState = {
   name: string
   browserKind: BrowserKind
   initialUrls: string
+  dynamicTemplateUpdates: boolean
   visibility: DeviceVisibilityPolicy
   execution: DeviceExecutionPolicy
   allowedDeviceIds: string
@@ -51,7 +54,14 @@ const defaultCreateForm = createBrowserTaskForm(defaultAppSettings)
 
 type SettingsSaveState = 'saved' | 'failed' | null
 
-type WorkspaceMode = 'run' | 'create' | 'edit' | 'settings'
+type WorkspaceMode = 'run' | 'create' | 'edit' | 'tools' | 'settings'
+type NavigationCategory =
+  | 'all'
+  | 'running'
+  | 'folders'
+  | 'favorites'
+  | 'restricted'
+type SettingsCategory = 'general' | 'devices' | 'secrets'
 
 const defaultSettingsForm: AppSettings = {
   ...defaultAppSettings,
@@ -62,6 +72,7 @@ function createBrowserTaskForm(settings: AppSettings): BrowserTaskFormState {
     name: settings.defaultTaskName,
     browserKind: settings.defaultBrowserKind,
     initialUrls: '',
+    dynamicTemplateUpdates: false,
     visibility: 'local_only',
     execution: 'local_only',
     allowedDeviceIds: '',
@@ -82,6 +93,7 @@ const defaultEditForm: BrowserTaskFormState = {
   name: defaultAppSettings.defaultTaskName,
   browserKind: defaultAppSettings.defaultBrowserKind,
   initialUrls: '',
+  dynamicTemplateUpdates: false,
   visibility: 'local_only',
   execution: 'local_only',
   allowedDeviceIds: '',
@@ -96,6 +108,7 @@ const defaultSecretForm: SecretFormState = {
 
 function App() {
   const [tasks, setTasks] = useState<TaskTemplate[]>([])
+  const [taskRunEvents, setTaskRunEvents] = useState<TaskRunEvent[]>([])
   const [secrets, setSecrets] = useState<LocalSecretMetadata[]>([])
   const [appSettings, setAppSettings] = useState<AppSettings>(
     initialSettingsSnapshot.settings,
@@ -114,6 +127,11 @@ function App() {
     useState<BrowserTaskFormState>(defaultEditForm)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('run')
+  const [selectedCategory, setSelectedCategory] =
+    useState<NavigationCategory>('all')
+  const [selectedSettingsCategory, setSelectedSettingsCategory] =
+    useState<SettingsCategory>('general')
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [confirmDeleteTaskId, setConfirmDeleteTaskId] = useState<string | null>(
     null,
   )
@@ -141,6 +159,11 @@ function App() {
     [browserTasks, selectedTaskId],
   )
 
+  const visibleBrowserTasks = useMemo(
+    () => filterBrowserTasks(browserTasks, selectedCategory),
+    [browserTasks, selectedCategory],
+  )
+
   useEffect(() => {
     void loadAppSettings()
     void loadSecrets()
@@ -153,6 +176,10 @@ function App() {
     }
 
     return window.pastelFlow.tasks.onChanged((updatedTask) => {
+      if (updatedTask.id === selectedTaskId) {
+        void loadTaskRunEvents(updatedTask.id)
+      }
+
       setTasks((currentTasks) => {
         if (!currentTasks.some((task) => task.id === updatedTask.id)) {
           return [...currentTasks, updatedTask]
@@ -163,7 +190,15 @@ function App() {
         )
       })
     })
-  }, [])
+  }, [selectedTaskId])
+
+  useEffect(() => {
+    if (selectedTaskId) {
+      void loadTaskRunEvents(selectedTaskId)
+    } else {
+      setTaskRunEvents([])
+    }
+  }, [selectedTaskId])
 
   useEffect(() => {
     document.documentElement.dataset.theme = appSettings.themeMode
@@ -236,6 +271,18 @@ function App() {
     }
   }
 
+  async function loadTaskRunEvents(taskId: string) {
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      setTaskRunEvents(await window.pastelFlow.tasks.listEvents(taskId))
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    }
+  }
+
   async function handleCreateTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -249,6 +296,7 @@ function App() {
       ...createDefaultBrowserTabGroupConfig(profileId),
       browserKind: createForm.browserKind,
       initialUrls: parseInitialUrls(createForm.initialUrls),
+      dynamicTemplateUpdates: createForm.dynamicTemplateUpdates,
     }
     const input: CreateBrowserTabGroupTaskInput = {
       name: trimmedName,
@@ -295,6 +343,12 @@ function App() {
     setSettingsSaveState(null)
     setSettingsErrorMessage(null)
     setWorkspaceMode('settings')
+    setSelectedSettingsCategory('general')
+    setConfirmDeleteTaskId(null)
+  }
+
+  function openToolsMode() {
+    setWorkspaceMode('tools')
     setConfirmDeleteTaskId(null)
   }
 
@@ -343,6 +397,7 @@ function App() {
       name: task.name,
       browserKind: config.browserKind,
       initialUrls: config.initialUrls.join('\n'),
+      dynamicTemplateUpdates: config.dynamicTemplateUpdates,
       visibility: permissions.visibility,
       execution: permissions.execution,
       allowedDeviceIds: permissions.allowedDeviceIds?.join('\n') ?? '',
@@ -350,6 +405,41 @@ function App() {
         permissions.secretRefs?.map((secretRef) => secretRef.id).join('\n') ??
         '',
     })
+  }
+
+  function openCategory(category: NavigationCategory) {
+    setSelectedCategory(category)
+    openRunMode()
+  }
+
+  async function handleTaskListDisplayModeChange(
+    taskListDisplayMode: TaskListDisplayMode,
+  ) {
+    const nextSettings = {
+      ...appSettings,
+      taskListDisplayMode,
+    }
+
+    setAppSettings(nextSettings)
+    setSettingsForm((currentForm) => ({
+      ...currentForm,
+      taskListDisplayMode,
+    }))
+
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      setErrorMessage(null)
+      const snapshot = await window.pastelFlow.settings.update(nextSettings)
+      setAppSettings(snapshot.settings)
+      setSettingsForm(snapshot.settings)
+      setUserDataPath(snapshot.userDataPath)
+      setCurrentDevice(snapshot.currentDevice)
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    }
   }
 
   async function handleUpdateTask(event: FormEvent<HTMLFormElement>) {
@@ -369,6 +459,7 @@ function App() {
       ...currentConfig,
       browserKind: editForm.browserKind,
       initialUrls: parseInitialUrls(editForm.initialUrls),
+      dynamicTemplateUpdates: editForm.dynamicTemplateUpdates,
     }
 
     try {
@@ -433,6 +524,7 @@ function App() {
       if (updatedTask.state.status === 'failed') {
         setErrorMessage(updatedTask.state.lastError ?? '작업 실행에 실패했습니다.')
       }
+      await loadTaskRunEvents(taskId)
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     } finally {
@@ -475,129 +567,365 @@ function App() {
     <main className="app-shell">
       <header className="app-header">
         <div>
-          <p className="eyebrow">저장된 브라우저 작업 공간</p>
           <h1>Pastel Flow</h1>
+          <p>{getWorkspaceModeLabel(workspaceMode)}</p>
         </div>
-        <p className="mode-label">{getWorkspaceModeLabel(workspaceMode)}</p>
-        <div className="header-actions">
-          <button
-            aria-label="작업 목록 새로고침"
-            className="icon-button"
-            type="button"
-            disabled={isLoading}
-            title="새로고침"
-            onClick={loadTasks}
-          >
-            {isLoading ? '...' : '↻'}
-          </button>
-          <button
-            aria-label="실행 화면"
-            className={`icon-button${workspaceMode === 'run' ? ' is-active' : ''}`}
-            type="button"
-            title="실행"
-            onClick={openRunMode}
-          >
-            ▶
-          </button>
-          <button
-            aria-label="새 작업 정의"
-            className={`icon-button${workspaceMode === 'create' ? ' is-active' : ''}`}
-            type="button"
-            title="새 작업"
-            onClick={openCreateMode}
-          >
-            +
-          </button>
-          <button
-            aria-label="기존 작업 수정"
-            className={`icon-button${workspaceMode === 'edit' ? ' is-active' : ''}`}
-            type="button"
-            title="수정"
-            onClick={openEditMode}
-          >
-            ✎
-          </button>
-          <button
-            aria-label="앱 설정"
-            className={`icon-button${workspaceMode === 'settings' ? ' is-active' : ''}`}
-            type="button"
-            title="설정"
-            onClick={openSettingsMode}
-          >
-            ⚙
-          </button>
-        </div>
+        <TopModeBar
+          currentMode={workspaceMode}
+          onCreate={openCreateMode}
+          onEdit={openEditMode}
+          onRun={openRunMode}
+          onSettings={openSettingsMode}
+          onTools={openToolsMode}
+        />
+        <button
+          aria-label="작업 목록 새로고침"
+          className="topbar-button"
+          type="button"
+          disabled={isLoading}
+          title="새로고침"
+          onClick={loadTasks}
+        >
+          {isLoading ? '...' : '↻'}
+        </button>
       </header>
 
       {errorMessage ? <p className="error-message">{errorMessage}</p> : null}
 
-      {workspaceMode === 'run' ? (
-        <TaskLaunchPanel
-          browserTasks={browserTasks}
-          isLoading={isLoading}
-          runningTaskId={runningTaskId}
-          selectedTaskId={selectedTaskId}
-          onCreate={openCreateMode}
-          onRun={handleRunTask}
-          onSelect={(task) => {
-            setSelectedTaskId(task.id)
-            setConfirmDeleteTaskId(null)
-            startEditing(task)
-          }}
-        />
-      ) : null}
-
-      {workspaceMode === 'create' ? (
-        <CreateTaskPanel
-          createForm={createForm}
-          currentDevice={currentDevice}
-          secrets={secrets}
-          onCancel={openRunMode}
-          onChange={setCreateForm}
-          onSubmit={handleCreateTask}
-        />
-      ) : null}
-
-      {workspaceMode === 'edit' ? (
-        <EditWorkspace
-          browserTasks={browserTasks}
-          confirmDeleteTaskId={confirmDeleteTaskId}
-          currentDevice={currentDevice}
-          editForm={editForm}
-          isLoading={isLoading}
-          secrets={secrets}
-          onChange={setEditForm}
-          onConfirmDelete={handleDeleteTask}
-          onDeleteRequest={setConfirmDeleteTaskId}
-          onSelect={(task) => {
-            setSelectedTaskId(task.id)
-            startEditing(task)
-          }}
-          onSubmit={handleUpdateTask}
-          selectedTask={selectedTask}
-        />
-      ) : null}
-
-      {workspaceMode === 'settings' ? (
-        <section className="mode-panel" aria-label="앱 설정">
-          <AppSettingsPanel
-            form={settingsForm}
-            onChange={setSettingsForm}
-            onClose={closeSettingsMode}
-            onSubmit={handleSaveSettings}
-            saveState={settingsSaveState}
-            settingsErrorMessage={settingsErrorMessage}
-            secretForm={secretForm}
-            secrets={secrets}
-            currentDevice={currentDevice}
-            userDataPath={userDataPath}
-            onCreateSecret={handleCreateSecret}
-            onDeleteSecret={handleDeleteSecret}
-            onSecretFormChange={setSecretForm}
+      <div className={`app-workspace${isSidebarOpen ? '' : ' is-sidebar-collapsed'}`}>
+        {isSidebarOpen ? (
+          <WorkspaceSidebar
+            browserTasks={browserTasks}
+            currentMode={workspaceMode}
+            selectedCategory={selectedCategory}
+            selectedSettingsCategory={selectedSettingsCategory}
+            selectedTask={selectedTask}
+            onCategorySelect={openCategory}
+            onClose={() => setIsSidebarOpen(false)}
+            onSelectSettingsCategory={setSelectedSettingsCategory}
+            onSelectTask={(task) => {
+              setSelectedTaskId(task.id)
+              startEditing(task)
+            }}
           />
-        </section>
-      ) : null}
+        ) : null}
+
+        <div className="workspace-content">
+          {!isSidebarOpen ? (
+            <button
+              aria-label="좌측 패널 열기"
+              className="sidebar-toggle floating-toggle"
+              type="button"
+              title="패널 열기"
+              onClick={() => setIsSidebarOpen(true)}
+            >
+              ☰
+            </button>
+          ) : null}
+
+          {workspaceMode === 'run' ? (
+            <TaskLaunchPanel
+              browserTasks={visibleBrowserTasks}
+              categoryLabel={getNavigationCategoryLabel(selectedCategory)}
+              displayMode={appSettings.taskListDisplayMode}
+              isLoading={isLoading}
+              runningTaskId={runningTaskId}
+              selectedTaskId={selectedTaskId}
+              onCreate={openCreateMode}
+              onDisplayModeChange={handleTaskListDisplayModeChange}
+              onRun={handleRunTask}
+              onSelect={(task) => {
+                setSelectedTaskId(task.id)
+                setConfirmDeleteTaskId(null)
+                startEditing(task)
+              }}
+            />
+          ) : null}
+
+          {workspaceMode === 'create' ? (
+            <CreateTaskPanel
+              createForm={createForm}
+              currentDevice={currentDevice}
+              secrets={secrets}
+              onCancel={openRunMode}
+              onChange={setCreateForm}
+              onSubmit={handleCreateTask}
+            />
+          ) : null}
+
+          {workspaceMode === 'edit' ? (
+            <EditWorkspace
+              confirmDeleteTaskId={confirmDeleteTaskId}
+              currentDevice={currentDevice}
+              editForm={editForm}
+              isLoading={isLoading}
+              secrets={secrets}
+              onChange={setEditForm}
+              onConfirmDelete={handleDeleteTask}
+              onDeleteRequest={setConfirmDeleteTaskId}
+              onSubmit={handleUpdateTask}
+              selectedTask={selectedTask}
+              taskRunEvents={taskRunEvents}
+            />
+          ) : null}
+
+          {workspaceMode === 'tools' ? <ToolsPanel /> : null}
+
+          {workspaceMode === 'settings' ? (
+            <section className="mode-panel" aria-label="앱 설정">
+              <AppSettingsPanel
+                form={settingsForm}
+                onChange={setSettingsForm}
+                onClose={closeSettingsMode}
+                onSubmit={handleSaveSettings}
+                saveState={settingsSaveState}
+                settingsErrorMessage={settingsErrorMessage}
+                secretForm={secretForm}
+                secrets={secrets}
+                currentDevice={currentDevice}
+                userDataPath={userDataPath}
+                onCreateSecret={handleCreateSecret}
+                onDeleteSecret={handleDeleteSecret}
+                onSecretFormChange={setSecretForm}
+                selectedCategory={selectedSettingsCategory}
+              />
+            </section>
+          ) : null}
+        </div>
+      </div>
     </main>
+  )
+}
+
+type TopModeBarProps = {
+  currentMode: WorkspaceMode
+  onCreate(): void
+  onEdit(): void
+  onRun(): void
+  onSettings(): void
+  onTools(): void
+}
+
+function TopModeBar({
+  currentMode,
+  onCreate,
+  onEdit,
+  onRun,
+  onSettings,
+  onTools,
+}: TopModeBarProps) {
+  const modes: {
+    id: WorkspaceMode
+    icon: string
+    label: string
+    onClick(): void
+  }[] = [
+    { id: 'run', icon: '▶', label: '실행', onClick: onRun },
+    { id: 'create', icon: '+', label: '새 작업', onClick: onCreate },
+    { id: 'edit', icon: '✎', label: '수정', onClick: onEdit },
+    { id: 'tools', icon: '◇', label: '도구', onClick: onTools },
+    { id: 'settings', icon: '⚙', label: '설정', onClick: onSettings },
+  ]
+
+  return (
+    <nav className="top-mode-bar" aria-label="작업 모드">
+      {modes.map((mode) => (
+        <button
+          aria-label={mode.label}
+          className={currentMode === mode.id ? 'is-active' : ''}
+          key={mode.id}
+          type="button"
+          title={mode.label}
+          onClick={mode.onClick}
+        >
+          <span aria-hidden="true">{mode.icon}</span>
+        </button>
+      ))}
+    </nav>
+  )
+}
+
+type WorkspaceSidebarProps = {
+  browserTasks: BrowserTabGroupTask[]
+  currentMode: WorkspaceMode
+  selectedCategory: NavigationCategory
+  selectedSettingsCategory: SettingsCategory
+  selectedTask: BrowserTabGroupTask | null
+  onCategorySelect(category: NavigationCategory): void
+  onClose(): void
+  onSelectSettingsCategory(category: SettingsCategory): void
+  onSelectTask(task: BrowserTabGroupTask): void
+}
+
+function WorkspaceSidebar({
+  browserTasks,
+  currentMode,
+  selectedCategory,
+  selectedSettingsCategory,
+  selectedTask,
+  onCategorySelect,
+  onClose,
+  onSelectSettingsCategory,
+  onSelectTask,
+}: WorkspaceSidebarProps) {
+  const restrictedCount = browserTasks.filter((task) =>
+    isRestrictedDevicePolicy(task.permissions),
+  ).length
+  const runningCount = browserTasks.filter(
+    (task) => task.state.status === 'running',
+  ).length
+  const runCategories: {
+    id: NavigationCategory
+    icon: string
+    label: string
+    count: number
+  }[] = [
+    { id: 'all', icon: '□', label: '전체', count: browserTasks.length },
+    { id: 'running', icon: '●', label: '실행 중', count: runningCount },
+    { id: 'folders', icon: '▣', label: '폴더', count: browserTasks.length },
+    { id: 'favorites', icon: '☆', label: '즐겨찾기', count: 0 },
+    { id: 'restricted', icon: '◇', label: '제한됨', count: restrictedCount },
+  ]
+  const settingsCategories: {
+    id: SettingsCategory
+    icon: string
+    label: string
+  }[] = [
+    { id: 'general', icon: '◌', label: '일반' },
+    { id: 'devices', icon: '▣', label: '기기' },
+    { id: 'secrets', icon: '◆', label: 'Secret' },
+  ]
+
+  return (
+    <aside className="workspace-sidebar" aria-label="보조 패널">
+      <div className="sidebar-group">
+        <div className="sidebar-heading">
+          <p className="sidebar-label">{getWorkspaceModeLabel(currentMode)}</p>
+          <button
+            aria-label="좌측 패널 닫기"
+            className="sidebar-toggle"
+            type="button"
+            title="패널 닫기"
+            onClick={onClose}
+          >
+            ☰
+          </button>
+        </div>
+
+        {currentMode === 'run'
+          ? runCategories.map((category) => (
+              <button
+                className={`sidebar-item${
+                  selectedCategory === category.id ? ' is-active' : ''
+                }`}
+                key={category.id}
+                type="button"
+                onClick={() => onCategorySelect(category.id)}
+              >
+                <span aria-hidden="true">{category.icon}</span>
+                <strong>{category.label}</strong>
+                <em>{category.count}</em>
+              </button>
+            ))
+          : null}
+
+        {currentMode === 'create' ? (
+          <div className="sidebar-empty">
+            <strong>브라우저 작업</strong>
+            <span>전용 프로필 템플릿을 만듭니다.</span>
+          </div>
+        ) : null}
+
+        {currentMode === 'edit'
+          ? browserTasks.map((task) => (
+              <button
+                className={`sidebar-item task-sidebar-item${
+                  selectedTask?.id === task.id ? ' is-active' : ''
+                }`}
+                key={task.id}
+                type="button"
+                onClick={() => onSelectTask(task)}
+              >
+                <span aria-hidden="true">□</span>
+                <strong>{task.name}</strong>
+                <em>{getTaskStatusLabel(task.state.status)}</em>
+              </button>
+            ))
+          : null}
+
+        {currentMode === 'tools' ? (
+          <div className="sidebar-empty">
+            <strong>도구 페이지</strong>
+            <span>포함 범위는 추후 확정합니다.</span>
+          </div>
+        ) : null}
+
+        {currentMode === 'settings'
+          ? settingsCategories.map((category) => (
+              <button
+                className={`sidebar-item${
+                  selectedSettingsCategory === category.id ? ' is-active' : ''
+                }`}
+                key={category.id}
+                type="button"
+                onClick={() => onSelectSettingsCategory(category.id)}
+              >
+                <span aria-hidden="true">{category.icon}</span>
+                <strong>{category.label}</strong>
+              </button>
+            ))
+          : null}
+      </div>
+
+      <div className="sidebar-note">
+        <span>Local first</span>
+        <strong>전용 프로필</strong>
+      </div>
+    </aside>
+  )
+}
+
+function ToolsPanel() {
+  return (
+    <section className="mode-panel tool-panel" aria-label="도구">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">Tools</p>
+          <h2>도구</h2>
+        </div>
+      </div>
+      <div className="empty-state empty-state-action">
+        <p>내장 응용 도구 화면을 준비했습니다.</p>
+        <p className="muted-text">포함할 도구 범위는 이후 단계에서 확정합니다.</p>
+      </div>
+    </section>
+  )
+}
+
+type TaskListDisplayToggleProps = {
+  value: TaskListDisplayMode
+  onChange(value: TaskListDisplayMode): void
+}
+
+function TaskListDisplayToggle({
+  onChange,
+  value,
+}: TaskListDisplayToggleProps) {
+  return (
+    <div className="display-toggle" aria-label="목록 표시 형식">
+      {(['grid', 'list'] as TaskListDisplayMode[]).map((displayMode) => (
+        <button
+          aria-label={displayMode === 'grid' ? '그리드 형식' : '목록 형식'}
+          className={value === displayMode ? 'is-active' : ''}
+          key={displayMode}
+          type="button"
+          title={displayMode === 'grid' ? '그리드' : '목록'}
+          onClick={() => onChange(displayMode)}
+        >
+          <span aria-hidden="true">{displayMode === 'grid' ? '▦' : '☰'}</span>
+        </button>
+      ))}
+    </div>
   )
 }
 
@@ -611,18 +939,24 @@ type TaskEditPanelProps = {
 
 type TaskLaunchPanelProps = {
   browserTasks: BrowserTabGroupTask[]
+  categoryLabel: string
+  displayMode: TaskListDisplayMode
   isLoading: boolean
   runningTaskId: string | null
   selectedTaskId: string | null
   onCreate(): void
+  onDisplayModeChange(value: TaskListDisplayMode): void
   onRun(taskId: string): Promise<void>
   onSelect(task: BrowserTabGroupTask): void
 }
 
 function TaskLaunchPanel({
   browserTasks,
+  categoryLabel,
+  displayMode,
   isLoading,
   onCreate,
+  onDisplayModeChange,
   onRun,
   onSelect,
   runningTaskId,
@@ -632,10 +966,16 @@ function TaskLaunchPanel({
     <section className="task-section launch-section" aria-label="작업 실행">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Run templates</p>
+          <p className="eyebrow">{categoryLabel}</p>
           <h2>실행할 작업</h2>
         </div>
-        <span>{browserTasks.length}개</span>
+        <div className="section-actions">
+          <TaskListDisplayToggle
+            value={displayMode}
+            onChange={onDisplayModeChange}
+          />
+          <span>{browserTasks.length}개</span>
+        </div>
       </div>
 
       {isLoading ? (
@@ -648,7 +988,7 @@ function TaskLaunchPanel({
           </button>
         </div>
       ) : (
-        <div className="task-list">
+        <div className={`task-list task-list-${displayMode}`}>
           {browserTasks.map((task) => {
             const config = normalizeBrowserTabGroupConfig(task.config)
             const isRunning = runningTaskId === task.id
@@ -659,17 +999,23 @@ function TaskLaunchPanel({
                 className={`task-row${isSelected ? ' is-selected' : ''}`}
                 key={task.id}
               >
-                <button
-                  className="task-select-button"
-                  type="button"
-                  onClick={() => onSelect(task)}
-                >
-                  <span className="task-row-title">{task.name}</span>
-                  <span className="task-row-meta">
-                    {getBrowserKindLabel(config.browserKind)} · 마지막 실행{' '}
-                    {formatDate(task.state.lastRunAt)}
-                  </span>
-                </button>
+                {displayMode === 'list' ? (
+                  <button
+                    className="task-select-button"
+                    type="button"
+                    onClick={() => onSelect(task)}
+                  >
+                    <span className="task-row-title">{task.name}</span>
+                    <span className="task-row-meta">
+                      {getBrowserKindLabel(config.browserKind)} · 마지막 실행{' '}
+                      {formatDate(task.state.lastRunAt)}
+                    </span>
+                  </button>
+                ) : (
+                  <div className="task-card-title">
+                    <strong>{task.name}</strong>
+                  </div>
+                )}
                 {isRestrictedDevicePolicy(task.permissions) ? (
                   <span className="sensitive-pill">제한됨</span>
                 ) : null}
@@ -770,6 +1116,19 @@ function CreateTaskPanel({
             rows={5}
           />
         </label>
+        <label className="inline-check">
+          <input
+            checked={createForm.dynamicTemplateUpdates}
+            type="checkbox"
+            onChange={(event) =>
+              onChange({
+                ...createForm,
+                dynamicTemplateUpdates: event.target.checked,
+              })
+            }
+          />
+          실행 후 열린 탭 URL을 템플릿에 반영
+        </label>
         <PolicyFields
           currentDevice={currentDevice}
           form={createForm}
@@ -785,22 +1144,20 @@ function CreateTaskPanel({
 }
 
 type EditWorkspaceProps = {
-  browserTasks: BrowserTabGroupTask[]
   confirmDeleteTaskId: string | null
   currentDevice: CurrentDevice
   editForm: BrowserTaskFormState
   isLoading: boolean
   secrets: LocalSecretMetadata[]
   selectedTask: BrowserTabGroupTask | null
+  taskRunEvents: TaskRunEvent[]
   onChange(value: BrowserTaskFormState): void
   onConfirmDelete(taskId: string): Promise<void>
   onDeleteRequest(taskId: string | null): void
-  onSelect(task: BrowserTabGroupTask): void
   onSubmit(event: FormEvent<HTMLFormElement>): void
 }
 
 function EditWorkspace({
-  browserTasks,
   confirmDeleteTaskId,
   currentDevice,
   editForm,
@@ -808,10 +1165,10 @@ function EditWorkspace({
   onChange,
   onConfirmDelete,
   onDeleteRequest,
-  onSelect,
   onSubmit,
   secrets,
   selectedTask,
+  taskRunEvents,
 }: EditWorkspaceProps) {
   if (isLoading) {
     return (
@@ -835,32 +1192,7 @@ function EditWorkspace({
   const isConfirmingDelete = confirmDeleteTaskId === selectedTask.id
 
   return (
-    <section className="workspace-grid" aria-label="기존 작업 수정">
-      <aside className="task-section" aria-label="수정할 작업 선택">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Edit target</p>
-            <h2>수정 대상</h2>
-          </div>
-          <span>{browserTasks.length}개</span>
-        </div>
-        <div className="task-list compact-list">
-          {browserTasks.map((task) => (
-            <button
-              className={`task-picker${
-                selectedTask.id === task.id ? ' is-selected' : ''
-              }`}
-              key={task.id}
-              type="button"
-              onClick={() => onSelect(task)}
-            >
-              <span>{task.name}</span>
-              <small>{getTaskStatusLabel(task.state.status)}</small>
-            </button>
-          ))}
-        </div>
-      </aside>
-
+    <section aria-label="기존 작업 수정">
       <section className="mode-panel" aria-label="선택한 작업 수정">
         <TaskEditPanel
           currentDevice={currentDevice}
@@ -873,6 +1205,10 @@ function EditWorkspace({
         <dl className="detail-list">
           <DetailItem label="브라우저" value={getBrowserKindLabel(config.browserKind)} />
           <DetailItem label="실행 방식" value="전용 프로필" />
+          <DetailItem
+            label="동적 업데이트"
+            value={config.dynamicTemplateUpdates ? '사용' : '사용 안 함'}
+          />
           <DetailItem label="상태" value={getTaskStatusLabel(selectedTask.state.status)} />
           <DetailItem label="마지막 실행" value={formatDate(selectedTask.state.lastRunAt)} />
           <DetailItem label="프로필 ID" value={config.profileId || '없음'} />
@@ -898,6 +1234,8 @@ function EditWorkspace({
             <p>{selectedTask.state.lastError}</p>
           </section>
         ) : null}
+
+        <TaskRunEventsPanel events={taskRunEvents} />
 
         <section className="danger-zone" aria-label="작업 삭제">
           {isConfirmingDelete ? (
@@ -939,6 +1277,7 @@ type AppSettingsPanelProps = {
   form: AppSettings
   currentDevice: CurrentDevice
   secretForm: SecretFormState
+  selectedCategory: SettingsCategory
   secrets: LocalSecretMetadata[]
   saveState: SettingsSaveState
   settingsErrorMessage: string | null
@@ -955,6 +1294,7 @@ function AppSettingsPanel({
   currentDevice,
   form,
   secretForm,
+  selectedCategory,
   onChange,
   onClose,
   onCreateSecret,
@@ -979,127 +1319,148 @@ function AppSettingsPanel({
       </div>
 
       <form className="task-form" onSubmit={onSubmit}>
-        <fieldset className="settings-fieldset">
-          <legend>테마</legend>
-          <div className="segmented-control">
-            {(['system', 'light', 'dark'] as ThemeMode[]).map((themeMode) => (
-              <label key={themeMode}>
-                <input
-                  checked={form.themeMode === themeMode}
-                  name="themeMode"
-                  type="radio"
-                  value={themeMode}
-                  onChange={() =>
-                    onChange({
-                      ...form,
-                      themeMode,
-                    })
-                  }
-                />
-                <span>{getThemeModeLabel(themeMode)}</span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
+        {selectedCategory === 'general' ? (
+          <>
+            <fieldset className="settings-fieldset">
+              <legend>테마</legend>
+              <div className="segmented-control">
+                {(['system', 'light', 'dark'] as ThemeMode[]).map((themeMode) => (
+                  <label key={themeMode}>
+                    <input
+                      checked={form.themeMode === themeMode}
+                      name="themeMode"
+                      type="radio"
+                      value={themeMode}
+                      onChange={() =>
+                        onChange({
+                          ...form,
+                          themeMode,
+                        })
+                      }
+                    />
+                    <span>{getThemeModeLabel(themeMode)}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
 
-        <div className="theme-preview" data-preview-theme={form.themeMode}>
-          <span>{getThemeModeLabel(form.themeMode)}</span>
-          <strong>Pastel Flow</strong>
-          <p>설정 저장 전에는 이 미리보기만 변경됩니다.</p>
-        </div>
+            <div className="theme-preview" data-preview-theme={form.themeMode}>
+              <span>{getThemeModeLabel(form.themeMode)}</span>
+              <strong>Pastel Flow</strong>
+              <p>설정 저장 전에는 이 미리보기만 변경됩니다.</p>
+            </div>
 
-        <label>
-          기본 브라우저
-          <select
-            value={form.defaultBrowserKind}
-            onChange={(event) =>
-              onChange({
-                ...form,
-                defaultBrowserKind: event.target.value as BrowserKind,
-              })
-            }
-          >
-            <option value="chrome">Chrome</option>
-            <option value="edge">Edge</option>
-            <option value="chromium">Chromium</option>
-          </select>
-        </label>
+            <label>
+              기본 브라우저
+              <select
+                value={form.defaultBrowserKind}
+                onChange={(event) =>
+                  onChange({
+                    ...form,
+                    defaultBrowserKind: event.target.value as BrowserKind,
+                  })
+                }
+              >
+                <option value="chrome">Chrome</option>
+                <option value="edge">Edge</option>
+                <option value="chromium">Chromium</option>
+              </select>
+            </label>
 
-        <label>
-          새 작업 기본 이름
-          <input
-            value={form.defaultTaskName}
-            onChange={(event) =>
-              onChange({
-                ...form,
-                defaultTaskName: event.target.value,
-              })
-            }
-          />
-        </label>
+            <label>
+              새 작업 기본 이름
+              <input
+                value={form.defaultTaskName}
+                onChange={(event) =>
+                  onChange({
+                    ...form,
+                    defaultTaskName: event.target.value,
+                  })
+                }
+              />
+            </label>
 
-        <label>
-          초기 URL 입력 방식
-          <input value="줄 단위 입력" readOnly />
-        </label>
+            <label>
+              작업 목록 표시 형식
+              <select
+                value={form.taskListDisplayMode}
+                onChange={(event) =>
+                  onChange({
+                    ...form,
+                    taskListDisplayMode: event.target.value as TaskListDisplayMode,
+                  })
+                }
+              >
+                <option value="grid">그리드</option>
+                <option value="list">목록</option>
+              </select>
+            </label>
 
-        <label>
-          Chrome 실행 파일 경로
-          <input
-            value={form.browserExecutablePaths.chrome ?? ''}
-            onChange={(event) =>
-              onChange({
-                ...form,
-                browserExecutablePaths: {
-                  ...form.browserExecutablePaths,
-                  chrome: event.target.value,
-                },
-              })
-            }
-            placeholder="비워두면 자동으로 찾습니다."
-          />
-        </label>
+            <label>
+              초기 URL 입력 방식
+              <input value="줄 단위 입력" readOnly />
+            </label>
 
-        <label>
-          Edge 실행 파일 경로
-          <input
-            value={form.browserExecutablePaths.edge ?? ''}
-            onChange={(event) =>
-              onChange({
-                ...form,
-                browserExecutablePaths: {
-                  ...form.browserExecutablePaths,
-                  edge: event.target.value,
-                },
-              })
-            }
-            placeholder="비워두면 자동으로 찾습니다."
-          />
-        </label>
+            <label>
+              Chrome 실행 파일 경로
+              <input
+                value={form.browserExecutablePaths.chrome ?? ''}
+                onChange={(event) =>
+                  onChange({
+                    ...form,
+                    browserExecutablePaths: {
+                      ...form.browserExecutablePaths,
+                      chrome: event.target.value,
+                    },
+                  })
+                }
+                placeholder="비워두면 자동으로 찾습니다."
+              />
+            </label>
 
-        <label>
-          Chromium 실행 파일 경로
-          <input
-            value={form.browserExecutablePaths.chromium ?? ''}
-            onChange={(event) =>
-              onChange({
-                ...form,
-                browserExecutablePaths: {
-                  ...form.browserExecutablePaths,
-                  chromium: event.target.value,
-                },
-              })
-            }
-            placeholder="비워두면 자동으로 찾습니다."
-          />
-        </label>
+            <label>
+              Edge 실행 파일 경로
+              <input
+                value={form.browserExecutablePaths.edge ?? ''}
+                onChange={(event) =>
+                  onChange({
+                    ...form,
+                    browserExecutablePaths: {
+                      ...form.browserExecutablePaths,
+                      edge: event.target.value,
+                    },
+                  })
+                }
+                placeholder="비워두면 자동으로 찾습니다."
+              />
+            </label>
 
-        <label>
-          데이터 위치
-          <input value={userDataPath || '아직 불러오지 못했습니다.'} readOnly />
-        </label>
+            <label>
+              Chromium 실행 파일 경로
+              <input
+                value={form.browserExecutablePaths.chromium ?? ''}
+                onChange={(event) =>
+                  onChange({
+                    ...form,
+                    browserExecutablePaths: {
+                      ...form.browserExecutablePaths,
+                      chromium: event.target.value,
+                    },
+                  })
+                }
+                placeholder="비워두면 자동으로 찾습니다."
+              />
+            </label>
 
-        <section className="settings-subsection" aria-label="기기 권한">
+            <label>
+              데이터 위치
+              <input value={userDataPath || '아직 불러오지 못했습니다.'} readOnly />
+            </label>
+          </>
+        ) : null}
+
+        {selectedCategory === 'devices' ? (
+          <section className="settings-subsection" aria-label="기기 권한">
           <div className="section-heading compact-heading">
             <div>
               <p className="eyebrow">Device policy</p>
@@ -1159,9 +1520,11 @@ function AppSettingsPanel({
               ))}
             </div>
           )}
-        </section>
+          </section>
+        ) : null}
 
-        <section className="settings-subsection" aria-label="로컬 Secret">
+        {selectedCategory === 'secrets' ? (
+          <section className="settings-subsection" aria-label="로컬 Secret">
           <div className="section-heading compact-heading">
             <div>
               <p className="eyebrow">Secrets</p>
@@ -1234,7 +1597,8 @@ function AppSettingsPanel({
               ))}
             </div>
           )}
-        </section>
+          </section>
+        ) : null}
 
         {settingsErrorMessage ? (
           <p className="panel-error">{settingsErrorMessage}</p>
@@ -1312,6 +1676,19 @@ function TaskEditPanel({
             rows={5}
           />
         </label>
+        <label className="inline-check">
+          <input
+            checked={editForm.dynamicTemplateUpdates}
+            type="checkbox"
+            onChange={(event) =>
+              onChange({
+                ...editForm,
+                dynamicTemplateUpdates: event.target.checked,
+              })
+            }
+          />
+          실행 후 열린 탭 URL을 템플릿에 반영
+        </label>
         <PolicyFields
           currentDevice={currentDevice}
           form={editForm}
@@ -1383,6 +1760,7 @@ function isSettingsDirty(form: AppSettings, settings: AppSettings): boolean {
     form.defaultBrowserKind !== settings.defaultBrowserKind ||
     form.defaultTaskName.trim() !== settings.defaultTaskName ||
     form.initialUrlInputMode !== settings.initialUrlInputMode ||
+    form.taskListDisplayMode !== settings.taskListDisplayMode ||
     normalizeSettingsPath(form.browserExecutablePaths.chrome) !==
       normalizeSettingsPath(settings.browserExecutablePaths.chrome) ||
     normalizeSettingsPath(form.browserExecutablePaths.edge) !==
@@ -1564,6 +1942,35 @@ function PolicyFields({
   )
 }
 
+type TaskRunEventsPanelProps = {
+  events: TaskRunEvent[]
+}
+
+function TaskRunEventsPanel({ events }: TaskRunEventsPanelProps) {
+  return (
+    <section className="run-events" aria-label="최근 실행 이벤트">
+      <h3>최근 실행 이벤트</h3>
+      {events.length === 0 ? (
+        <p className="muted-text">아직 실행 이벤트가 없습니다.</p>
+      ) : (
+        <div className="run-event-list">
+          {events.slice(0, 8).map((event) => (
+            <div className="run-event-row" key={event.id}>
+              <span className={`status-pill status-${event.status}`}>
+                {getTaskStatusLabel(event.status)}
+              </span>
+              <div>
+                <strong>{event.message ?? '상태 변경'}</strong>
+                <small>{formatDate(event.createdAt)}</small>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
 function normalizeSettingsPath(value: string | undefined): string {
   return value?.trim() ?? ''
 }
@@ -1582,6 +1989,38 @@ function normalizeLinkedDeviceList(devices: LinkedDevice[]): LinkedDevice[] {
     name: device.name.trim(),
     accessLevel: device.accessLevel,
   }))
+}
+
+function filterBrowserTasks(
+  tasks: BrowserTabGroupTask[],
+  category: NavigationCategory,
+): BrowserTabGroupTask[] {
+  switch (category) {
+    case 'running':
+      return tasks.filter((task) => task.state.status === 'running')
+    case 'restricted':
+      return tasks.filter((task) => isRestrictedDevicePolicy(task.permissions))
+    case 'favorites':
+      return []
+    case 'folders':
+    case 'all':
+      return tasks
+  }
+}
+
+function getNavigationCategoryLabel(category: NavigationCategory): string {
+  switch (category) {
+    case 'all':
+      return 'All templates'
+    case 'running':
+      return 'Running'
+    case 'folders':
+      return 'Folders'
+    case 'favorites':
+      return 'Favorites'
+    case 'restricted':
+      return 'Restricted'
+  }
 }
 
 function getThemeModeLabel(themeMode: ThemeMode): string {
@@ -1603,6 +2042,8 @@ function getWorkspaceModeLabel(workspaceMode: WorkspaceMode): string {
       return '새 작업'
     case 'edit':
       return '수정'
+    case 'tools':
+      return '도구'
     case 'settings':
       return '설정'
   }

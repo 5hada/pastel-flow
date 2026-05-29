@@ -5,6 +5,7 @@ import type { BrowserKind } from './tasks'
 export type ThemeMode = 'system' | 'light' | 'dark'
 
 export type InitialUrlInputMode = 'line'
+export type TaskListDisplayMode = 'grid' | 'list'
 
 export type BrowserExecutablePaths = Partial<Record<BrowserKind, string>>
 
@@ -13,6 +14,7 @@ export type AppSettings = {
   defaultBrowserKind: BrowserKind
   defaultTaskName: string
   initialUrlInputMode: InitialUrlInputMode
+  taskListDisplayMode: TaskListDisplayMode
   browserExecutablePaths: BrowserExecutablePaths
   linkedDevices: LinkedDevice[]
 }
@@ -28,6 +30,7 @@ export const defaultAppSettings: AppSettings = {
   defaultBrowserKind: 'chrome',
   defaultTaskName: '새 브라우저 작업',
   initialUrlInputMode: 'line',
+  taskListDisplayMode: 'grid',
   browserExecutablePaths: {},
   linkedDevices: [],
 }
@@ -51,6 +54,9 @@ export function normalizeAppSettings(
       settings?.initialUrlInputMode === 'line'
         ? settings.initialUrlInputMode
         : defaultAppSettings.initialUrlInputMode,
+    taskListDisplayMode: isTaskListDisplayMode(settings?.taskListDisplayMode)
+      ? settings.taskListDisplayMode
+      : defaultAppSettings.taskListDisplayMode,
     browserExecutablePaths: normalizeBrowserExecutablePaths(
       settings?.browserExecutablePaths,
     ),
@@ -93,4 +99,8 @@ function isThemeMode(value: unknown): value is ThemeMode {
 
 function isBrowserKind(value: unknown): value is BrowserKind {
   return value === 'chrome' || value === 'edge' || value === 'chromium'
+}
+
+function isTaskListDisplayMode(value: unknown): value is TaskListDisplayMode {
+  return value === 'grid' || value === 'list'
 }

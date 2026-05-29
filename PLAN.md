@@ -25,6 +25,8 @@ Pastel Flow는 반복적으로 사용하는 작업 환경을 템플릿으로 저
 
 사용자는 작업 템플릿을 만들고, 템플릿에 브라우저 탭 그룹 설정을 저장한다. 템플릿을 실행하면 Pastel Flow가 해당 작업 전용 브라우저 프로필을 열고, 사용자는 그 안에서 탭을 추가하거나 닫거나 로그인 상태를 변경할 수 있다. 브라우저를 종료한 뒤 다시 같은 템플릿을 실행하면 이전 세션이 유지되어야 한다.
 
+템플릿의 동적 업데이트를 켠 경우 Pastel Flow는 브라우저 실행 중 열린 탭 URL 목록을 주기적으로 캡처하고, 브라우저 종료 시 마지막 URL 목록을 템플릿의 `initialUrls`에 반영한다. 전용 프로필 방식에서는 브라우저의 실제 탭 그룹 이름, 색, 그룹 관계를 안정적으로 읽을 수 없으므로 MVP의 동적 업데이트 범위는 URL 목록으로 제한한다. 탭 그룹 메타데이터 동기화는 향후 `extension_controlled` 실행 방식에서 구현한다.
+
 초기 구현 방식은 **템플릿별 전용 브라우저 프로필 실행**으로 고정한다.
 
 - 각 브라우저 작업 템플릿은 고유한 `profileId`를 가진다.
@@ -97,6 +99,7 @@ type BrowserTabGroupConfig = {
   browserKind: 'chrome' | 'edge' | 'chromium';
   restorePolicy: 'browser_profile' | 'initial_urls_only';
   runMode: 'dedicated_profile' | 'extension_controlled' | 'default_browser_deeplink';
+  dynamicTemplateUpdates: boolean;
 };
 
 type TaskState = {
@@ -216,12 +219,18 @@ type TaskRunResult<TState> = {
 - [x] 작업별 visibility/execution policy를 편집하는 UI를 추가한다.
 - [x] 민감 작업과 일반 작업을 구분할 최소 UI 표시를 추가한다.
 - [x] secret 참조 모델과 로컬 secret 저장소 초안을 구현한다.
+- [x] Secret 값을 Electron `safeStorage`로 암호화해 저장한다.
+- [x] Secret 삭제 시 작업의 `secretRefs`를 정리한다.
+- [x] 연동 기기 동기화 모델과 서버 DB schema 초안을 작성한다.
+- [x] 기존 평문 `secrets.json` 데이터를 암호화 형식으로 마이그레이션한다.
+- [x] 작업별 실행 로그를 표준화하고 UI에 최근 실행 이벤트를 표시한다.
+- [x] 브라우저 실행 후 열린 탭 URL 변경사항을 템플릿에 반영하는 동적 업데이트 토글을 추가한다.
 
 다음 구현 우선순위:
 
-1. Secret 값 암호화와 OS keychain 연동 방식을 검토한다.
-2. Secret 삭제 시 작업의 `secretRefs` 정리 정책을 구현한다.
-3. 연동 기기 동기화 모델과 서버 DB schema 초안을 작성한다.
+1. 확장 프로그램 기반 실행에서 실제 탭 그룹 이름, 색, 그룹 관계를 템플릿에 반영한다.
+2. Secret 생성 실패 시 `safeStorage` 사용 불가 원인을 UI에 더 구체적으로 표시한다.
+3. 실행 이벤트에 검색/필터와 보존 기간 설정을 추가한다.
 
 ### Phase 2: 권한과 Secret 기반
 

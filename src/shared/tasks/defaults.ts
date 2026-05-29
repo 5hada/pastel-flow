@@ -20,6 +20,8 @@ export const defaultTaskState: TaskState = {
 
 export const defaultBrowserRunMode: BrowserRunMode = 'dedicated_profile'
 
+export const defaultDynamicTemplateUpdates = false
+
 export function createDefaultBrowserTabGroupConfig(
   profileId: string,
 ): BrowserTabGroupConfig {
@@ -29,6 +31,7 @@ export function createDefaultBrowserTabGroupConfig(
     browserKind: 'chrome',
     restorePolicy: 'browser_profile',
     runMode: defaultBrowserRunMode,
+    dynamicTemplateUpdates: defaultDynamicTemplateUpdates,
   }
 }
 
@@ -47,6 +50,10 @@ export function normalizeBrowserTabGroupConfig(
     runMode: isBrowserRunMode(config.runMode)
       ? config.runMode
       : defaultBrowserRunMode,
+    dynamicTemplateUpdates:
+      typeof config.dynamicTemplateUpdates === 'boolean'
+        ? config.dynamicTemplateUpdates
+        : defaultDynamicTemplateUpdates,
   }
 }
 

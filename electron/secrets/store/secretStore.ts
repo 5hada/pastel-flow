@@ -15,17 +15,25 @@ export type SecretStore = {
 
 export type SecretStoreOptions = {
   dataDir: string
+  encrypt(value: string): string
+  encryptionAvailable: boolean
 }
 
 type StoredLocalSecret = LocalSecretMetadata & {
-  value: string
+  encryptedValue?: string
+  value?: string
+  storage: 'electron_safe_storage'
 }
 
 type SecretFile = {
   secrets: StoredLocalSecret[]
 }
 
-export function createSecretStore({ dataDir }: SecretStoreOptions): SecretStore {
+export function createSecretStore({
+  dataDir,
+  encrypt,
+  encryptionAvailable,
+}: SecretStoreOptions): SecretStore {
   const secretsFilePath = path.join(dataDir, 'secrets.json')
 
   async function readSecretFile(): Promise<SecretFile> {
@@ -54,9 +62,39 @@ export function createSecretStore({ dataDir }: SecretStoreOptions): SecretStore 
     )
   }
 
+  async function readMigratedSecretFile(): Promise<SecretFile> {
+    const secretFile = await readSecretFile()
+
+    if (!encryptionAvailable) {
+      return secretFile
+    }
+
+    let didMigrate = false
+    const secrets = secretFile.secrets.map((secret) => {
+      if (!secret.value || secret.encryptedValue) {
+        return secret
+      }
+
+      didMigrate = true
+      return {
+        ...secret,
+        value: undefined,
+        encryptedValue: encrypt(secret.value),
+        storage: 'electron_safe_storage' as const,
+        updatedAt: new Date().toISOString(),
+      }
+    })
+
+    if (didMigrate) {
+      await writeSecretFile({ secrets })
+    }
+
+    return { secrets }
+  }
+
   return {
     async listSecrets() {
-      const secretFile = await readSecretFile()
+      const secretFile = await readMigratedSecretFile()
       return secretFile.secrets.map(toMetadata)
     },
 
@@ -68,16 +106,23 @@ export function createSecretStore({ dataDir }: SecretStoreOptions): SecretStore 
         throw new Error('Secret 이름과 값이 필요합니다.')
       }
 
+      if (!encryptionAvailable) {
+        throw new Error(
+          '이 기기에서는 Secret 암호화 저장을 사용할 수 없습니다.',
+        )
+      }
+
       const now = new Date().toISOString()
       const secret: StoredLocalSecret = {
         id: randomUUID(),
         name,
-        value,
+        encryptedValue: encrypt(value),
+        storage: 'electron_safe_storage',
         description: input.description?.trim() || undefined,
         createdAt: now,
         updatedAt: now,
       }
-      const secretFile = await readSecretFile()
+      const secretFile = await readMigratedSecretFile()
       await writeSecretFile({
         secrets: [...secretFile.secrets, secret],
       })
@@ -86,7 +131,7 @@ export function createSecretStore({ dataDir }: SecretStoreOptions): SecretStore 
     },
 
     async deleteSecret(id) {
-      const secretFile = await readSecretFile()
+      const secretFile = await readMigratedSecretFile()
       await writeSecretFile({
         secrets: secretFile.secrets.filter((secret) => secret.id !== id),
       })

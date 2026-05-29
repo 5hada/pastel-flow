@@ -56,6 +56,7 @@ export type BrowserTabGroupConfig = {
   browserKind: BrowserKind
   restorePolicy: RestorePolicy
   runMode: BrowserRunMode
+  dynamicTemplateUpdates: boolean
 }
 
 export type TaskTemplate<TConfig = unknown, TState = TaskState> = {

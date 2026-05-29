@@ -6,6 +6,7 @@ import type {
   CreateLocalSecretInput,
   LocalSecretMetadata,
 } from '../../shared/secrets'
+import type { TaskRunEvent } from '../../shared/taskRunEvents'
 import type {
   BrowserTabGroupConfig,
   DevicePolicy,
@@ -43,6 +44,7 @@ export type TasksApi = {
   ): Promise<TaskTemplate<TConfig>>
   delete(id: string): Promise<void>
   run(id: string): Promise<TaskTemplate>
+  listEvents(taskId?: string): Promise<TaskRunEvent[]>
   onChanged(listener: (task: TaskTemplate) => void): () => void
 }
 

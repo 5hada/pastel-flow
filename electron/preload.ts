@@ -36,6 +36,9 @@ const pastelFlowApi = {
     run(id: string) {
       return ipcRenderer.invoke('tasks:run', id)
     },
+    listEvents(taskId?: string) {
+      return ipcRenderer.invoke('tasks:list-events', taskId)
+    },
     onChanged(listener: (task: unknown) => void) {
       const wrappedListener = (_event: Electron.IpcRendererEvent, task: unknown) =>
         listener(task)

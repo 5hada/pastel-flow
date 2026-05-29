@@ -1,6 +1,7 @@
 import type { TaskState, TaskTemplate } from '../../../src/shared/tasks'
 import type { TaskAdapterRegistry } from '../adapters/taskAdapterRegistry'
 import type { AppSettingsStore } from '../../settings/store/appSettingsStore'
+import type { TaskRunEventStore } from '../store/taskRunEventStore'
 import type { TaskStore } from '../store/taskStore'
 
 export type TaskRunner = {
@@ -9,6 +10,7 @@ export type TaskRunner = {
 
 export type TaskRunnerOptions = {
   taskStore: TaskStore
+  taskRunEventStore: TaskRunEventStore
   appSettingsStore: AppSettingsStore
   adapterRegistry: TaskAdapterRegistry
   dataDir: string
@@ -18,6 +20,7 @@ export type TaskRunnerOptions = {
 
 export function createTaskRunner({
   taskStore,
+  taskRunEventStore,
   appSettingsStore,
   adapterRegistry,
   dataDir,
@@ -34,6 +37,12 @@ export function createTaskRunner({
       })
 
       try {
+        await taskRunEventStore.appendEvent({
+          taskId: task.id,
+          deviceId,
+          status: 'running',
+          message: '작업 실행을 시작했습니다.',
+        })
         await adapter.validateConfig(task.config)
         const appSettingsSnapshot = await appSettingsStore.getSnapshot()
         const result = await adapter.run({
@@ -41,6 +50,19 @@ export function createTaskRunner({
           deviceId,
           dataDir,
           appSettings: appSettingsSnapshot.settings,
+          async updateConfig(config) {
+            await runStateSaved
+            const updatedTask = await taskStore.updateTask(task.id, {
+              config,
+            })
+            await taskRunEventStore.appendEvent({
+              taskId: task.id,
+              deviceId,
+              status: updatedTask.state.status,
+              message: '브라우저 탭 변경사항을 템플릿에 반영했습니다.',
+            })
+            onTaskUpdated?.(updatedTask)
+          },
           async updateState(state) {
             await runStateSaved
             const currentTask = await taskStore.getTask(task.id)
@@ -49,6 +71,12 @@ export function createTaskRunner({
                 ...currentTask.state,
                 ...(state as Partial<TaskState>),
               },
+            })
+            await taskRunEventStore.appendEvent({
+              taskId: task.id,
+              deviceId,
+              status: updatedTask.state.status,
+              message: updatedTask.state.lastError ?? '작업 상태가 변경되었습니다.',
             })
             onTaskUpdated?.(updatedTask)
           },
@@ -61,17 +89,30 @@ export function createTaskRunner({
             ...resultState,
           },
         })
+        await taskRunEventStore.appendEvent({
+          taskId: task.id,
+          deviceId,
+          status: updatedTask.state.status,
+          message: result.message ?? '작업 실행 요청을 처리했습니다.',
+        })
         resolveRunStateSaved()
         onTaskUpdated?.(updatedTask)
 
         return updatedTask
       } catch (error) {
+        const message = getErrorMessage(error)
         const updatedTask = await taskStore.updateTask(task.id, {
           state: {
             ...task.state,
             status: 'failed',
-            lastError: getErrorMessage(error),
+            lastError: message,
           },
+        })
+        await taskRunEventStore.appendEvent({
+          taskId: task.id,
+          deviceId,
+          status: 'failed',
+          message,
         })
         resolveRunStateSaved()
         onTaskUpdated?.(updatedTask)

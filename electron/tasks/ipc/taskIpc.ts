@@ -7,12 +7,14 @@ import {
 import type { DeviceStore } from '../../devices/store/deviceStore'
 import type { AppSettingsStore } from '../../settings/store/appSettingsStore'
 import type { TaskRunner } from '../runner/taskRunner'
+import type { TaskRunEventStore } from '../store/taskRunEventStore'
 import type { TaskStore } from '../store/taskStore'
 
 export function registerTaskIpc(
   ipcMain: IpcMain,
   taskStore: TaskStore,
   taskRunner: TaskRunner,
+  taskRunEventStore: TaskRunEventStore,
   appSettingsStore: AppSettingsStore,
   deviceStore: DeviceStore,
 ): void {
@@ -30,6 +32,31 @@ export function registerTaskIpc(
         appSettingsSnapshot.settings.linkedDevices,
       ),
     )
+  })
+  ipcMain.handle('tasks:list-events', async (_event, taskId?: string) => {
+    const [tasks, currentDevice, appSettingsSnapshot] = await Promise.all([
+      taskStore.listTasks(),
+      deviceStore.getCurrentDevice(),
+      appSettingsStore.getSnapshot(),
+    ])
+    const visibleTaskIds = new Set(
+      tasks
+        .filter((task) =>
+          canViewTaskOnDevice(
+            task,
+            currentDevice,
+            appSettingsSnapshot.settings.linkedDevices,
+          ),
+        )
+        .map((task) => task.id),
+    )
+
+    if (taskId && !visibleTaskIds.has(taskId)) {
+      return []
+    }
+
+    const events = await taskRunEventStore.listEvents(taskId)
+    return events.filter((event) => visibleTaskIds.has(event.taskId))
   })
   ipcMain.handle('tasks:create', async (_event, input) => {
     const currentDevice = await deviceStore.getCurrentDevice()

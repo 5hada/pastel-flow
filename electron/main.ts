@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { createDeviceStore } from './devices/store/deviceStore'
@@ -10,6 +10,7 @@ import { browserTabGroupAdapter } from './tasks/adapters/browserTabGroupAdapter'
 import { createTaskAdapterRegistry } from './tasks/adapters/taskAdapterRegistry'
 import { registerTaskIpc } from './tasks/ipc/taskIpc'
 import { createTaskRunner } from './tasks/runner/taskRunner'
+import { createTaskRunEventStore } from './tasks/store/taskRunEventStore'
 import { createTaskStore } from './tasks/store/taskStore'
 import { canViewTaskOnDevice } from '../src/shared/tasks'
 
@@ -86,12 +87,20 @@ app.whenReady().then(async () => {
   const taskStore = createTaskStore({
     dataDir,
   })
+  const taskRunEventStore = createTaskRunEventStore({
+    dataDir,
+  })
   const secretStore = createSecretStore({
     dataDir,
+    encryptionAvailable: safeStorage.isEncryptionAvailable(),
+    encrypt(value) {
+      return safeStorage.encryptString(value).toString('base64')
+    },
   })
   const adapterRegistry = createTaskAdapterRegistry([browserTabGroupAdapter])
   const taskRunner = createTaskRunner({
     taskStore,
+    taskRunEventStore,
     appSettingsStore,
     adapterRegistry,
     dataDir,
@@ -119,7 +128,14 @@ app.whenReady().then(async () => {
   })
 
   registerAppSettingsIpc(ipcMain, appSettingsStore, deviceStore)
-  registerSecretIpc(ipcMain, secretStore)
-  registerTaskIpc(ipcMain, taskStore, taskRunner, appSettingsStore, deviceStore)
+  registerSecretIpc(ipcMain, secretStore, taskStore)
+  registerTaskIpc(
+    ipcMain,
+    taskStore,
+    taskRunner,
+    taskRunEventStore,
+    appSettingsStore,
+    deviceStore,
+  )
   createWindow()
 })

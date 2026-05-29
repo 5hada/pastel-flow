@@ -7,9 +7,11 @@ import {
   type AppSettingsSnapshot,
 } from '../../../src/shared/settings'
 
+export type StoredAppSettingsSnapshot = Omit<AppSettingsSnapshot, 'currentDevice'>
+
 export type AppSettingsStore = {
-  getSnapshot(): Promise<AppSettingsSnapshot>
-  updateSettings(settings: AppSettings): Promise<AppSettingsSnapshot>
+  getSnapshot(): Promise<StoredAppSettingsSnapshot>
+  updateSettings(settings: AppSettings): Promise<StoredAppSettingsSnapshot>
 }
 
 export type AppSettingsStoreOptions = {

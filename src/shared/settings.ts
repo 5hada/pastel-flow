@@ -1,19 +1,26 @@
+import type { CurrentDevice, LinkedDevice } from './devices'
+import { normalizeLinkedDevices } from './devices'
 import type { BrowserKind } from './tasks'
 
 export type ThemeMode = 'system' | 'light' | 'dark'
 
 export type InitialUrlInputMode = 'line'
 
+export type BrowserExecutablePaths = Partial<Record<BrowserKind, string>>
+
 export type AppSettings = {
   themeMode: ThemeMode
   defaultBrowserKind: BrowserKind
   defaultTaskName: string
   initialUrlInputMode: InitialUrlInputMode
+  browserExecutablePaths: BrowserExecutablePaths
+  linkedDevices: LinkedDevice[]
 }
 
 export type AppSettingsSnapshot = {
   settings: AppSettings
   userDataPath: string
+  currentDevice: CurrentDevice
 }
 
 export const defaultAppSettings: AppSettings = {
@@ -21,6 +28,8 @@ export const defaultAppSettings: AppSettings = {
   defaultBrowserKind: 'chrome',
   defaultTaskName: '새 브라우저 작업',
   initialUrlInputMode: 'line',
+  browserExecutablePaths: {},
+  linkedDevices: [],
 }
 
 export function normalizeAppSettings(
@@ -42,7 +51,40 @@ export function normalizeAppSettings(
       settings?.initialUrlInputMode === 'line'
         ? settings.initialUrlInputMode
         : defaultAppSettings.initialUrlInputMode,
+    browserExecutablePaths: normalizeBrowserExecutablePaths(
+      settings?.browserExecutablePaths,
+    ),
+    linkedDevices: normalizeLinkedDevices(settings?.linkedDevices),
   }
+}
+
+function normalizeBrowserExecutablePaths(
+  browserExecutablePaths: unknown,
+): BrowserExecutablePaths {
+  if (!browserExecutablePaths || typeof browserExecutablePaths !== 'object') {
+    return defaultAppSettings.browserExecutablePaths
+  }
+
+  return {
+    chrome: normalizeOptionalPath(
+      (browserExecutablePaths as BrowserExecutablePaths).chrome,
+    ),
+    edge: normalizeOptionalPath(
+      (browserExecutablePaths as BrowserExecutablePaths).edge,
+    ),
+    chromium: normalizeOptionalPath(
+      (browserExecutablePaths as BrowserExecutablePaths).chromium,
+    ),
+  }
+}
+
+function normalizeOptionalPath(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+
+  const trimmedValue = value.trim()
+  return trimmedValue || undefined
 }
 
 function isThemeMode(value: unknown): value is ThemeMode {

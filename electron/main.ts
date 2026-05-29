@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { createDeviceStore } from './devices/store/deviceStore'
 import { registerAppSettingsIpc } from './settings/ipc/appSettingsIpc'
 import { createAppSettingsStore } from './settings/store/appSettingsStore'
 import { browserTabGroupAdapter } from './tasks/adapters/browserTabGroupAdapter'
@@ -8,6 +9,7 @@ import { createTaskAdapterRegistry } from './tasks/adapters/taskAdapterRegistry'
 import { registerTaskIpc } from './tasks/ipc/taskIpc'
 import { createTaskRunner } from './tasks/runner/taskRunner'
 import { createTaskStore } from './tasks/store/taskStore'
+import { canViewTaskOnDevice } from '../src/shared/tasks'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -70,23 +72,48 @@ app.on('activate', () => {
   }
 })
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const dataDir = app.getPath('userData')
   const appSettingsStore = createAppSettingsStore({
     dataDir,
   })
+  const deviceStore = createDeviceStore({
+    dataDir,
+  })
+  const currentDevice = await deviceStore.getCurrentDevice()
   const taskStore = createTaskStore({
     dataDir,
   })
   const adapterRegistry = createTaskAdapterRegistry([browserTabGroupAdapter])
   const taskRunner = createTaskRunner({
     taskStore,
+    appSettingsStore,
     adapterRegistry,
     dataDir,
-    deviceId: 'local-device',
+    deviceId: currentDevice.id,
+    async onTaskUpdated(task) {
+      const [currentDevice, appSettingsSnapshot] = await Promise.all([
+        deviceStore.getCurrentDevice(),
+        appSettingsStore.getSnapshot(),
+      ])
+
+      if (
+        !canViewTaskOnDevice(
+          task,
+          currentDevice,
+          appSettingsSnapshot.settings.linkedDevices,
+        )
+      ) {
+        return
+      }
+
+      for (const browserWindow of BrowserWindow.getAllWindows()) {
+        browserWindow.webContents.send('tasks:changed', task)
+      }
+    },
   })
 
-  registerAppSettingsIpc(ipcMain, appSettingsStore)
-  registerTaskIpc(ipcMain, taskStore, taskRunner)
+  registerAppSettingsIpc(ipcMain, appSettingsStore, deviceStore)
+  registerTaskIpc(ipcMain, taskStore, taskRunner, appSettingsStore, deviceStore)
   createWindow()
 })

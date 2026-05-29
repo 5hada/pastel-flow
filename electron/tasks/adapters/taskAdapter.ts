@@ -1,9 +1,11 @@
+import type { AppSettings } from '../../../src/shared/settings'
 import type { TaskTemplate, TaskType } from '../../../src/shared/tasks'
 
 export type TaskRunContext<TConfig = unknown, TState = unknown> = {
   task: TaskTemplate<TConfig, TState>
   deviceId: string
   dataDir: string
+  appSettings: AppSettings
   updateState(state: Partial<TState>): Promise<void>
 }
 

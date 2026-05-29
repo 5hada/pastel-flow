@@ -21,7 +21,7 @@ export const browserTabGroupAdapter: TaskAdapter<
       throw new Error('Browser tab group tasks require a profileId.')
     }
   },
-  async run({ dataDir, task, updateState }) {
+  async run({ appSettings, dataDir, task, updateState }) {
     const config = normalizeBrowserTabGroupConfig(task.config)
 
     if (config.runMode !== 'dedicated_profile') {
@@ -37,7 +37,10 @@ export const browserTabGroupAdapter: TaskAdapter<
     )
 
     await mkdir(localProfilePath, { recursive: true })
-    const browserExecutable = await findBrowserExecutable(config.browserKind)
+    const browserExecutable = await findBrowserExecutable(
+      config.browserKind,
+      appSettings.browserExecutablePaths,
+    )
     const browserProcess = await launchBrowser(browserExecutable.path, [
       `--user-data-dir=${localProfilePath}`,
       '--no-first-run',

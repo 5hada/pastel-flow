@@ -1,5 +1,11 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import {
+  getDeviceAccessLevelLabel,
+  type CurrentDevice,
+  type DeviceAccessLevel,
+  type LinkedDevice,
+} from './shared/devices'
+import {
   defaultAppSettings,
   type AppSettings,
   type ThemeMode,
@@ -43,6 +49,10 @@ function createBrowserTaskForm(settings: AppSettings): BrowserTaskFormState {
 const initialSettingsSnapshot = {
   settings: defaultAppSettings,
   userDataPath: '',
+  currentDevice: {
+    id: '',
+    name: '',
+  },
 }
 
 const defaultEditForm: BrowserTaskFormState = {
@@ -60,6 +70,9 @@ function App() {
     useState<AppSettings>(defaultSettingsForm)
   const [userDataPath, setUserDataPath] = useState(
     initialSettingsSnapshot.userDataPath,
+  )
+  const [currentDevice, setCurrentDevice] = useState<CurrentDevice>(
+    initialSettingsSnapshot.currentDevice,
   )
   const [createForm, setCreateForm] =
     useState<BrowserTaskFormState>(defaultCreateForm)
@@ -95,6 +108,24 @@ function App() {
   useEffect(() => {
     void loadAppSettings()
     void loadTasks()
+  }, [])
+
+  useEffect(() => {
+    if (!window.pastelFlow) {
+      return undefined
+    }
+
+    return window.pastelFlow.tasks.onChanged((updatedTask) => {
+      setTasks((currentTasks) => {
+        if (!currentTasks.some((task) => task.id === updatedTask.id)) {
+          return [...currentTasks, updatedTask]
+        }
+
+        return currentTasks.map((task) =>
+          task.id === updatedTask.id ? updatedTask : task,
+        )
+      })
+    })
   }, [])
 
   useEffect(() => {
@@ -150,6 +181,7 @@ function App() {
       setAppSettings(snapshot.settings)
       setSettingsForm(snapshot.settings)
       setUserDataPath(snapshot.userDataPath)
+      setCurrentDevice(snapshot.currentDevice)
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     }
@@ -244,7 +276,9 @@ function App() {
       setAppSettings(snapshot.settings)
       setSettingsForm(snapshot.settings)
       setUserDataPath(snapshot.userDataPath)
+      setCurrentDevice(snapshot.currentDevice)
       setSettingsSaveState('saved')
+      await loadTasks()
     } catch (error) {
       setSettingsSaveState('failed')
       setSettingsErrorMessage(getErrorMessage(error))
@@ -460,6 +494,7 @@ function App() {
             onSubmit={handleSaveSettings}
             saveState={settingsSaveState}
             settingsErrorMessage={settingsErrorMessage}
+            currentDevice={currentDevice}
             userDataPath={userDataPath}
           />
         </section>
@@ -775,6 +810,7 @@ function EditWorkspace({
 
 type AppSettingsPanelProps = {
   form: AppSettings
+  currentDevice: CurrentDevice
   saveState: SettingsSaveState
   settingsErrorMessage: string | null
   userDataPath: string
@@ -784,6 +820,7 @@ type AppSettingsPanelProps = {
 }
 
 function AppSettingsPanel({
+  currentDevice,
   form,
   onChange,
   onClose,
@@ -870,9 +907,122 @@ function AppSettingsPanel({
         </label>
 
         <label>
+          Chrome 실행 파일 경로
+          <input
+            value={form.browserExecutablePaths.chrome ?? ''}
+            onChange={(event) =>
+              onChange({
+                ...form,
+                browserExecutablePaths: {
+                  ...form.browserExecutablePaths,
+                  chrome: event.target.value,
+                },
+              })
+            }
+            placeholder="비워두면 자동으로 찾습니다."
+          />
+        </label>
+
+        <label>
+          Edge 실행 파일 경로
+          <input
+            value={form.browserExecutablePaths.edge ?? ''}
+            onChange={(event) =>
+              onChange({
+                ...form,
+                browserExecutablePaths: {
+                  ...form.browserExecutablePaths,
+                  edge: event.target.value,
+                },
+              })
+            }
+            placeholder="비워두면 자동으로 찾습니다."
+          />
+        </label>
+
+        <label>
+          Chromium 실행 파일 경로
+          <input
+            value={form.browserExecutablePaths.chromium ?? ''}
+            onChange={(event) =>
+              onChange({
+                ...form,
+                browserExecutablePaths: {
+                  ...form.browserExecutablePaths,
+                  chromium: event.target.value,
+                },
+              })
+            }
+            placeholder="비워두면 자동으로 찾습니다."
+          />
+        </label>
+
+        <label>
           데이터 위치
           <input value={userDataPath || '아직 불러오지 못했습니다.'} readOnly />
         </label>
+
+        <section className="settings-subsection" aria-label="기기 권한">
+          <div className="section-heading compact-heading">
+            <div>
+              <p className="eyebrow">Device policy</p>
+              <h3>기기별 허용 수준</h3>
+            </div>
+            <button
+              className="ghost-button"
+              type="button"
+              onClick={() =>
+                onChange({
+                  ...form,
+                  linkedDevices: [
+                    ...form.linkedDevices,
+                    createEmptyLinkedDevice(),
+                  ],
+                })
+              }
+            >
+              기기 추가
+            </button>
+          </div>
+
+          <div className="device-current">
+            <span>현재 기기</span>
+            <strong>{currentDevice.name || '아직 불러오지 못했습니다.'}</strong>
+            <code>{currentDevice.id || '기기 ID 없음'}</code>
+          </div>
+
+          {form.linkedDevices.length === 0 ? (
+            <p className="muted-text">아직 연동된 기기 설정이 없습니다.</p>
+          ) : (
+            <div className="linked-device-list">
+              {form.linkedDevices.map((device, index) => (
+                <LinkedDeviceEditor
+                  device={device}
+                  key={`${device.id}-${index}`}
+                  onChange={(updatedDevice) =>
+                    onChange({
+                      ...form,
+                      linkedDevices: form.linkedDevices.map(
+                        (currentDeviceItem, currentIndex) =>
+                          currentIndex === index
+                            ? updatedDevice
+                            : currentDeviceItem,
+                      ),
+                    })
+                  }
+                  onRemove={() =>
+                    onChange({
+                      ...form,
+                      linkedDevices: form.linkedDevices.filter(
+                        (_device, currentIndex) => currentIndex !== index,
+                      ),
+                    })
+                  }
+                />
+              ))}
+            </div>
+          )}
+        </section>
 
         {settingsErrorMessage ? (
           <p className="panel-error">{settingsErrorMessage}</p>
@@ -982,8 +1132,100 @@ function isSettingsDirty(form: AppSettings, settings: AppSettings): boolean {
     form.themeMode !== settings.themeMode ||
     form.defaultBrowserKind !== settings.defaultBrowserKind ||
     form.defaultTaskName.trim() !== settings.defaultTaskName ||
-    form.initialUrlInputMode !== settings.initialUrlInputMode
+    form.initialUrlInputMode !== settings.initialUrlInputMode ||
+    normalizeSettingsPath(form.browserExecutablePaths.chrome) !==
+      normalizeSettingsPath(settings.browserExecutablePaths.chrome) ||
+    normalizeSettingsPath(form.browserExecutablePaths.edge) !==
+      normalizeSettingsPath(settings.browserExecutablePaths.edge) ||
+    normalizeSettingsPath(form.browserExecutablePaths.chromium) !==
+      normalizeSettingsPath(settings.browserExecutablePaths.chromium) ||
+    JSON.stringify(normalizeLinkedDeviceList(form.linkedDevices)) !==
+      JSON.stringify(normalizeLinkedDeviceList(settings.linkedDevices))
   )
+}
+
+type LinkedDeviceEditorProps = {
+  device: LinkedDevice
+  onChange(device: LinkedDevice): void
+  onRemove(): void
+}
+
+function LinkedDeviceEditor({
+  device,
+  onChange,
+  onRemove,
+}: LinkedDeviceEditorProps) {
+  return (
+    <div className="linked-device-row">
+      <label>
+        기기 이름
+        <input
+          value={device.name}
+          onChange={(event) =>
+            onChange({
+              ...device,
+              name: event.target.value,
+            })
+          }
+        />
+      </label>
+      <label>
+        기기 ID
+        <input
+          value={device.id}
+          onChange={(event) =>
+            onChange({
+              ...device,
+              id: event.target.value,
+            })
+          }
+        />
+      </label>
+      <label>
+        허용 수준
+        <select
+          value={device.accessLevel}
+          onChange={(event) =>
+            onChange({
+              ...device,
+              accessLevel: event.target.value as DeviceAccessLevel,
+            })
+          }
+        >
+          {(['blocked', 'visible', 'executable', 'trusted'] as const).map(
+            (accessLevel) => (
+              <option key={accessLevel} value={accessLevel}>
+                {getDeviceAccessLevelLabel(accessLevel)}
+              </option>
+            ),
+          )}
+        </select>
+      </label>
+      <button className="danger-button" type="button" onClick={onRemove}>
+        제거
+      </button>
+    </div>
+  )
+}
+
+function normalizeSettingsPath(value: string | undefined): string {
+  return value?.trim() ?? ''
+}
+
+function createEmptyLinkedDevice(): LinkedDevice {
+  return {
+    id: '',
+    name: '',
+    accessLevel: 'visible',
+  }
+}
+
+function normalizeLinkedDeviceList(devices: LinkedDevice[]): LinkedDevice[] {
+  return devices.map((device) => ({
+    id: device.id.trim(),
+    name: device.name.trim(),
+    accessLevel: device.accessLevel,
+  }))
 }
 
 function getThemeModeLabel(themeMode: ThemeMode): string {

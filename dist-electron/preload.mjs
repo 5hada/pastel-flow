@@ -24,6 +24,13 @@ const pastelFlowApi = {
     },
     run(id) {
       return electron.ipcRenderer.invoke("tasks:run", id);
+    },
+    onChanged(listener) {
+      const wrappedListener = (_event, task) => listener(task);
+      electron.ipcRenderer.on("tasks:changed", wrappedListener);
+      return () => {
+        electron.ipcRenderer.off("tasks:changed", wrappedListener);
+      };
     }
   }
 };

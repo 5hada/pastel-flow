@@ -139,6 +139,8 @@ type TaskRunContext<TConfig, TState> = {
   task: TaskTemplate<TConfig, TState>;
   deviceId: string;
   dataDir: string;
+  appSettings: AppSettings;
+  updateState(state: Partial<TState>): Promise<void>;
 };
 
 type TaskRunResult<TState> = {
@@ -164,17 +166,18 @@ type TaskRunResult<TState> = {
 - 브라우저 탭 그룹의 이름, 브라우저 종류, 실행 방식, 초기 URL을 UI에서 생성/수정할 수 있게 했다.
 - 저장된 브라우저 탭 그룹을 UI에서 삭제할 수 있게 했다.
 - 작업 실행 IPC, preload API, adapter registry, task runner를 추가했다.
-- `dedicated_profile` 실행 방식에서 전용 브라우저 프로필 디렉터리를 생성하고 실행 상태를 저장한다.
+- `dedicated_profile` 실행 방식에서 전용 브라우저 프로필 디렉터리를 생성하고 브라우저 프로세스를 실행한다.
+- Chrome, Edge, Chromium 실행 파일 자동 탐색과 앱 설정 기반 수동 경로 지정을 지원한다.
+- 브라우저 실행 성공, 실패, 종료 이후 상태를 `tasks.json`에 저장한다.
+- 앱 재시작 후 작업 설정과 실행 상태가 유지되는 것을 직접 실행으로 확인했다.
 
 ### 부분 완료
 
-- 실행 버튼과 실행 상태 갱신 흐름은 구현됐지만 실제 Chrome, Edge, Chromium 프로세스 실행은 아직 없다.
-- `browser_tab_group` adapter는 전용 프로필 디렉터리 준비까지만 처리한다.
+- 실행 이후 상태 변경은 저장되지만 renderer로 실시간 push되지는 않는다.
 - `extension_controlled`, `default_browser_deeplink` 실행 방식은 모델에만 있고 아직 실행되지 않는다.
 
 ### 미완료
 
-- Chrome, Edge, Chromium 실행 파일 탐색과 전용 프로필 실행.
 - secret 저장소, 기기 식별자, 권한 정책 적용 로직.
 
 ### 현재 단계 완료 기준
@@ -203,13 +206,19 @@ type TaskRunResult<TState> = {
 - [x] `initialUrls`가 있으면 브라우저 실행 인자로 전달한다.
 - [x] 브라우저 실행 실패 시 사용자가 이해할 수 있는 오류 메시지를 저장한다.
 - [x] 실행된 브라우저 종료 이후 상태 표기 정책을 구현한다.
-- [ ] 앱 재시작 후 작업 설정과 실행 상태가 유지되는지 검증한다.
+- [x] 앱 재시작 후 작업 설정과 실행 상태가 유지되는지 검증한다.
+- [x] 브라우저 실행 파일 수동 지정 설정을 구현한다.
+- [x] 실행 상태 변경을 renderer에 실시간으로 알려주는 이벤트 흐름을 구현한다.
+- [x] 기기 식별자를 생성하고 로컬에 저장한다.
+- [x] 연동 기기별 허용 수준 설정을 추가한다.
+- [x] 허용되지 않은 작업이 renderer에 표시되지 않도록 main process에서 목록을 필터링한다.
+- [x] 작업 실행, 수정, 삭제 전에 execution policy를 확인한다.
 
 다음 구현 우선순위:
 
-1. 앱 재시작 후 작업 설정과 실행 상태가 유지되는지 검증한다.
-2. 브라우저 실행 파일 수동 지정 설정을 검토한다.
-3. 실행 상태 변경을 renderer에 실시간으로 알려주는 이벤트 흐름을 검토한다.
+1. 작업별 visibility/execution policy를 편집하는 UI를 추가한다.
+2. 민감 작업과 일반 작업을 구분할 최소 UI 표시를 추가한다.
+3. secret 참조 모델과 로컬 secret 저장소 초안을 구현한다.
 
 ### Phase 2: 권한과 Secret 기반
 

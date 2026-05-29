@@ -39,6 +39,7 @@ export type TasksApi = {
   ): Promise<TaskTemplate<TConfig>>
   delete(id: string): Promise<void>
   run(id: string): Promise<TaskTemplate>
+  onChanged(listener: (task: TaskTemplate) => void): () => void
 }
 
 export type SettingsApi = {

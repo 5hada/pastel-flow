@@ -192,6 +192,17 @@
   font-size: 1.1rem;
 }
 
+.compact-heading {
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.compact-heading h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1rem;
+}
+
 .section-heading span {
   color: var(--text-muted);
   font-weight: 700;
@@ -624,6 +635,49 @@ button:disabled {
   background: #dff3ef;
 }
 
+.settings-subsection {
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.device-current {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--text);
+  background: var(--surface-muted);
+}
+
+.device-current span,
+.device-current code {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.device-current code {
+  overflow-wrap: anywhere;
+}
+
+.linked-device-list {
+  display: grid;
+  gap: 10px;
+}
+
+.linked-device-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(180px, 1fr) minmax(140px, 0.7fr) auto;
+  gap: 10px;
+  align-items: end;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface-muted);
+}
+
 @media (prefers-color-scheme: dark) {
   .theme-preview[data-preview-theme='system'] {
     border-color: #303a47;
@@ -651,6 +705,7 @@ button:disabled {
 
   .app-header,
   .panel-heading,
+  .linked-device-row,
   .task-row,
   .detail-list {
     grid-template-columns: 1fr;

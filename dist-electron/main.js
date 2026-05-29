@@ -1,30 +1,132 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { mkdir, writeFile, readFile, access } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { readFile, mkdir, writeFile, access } from "node:fs/promises";
+import os from "node:os";
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
-import { randomUUID } from "node:crypto";
-function registerAppSettingsIpc(ipcMain2, appSettingsStore) {
-  ipcMain2.handle("settings:get", () => appSettingsStore.getSnapshot());
-  ipcMain2.handle(
-    "settings:update",
-    (_event, settings) => appSettingsStore.updateSettings(settings)
-  );
+function createDeviceStore({ dataDir }) {
+  const deviceFilePath = path.join(dataDir, "device.json");
+  async function readCurrentDevice() {
+    try {
+      const raw = await readFile(deviceFilePath, "utf8");
+      const parsed = JSON.parse(raw);
+      if (typeof parsed.id === "string" && parsed.id.trim()) {
+        return {
+          id: parsed.id.trim(),
+          name: typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim() : parsed.id.trim()
+        };
+      }
+      return null;
+    } catch (error) {
+      if (isNodeError$2(error) && error.code === "ENOENT") {
+        return null;
+      }
+      throw error;
+    }
+  }
+  async function writeCurrentDevice(device) {
+    await mkdir(dataDir, { recursive: true });
+    await writeFile(
+      deviceFilePath,
+      `${JSON.stringify(device, null, 2)}
+`,
+      "utf8"
+    );
+  }
+  return {
+    async getCurrentDevice() {
+      const existingDevice = await readCurrentDevice();
+      if (existingDevice) {
+        return existingDevice;
+      }
+      const device = {
+        id: randomUUID(),
+        name: os.hostname() || "Local device"
+      };
+      await writeCurrentDevice(device);
+      return device;
+    }
+  };
+}
+function isNodeError$2(error) {
+  return error instanceof Error && "code" in error;
+}
+function registerAppSettingsIpc(ipcMain2, appSettingsStore, deviceStore) {
+  ipcMain2.handle("settings:get", async () => ({
+    ...await appSettingsStore.getSnapshot(),
+    currentDevice: await deviceStore.getCurrentDevice()
+  }));
+  ipcMain2.handle("settings:update", async (_event, settings) => ({
+    ...await appSettingsStore.updateSettings(settings),
+    currentDevice: await deviceStore.getCurrentDevice()
+  }));
+}
+function normalizeLinkedDevices(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((device) => {
+    if (!device || typeof device !== "object") {
+      return null;
+    }
+    const candidate = device;
+    if (typeof candidate.id !== "string" || !candidate.id.trim()) {
+      return null;
+    }
+    return {
+      id: candidate.id.trim(),
+      name: typeof candidate.name === "string" && candidate.name.trim() ? candidate.name.trim() : candidate.id.trim(),
+      accessLevel: isDeviceAccessLevel(candidate.accessLevel) ? candidate.accessLevel : "visible"
+    };
+  }).filter((device) => Boolean(device));
+}
+function isDeviceAccessLevel(value) {
+  return value === "blocked" || value === "visible" || value === "executable" || value === "trusted";
 }
 const defaultAppSettings = {
   themeMode: "light",
   defaultBrowserKind: "chrome",
   defaultTaskName: "새 브라우저 작업",
-  initialUrlInputMode: "line"
+  initialUrlInputMode: "line",
+  browserExecutablePaths: {},
+  linkedDevices: []
 };
 function normalizeAppSettings(settings) {
   return {
     themeMode: isThemeMode(settings == null ? void 0 : settings.themeMode) ? settings.themeMode : defaultAppSettings.themeMode,
     defaultBrowserKind: isBrowserKind$1(settings == null ? void 0 : settings.defaultBrowserKind) ? settings.defaultBrowserKind : defaultAppSettings.defaultBrowserKind,
     defaultTaskName: typeof (settings == null ? void 0 : settings.defaultTaskName) === "string" && settings.defaultTaskName.trim() ? settings.defaultTaskName.trim() : defaultAppSettings.defaultTaskName,
-    initialUrlInputMode: (settings == null ? void 0 : settings.initialUrlInputMode) === "line" ? settings.initialUrlInputMode : defaultAppSettings.initialUrlInputMode
+    initialUrlInputMode: (settings == null ? void 0 : settings.initialUrlInputMode) === "line" ? settings.initialUrlInputMode : defaultAppSettings.initialUrlInputMode,
+    browserExecutablePaths: normalizeBrowserExecutablePaths(
+      settings == null ? void 0 : settings.browserExecutablePaths
+    ),
+    linkedDevices: normalizeLinkedDevices(settings == null ? void 0 : settings.linkedDevices)
   };
+}
+function normalizeBrowserExecutablePaths(browserExecutablePaths) {
+  if (!browserExecutablePaths || typeof browserExecutablePaths !== "object") {
+    return defaultAppSettings.browserExecutablePaths;
+  }
+  return {
+    chrome: normalizeOptionalPath(
+      browserExecutablePaths.chrome
+    ),
+    edge: normalizeOptionalPath(
+      browserExecutablePaths.edge
+    ),
+    chromium: normalizeOptionalPath(
+      browserExecutablePaths.chromium
+    )
+  };
+}
+function normalizeOptionalPath(value) {
+  if (typeof value !== "string") {
+    return void 0;
+  }
+  const trimmedValue = value.trim();
+  return trimmedValue || void 0;
 }
 function isThemeMode(value) {
   return value === "system" || value === "light" || value === "dark";
@@ -103,8 +205,74 @@ function isRestorePolicy(value) {
 function isBrowserRunMode(value) {
   return value === "dedicated_profile" || value === "extension_controlled" || value === "default_browser_deeplink";
 }
-async function findBrowserExecutable(browserKind) {
+function canViewTaskOnDevice(task, currentDevice, linkedDevices) {
+  const accessLevel = getCurrentDeviceAccessLevel(currentDevice, linkedDevices);
+  if (accessLevel === "blocked") {
+    return false;
+  }
+  switch (task.permissions.visibility) {
+    case "all_devices":
+      return true;
+    case "trusted_devices":
+      return accessLevel === "trusted";
+    case "specific_devices":
+      return isDeviceAllowed(task.permissions, currentDevice.id);
+    case "local_only":
+      return isLocalDeviceAllowed(task.permissions, currentDevice.id);
+  }
+}
+function canExecuteTaskOnDevice(task, currentDevice, linkedDevices) {
+  const accessLevel = getCurrentDeviceAccessLevel(currentDevice, linkedDevices);
+  if (accessLevel !== "executable" && accessLevel !== "trusted") {
+    return false;
+  }
+  switch (task.permissions.execution) {
+    case "anywhere":
+      return true;
+    case "trusted_only":
+      return accessLevel === "trusted";
+    case "specific_devices":
+      return isDeviceAllowed(task.permissions, currentDevice.id);
+    case "local_only":
+      return isLocalDeviceAllowed(task.permissions, currentDevice.id);
+  }
+}
+function createLocalOnlyDevicePolicy(currentDevice) {
+  return {
+    visibility: "local_only",
+    execution: "local_only",
+    allowedDeviceIds: [currentDevice.id]
+  };
+}
+function getCurrentDeviceAccessLevel(currentDevice, linkedDevices) {
+  var _a;
+  return ((_a = linkedDevices.find((device) => device.id === currentDevice.id)) == null ? void 0 : _a.accessLevel) ?? "trusted";
+}
+function isDeviceAllowed(permissions, deviceId) {
+  var _a;
+  return Boolean((_a = permissions.allowedDeviceIds) == null ? void 0 : _a.includes(deviceId));
+}
+function isLocalDeviceAllowed(permissions, deviceId) {
+  if (!permissions.allowedDeviceIds || permissions.allowedDeviceIds.length === 0) {
+    return true;
+  }
+  return permissions.allowedDeviceIds.includes(deviceId);
+}
+async function findBrowserExecutable(browserKind, executablePaths = {}) {
+  var _a;
   const displayName = getBrowserDisplayName(browserKind);
+  const configuredPath = (_a = executablePaths[browserKind]) == null ? void 0 : _a.trim();
+  if (configuredPath) {
+    if (await pathExists(configuredPath)) {
+      return {
+        displayName,
+        path: configuredPath
+      };
+    }
+    throw new Error(
+      `${displayName} 실행 파일 경로가 올바르지 않습니다: ${configuredPath}`
+    );
+  }
   const candidates = dedupe([
     ...getKnownBrowserPaths(browserKind),
     ...getPathBrowserCandidates(browserKind)
@@ -258,7 +426,7 @@ const browserTabGroupAdapter = {
       throw new Error("Browser tab group tasks require a profileId.");
     }
   },
-  async run({ dataDir, task, updateState }) {
+  async run({ appSettings, dataDir, task, updateState }) {
     const config = normalizeBrowserTabGroupConfig(task.config);
     if (config.runMode !== "dedicated_profile") {
       throw new Error(
@@ -271,7 +439,10 @@ const browserTabGroupAdapter = {
       config.profileId
     );
     await mkdir(localProfilePath, { recursive: true });
-    const browserExecutable = await findBrowserExecutable(config.browserKind);
+    const browserExecutable = await findBrowserExecutable(
+      config.browserKind,
+      appSettings.browserExecutablePaths
+    );
     const browserProcess = await launchBrowser(browserExecutable.path, [
       `--user-data-dir=${localProfilePath}`,
       "--no-first-run",
@@ -340,21 +511,81 @@ function createTaskAdapterRegistry(adapters) {
     }
   };
 }
-function registerTaskIpc(ipcMain2, taskStore, taskRunner) {
-  ipcMain2.handle("tasks:list", () => taskStore.listTasks());
-  ipcMain2.handle("tasks:create", (_event, input) => taskStore.createTask(input));
-  ipcMain2.handle(
-    "tasks:update",
-    (_event, id, input) => taskStore.updateTask(id, input)
-  );
-  ipcMain2.handle("tasks:delete", (_event, id) => taskStore.deleteTask(id));
-  ipcMain2.handle("tasks:run", (_event, id) => taskRunner.runTask(id));
+function registerTaskIpc(ipcMain2, taskStore, taskRunner, appSettingsStore, deviceStore) {
+  ipcMain2.handle("tasks:list", async () => {
+    const [tasks, currentDevice, appSettingsSnapshot] = await Promise.all([
+      taskStore.listTasks(),
+      deviceStore.getCurrentDevice(),
+      appSettingsStore.getSnapshot()
+    ]);
+    return tasks.filter(
+      (task) => canViewTaskOnDevice(
+        task,
+        currentDevice,
+        appSettingsSnapshot.settings.linkedDevices
+      )
+    );
+  });
+  ipcMain2.handle("tasks:create", async (_event, input) => {
+    const currentDevice = await deviceStore.getCurrentDevice();
+    return taskStore.createTask({
+      ...input,
+      permissions: input.permissions ?? createLocalOnlyDevicePolicy(currentDevice)
+    });
+  });
+  ipcMain2.handle("tasks:update", async (_event, id, input) => {
+    const [task, currentDevice, appSettingsSnapshot] = await Promise.all([
+      taskStore.getTask(id),
+      deviceStore.getCurrentDevice(),
+      appSettingsStore.getSnapshot()
+    ]);
+    if (!canExecuteTaskOnDevice(
+      task,
+      currentDevice,
+      appSettingsSnapshot.settings.linkedDevices
+    )) {
+      throw new Error("이 기기에서는 해당 작업을 수정할 수 없습니다.");
+    }
+    return taskStore.updateTask(id, input);
+  });
+  ipcMain2.handle("tasks:delete", async (_event, id) => {
+    const [task, currentDevice, appSettingsSnapshot] = await Promise.all([
+      taskStore.getTask(id),
+      deviceStore.getCurrentDevice(),
+      appSettingsStore.getSnapshot()
+    ]);
+    if (!canExecuteTaskOnDevice(
+      task,
+      currentDevice,
+      appSettingsSnapshot.settings.linkedDevices
+    )) {
+      throw new Error("이 기기에서는 해당 작업을 삭제할 수 없습니다.");
+    }
+    return taskStore.deleteTask(id);
+  });
+  ipcMain2.handle("tasks:run", async (_event, id) => {
+    const [task, currentDevice, appSettingsSnapshot] = await Promise.all([
+      taskStore.getTask(id),
+      deviceStore.getCurrentDevice(),
+      appSettingsStore.getSnapshot()
+    ]);
+    if (!canExecuteTaskOnDevice(
+      task,
+      currentDevice,
+      appSettingsSnapshot.settings.linkedDevices
+    )) {
+      throw new Error("이 기기에서는 해당 작업을 실행할 수 없습니다.");
+    }
+    return taskRunner.runTask(id);
+  });
 }
 function createTaskRunner({
   taskStore,
+  appSettingsStore,
   adapterRegistry,
   dataDir,
-  deviceId
+  deviceId,
+  onTaskUpdated
 }) {
   return {
     async runTask(id) {
@@ -366,19 +597,22 @@ function createTaskRunner({
       });
       try {
         await adapter.validateConfig(task.config);
+        const appSettingsSnapshot = await appSettingsStore.getSnapshot();
         const result = await adapter.run({
           task,
           deviceId,
           dataDir,
+          appSettings: appSettingsSnapshot.settings,
           async updateState(state) {
             await runStateSaved;
             const currentTask = await taskStore.getTask(task.id);
-            await taskStore.updateTask(task.id, {
+            const updatedTask2 = await taskStore.updateTask(task.id, {
               state: {
                 ...currentTask.state,
                 ...state
               }
             });
+            onTaskUpdated == null ? void 0 : onTaskUpdated(updatedTask2);
           }
         });
         const resultState = result.state;
@@ -389,6 +623,7 @@ function createTaskRunner({
           }
         });
         resolveRunStateSaved();
+        onTaskUpdated == null ? void 0 : onTaskUpdated(updatedTask);
         return updatedTask;
       } catch (error) {
         const updatedTask = await taskStore.updateTask(task.id, {
@@ -399,6 +634,7 @@ function createTaskRunner({
           }
         });
         resolveRunStateSaved();
+        onTaskUpdated == null ? void 0 : onTaskUpdated(updatedTask);
         return updatedTask;
       }
     }
@@ -530,23 +766,44 @@ app.on("activate", () => {
     createWindow();
   }
 });
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const dataDir = app.getPath("userData");
   const appSettingsStore = createAppSettingsStore({
     dataDir
   });
+  const deviceStore = createDeviceStore({
+    dataDir
+  });
+  const currentDevice = await deviceStore.getCurrentDevice();
   const taskStore = createTaskStore({
     dataDir
   });
   const adapterRegistry = createTaskAdapterRegistry([browserTabGroupAdapter]);
   const taskRunner = createTaskRunner({
     taskStore,
+    appSettingsStore,
     adapterRegistry,
     dataDir,
-    deviceId: "local-device"
+    deviceId: currentDevice.id,
+    async onTaskUpdated(task) {
+      const [currentDevice2, appSettingsSnapshot] = await Promise.all([
+        deviceStore.getCurrentDevice(),
+        appSettingsStore.getSnapshot()
+      ]);
+      if (!canViewTaskOnDevice(
+        task,
+        currentDevice2,
+        appSettingsSnapshot.settings.linkedDevices
+      )) {
+        return;
+      }
+      for (const browserWindow of BrowserWindow.getAllWindows()) {
+        browserWindow.webContents.send("tasks:changed", task);
+      }
+    }
   });
-  registerAppSettingsIpc(ipcMain, appSettingsStore);
-  registerTaskIpc(ipcMain, taskStore, taskRunner);
+  registerAppSettingsIpc(ipcMain, appSettingsStore, deviceStore);
+  registerTaskIpc(ipcMain, taskStore, taskRunner, appSettingsStore, deviceStore);
   createWindow();
 });
 export {

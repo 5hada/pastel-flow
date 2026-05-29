@@ -1,5 +1,6 @@
 import type { TaskState, TaskTemplate } from '../../../src/shared/tasks'
 import type { TaskAdapterRegistry } from '../adapters/taskAdapterRegistry'
+import type { AppSettingsStore } from '../../settings/store/appSettingsStore'
 import type { TaskStore } from '../store/taskStore'
 
 export type TaskRunner = {
@@ -8,16 +9,20 @@ export type TaskRunner = {
 
 export type TaskRunnerOptions = {
   taskStore: TaskStore
+  appSettingsStore: AppSettingsStore
   adapterRegistry: TaskAdapterRegistry
   dataDir: string
   deviceId: string
+  onTaskUpdated?(task: TaskTemplate): void
 }
 
 export function createTaskRunner({
   taskStore,
+  appSettingsStore,
   adapterRegistry,
   dataDir,
   deviceId,
+  onTaskUpdated,
 }: TaskRunnerOptions): TaskRunner {
   return {
     async runTask(id) {
@@ -30,19 +35,22 @@ export function createTaskRunner({
 
       try {
         await adapter.validateConfig(task.config)
+        const appSettingsSnapshot = await appSettingsStore.getSnapshot()
         const result = await adapter.run({
           task,
           deviceId,
           dataDir,
+          appSettings: appSettingsSnapshot.settings,
           async updateState(state) {
             await runStateSaved
             const currentTask = await taskStore.getTask(task.id)
-            await taskStore.updateTask(task.id, {
+            const updatedTask = await taskStore.updateTask(task.id, {
               state: {
                 ...currentTask.state,
                 ...(state as Partial<TaskState>),
               },
             })
+            onTaskUpdated?.(updatedTask)
           },
         })
         const resultState = result.state as Partial<TaskState>
@@ -54,6 +62,7 @@ export function createTaskRunner({
           },
         })
         resolveRunStateSaved()
+        onTaskUpdated?.(updatedTask)
 
         return updatedTask
       } catch (error) {
@@ -65,6 +74,7 @@ export function createTaskRunner({
           },
         })
         resolveRunStateSaved()
+        onTaskUpdated?.(updatedTask)
 
         return updatedTask
       }

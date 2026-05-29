@@ -1,6 +1,7 @@
 import { constants } from 'node:fs'
 import { access } from 'node:fs/promises'
 import path from 'node:path'
+import type { BrowserExecutablePaths } from '../../../src/shared/settings'
 import type { BrowserKind } from '../../../src/shared/tasks'
 
 export type BrowserExecutable = {
@@ -10,8 +11,24 @@ export type BrowserExecutable = {
 
 export async function findBrowserExecutable(
   browserKind: BrowserKind,
+  executablePaths: BrowserExecutablePaths = {},
 ): Promise<BrowserExecutable> {
   const displayName = getBrowserDisplayName(browserKind)
+  const configuredPath = executablePaths[browserKind]?.trim()
+
+  if (configuredPath) {
+    if (await pathExists(configuredPath)) {
+      return {
+        displayName,
+        path: configuredPath,
+      }
+    }
+
+    throw new Error(
+      `${displayName} 실행 파일 경로가 올바르지 않습니다: ${configuredPath}`,
+    )
+  }
+
   const candidates = dedupe([
     ...getKnownBrowserPaths(browserKind),
     ...getPathBrowserCandidates(browserKind),

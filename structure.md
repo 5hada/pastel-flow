@@ -8,6 +8,8 @@
 - Renderer: React + TypeScript
 - 번들러/개발 서버: Vite
 - 초기 저장 방식: Electron `userData` 경로의 `tasks.json`
+- 앱 설정 저장 방식: Electron `userData` 경로의 `appSettings.json`
+- 기기 식별자 저장 방식: Electron `userData` 경로의 `device.json`
 - 현재 MVP: 브라우저 탭 그룹 템플릿 생성, 수정, 삭제, 저장, 실행, 목록 표시
 - 현재 브라우저 실행 기본값: `dedicated_profile`
 
@@ -49,6 +51,14 @@ main process와 renderer가 함께 쓰는 타입과 순수 helper 영역이다.
 electron/
   main.ts                         Electron 앱 시작점, task store와 IPC 등록
   preload.ts                      window.pastelFlow API 노출
+  devices/
+    store/
+      deviceStore.ts              device.json 기반 현재 기기 ID 저장소
+  settings/
+    ipc/
+      appSettingsIpc.ts           settings:get/update IPC 등록
+    store/
+      appSettingsStore.ts         appSettings.json 기반 설정 저장소
   tasks/
     adapters/
       taskAdapter.ts              작업 adapter 공통 인터페이스
@@ -72,7 +82,10 @@ src/
     types/
       global.d.ts                 window.pastelFlow 전역 타입 선언
   shared/
+    devices.ts                    현재 기기, 연동 기기, 허용 수준 타입과 helper
+    settings.ts                   앱 설정 타입, 기본값, normalize helper
     tasks/
+      policies.ts                 기기 visibility/execution 정책 helper
       types.ts                    작업 템플릿과 브라우저 config 타입
       defaults.ts                 기본 state/config/policy
       index.ts                    shared tasks barrel export
@@ -82,27 +95,34 @@ src/
 
 ```text
 App.tsx
-  -> window.pastelFlow.tasks
+  -> window.pastelFlow.tasks / window.pastelFlow.settings
   -> electron/preload.ts
-  -> IPC channel: tasks:list | tasks:create | tasks:update | tasks:delete | tasks:run
-  -> electron/tasks/ipc/taskIpc.ts
-  -> electron/tasks/store/taskStore.ts
+  -> IPC channel: tasks:* | settings:*
+  -> electron/tasks/ipc/taskIpc.ts / electron/settings/ipc/appSettingsIpc.ts
+  -> electron/tasks/store/taskStore.ts / electron/settings/store/appSettingsStore.ts
   -> electron/tasks/runner/taskRunner.ts
   -> electron/tasks/adapters/browserTabGroupAdapter.ts
-  -> Electron userData/tasks.json
+  -> Electron userData/tasks.json / appSettings.json
 ```
 
-현재 UI는 브라우저 탭 그룹 생성, 수정, 삭제, 실행, 목록 표시를 지원한다. 이름, 브라우저 종류, 실행 방식, 초기 URL 목록을 renderer에서 편집하고 `tasks.json`에 저장한다. `dedicated_profile` 실행 방식에서는 전용 프로필 디렉터리를 만든 뒤 Chrome, Edge, Chromium 실행 파일을 찾아 `--user-data-dir` 인자로 브라우저 프로세스를 연다. 초기 URL이 있으면 브라우저 실행 인자로 같이 전달한다.
+현재 UI는 브라우저 탭 그룹 생성, 수정, 삭제, 실행, 목록 표시와 앱 설정 편집을 지원한다. 이름, 브라우저 종류, 실행 방식, 초기 URL 목록을 renderer에서 편집하고 `tasks.json`에 저장한다. `dedicated_profile` 실행 방식에서는 전용 프로필 디렉터리를 만든 뒤 Chrome, Edge, Chromium 실행 파일을 찾아 `--user-data-dir` 인자로 브라우저 프로세스를 연다. 초기 URL이 있으면 브라우저 실행 인자로 같이 전달한다.
 
-작업 adapter는 `TaskRunContext.updateState`를 통해 실행 이후의 비동기 상태 변화를 저장할 수 있다. 브라우저 탭 그룹 adapter는 브라우저 프로세스 종료 이벤트를 감지해 정상 종료 시 `idle`, 비정상 종료 시 `failed`와 오류 메시지를 저장한다. renderer는 별도 Node/Electron API를 쓰지 않고, 저장된 상태를 목록 재조회 또는 작업 실행 결과로 표시한다.
+앱 설정은 `appSettings.json`에 저장한다. 설정에는 테마, 기본 브라우저, 새 작업 기본 이름, 브라우저별 실행 파일 수동 경로, 연동 기기별 허용 수준이 포함된다. 브라우저 실행 파일 경로가 설정되어 있으면 자동 탐색보다 우선 사용하고, 경로가 비어 있으면 OS별 기본 경로와 `PATH`를 탐색한다.
+
+현재 기기 ID는 `device.json`에 저장한다. `tasks:list`는 main process에서 현재 기기와 연동 기기 허용 수준, 작업 `DevicePolicy.visibility`를 확인한 뒤 허용된 작업만 renderer에 반환한다. 따라서 허용되지 않은 작업은 renderer 상태에 들어오지 않으며 목록에도 표시되지 않는다. `tasks:run`, `tasks:update`, `tasks:delete`는 `DevicePolicy.execution`을 확인한 뒤 허용되지 않으면 오류를 반환한다.
+
+작업 adapter는 `TaskRunContext.updateState`를 통해 실행 이후의 비동기 상태 변화를 저장할 수 있다. 브라우저 탭 그룹 adapter는 브라우저 프로세스 종료 이벤트를 감지해 정상 종료 시 `idle`, 비정상 종료 시 `failed`와 오류 메시지를 저장한다. `taskRunner`는 작업 상태가 저장될 때 `onTaskUpdated` 콜백을 호출하고, `electron/main.ts`는 모든 BrowserWindow에 `tasks:changed` 이벤트를 보낸다. renderer는 `window.pastelFlow.tasks.onChanged`로 이벤트를 구독해 목록의 작업 상태를 실시간으로 병합한다.
 
 ## 5. 다음 구현 위치
 
 - 작업 타입 변경: `src/shared/tasks/types.ts`
 - 작업 기본값 변경: `src/shared/tasks/defaults.ts`
+- 앱 설정 변경: `src/shared/settings.ts`, `electron/settings/store/appSettingsStore.ts`, `src/App.tsx`
+- 기기 정책 변경: `src/shared/devices.ts`, `src/shared/tasks/policies.ts`, `electron/devices/store/deviceStore.ts`, `electron/tasks/ipc/taskIpc.ts`
 - 로컬 저장 방식 변경: `electron/tasks/store/taskStore.ts`
 - 새 IPC 추가: `electron/tasks/ipc/taskIpc.ts`, `electron/preload.ts`, `src/renderer/api/tasksApi.ts`
 - 브라우저 실행 구현: `electron/tasks/adapters/browserTabGroupAdapter.ts`
+- 브라우저 실행 파일 탐색 변경: `electron/tasks/adapters/browserExecutableFinder.ts`
 - 작업 실행 버튼/상태 UI: `src/App.tsx`
 
 브라우저 실행 기능을 추가할 때는 adapter가 프로필 경로 생성과 외부 프로세스 실행을 담당하고, renderer는 실행 요청과 결과 표시만 담당한다.

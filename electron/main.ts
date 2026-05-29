@@ -1,6 +1,8 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { registerTaskIpc } from './tasks/ipc/taskIpc'
+import { createTaskStore } from './tasks/store/taskStore'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -63,4 +65,11 @@ app.on('activate', () => {
   }
 })
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  const taskStore = createTaskStore({
+    dataDir: app.getPath('userData'),
+  })
+
+  registerTaskIpc(ipcMain, taskStore)
+  createWindow()
+})

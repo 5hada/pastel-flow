@@ -1,42 +1,195 @@
 #root {
-  max-width: 1280px;
+  min-height: 100vh;
+}
+
+.app-shell {
+  width: min(1040px, calc(100vw - 48px));
   margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  padding: 40px 0;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 32px;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
+.eyebrow {
+  margin: 0 0 8px;
+  color: #617085;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.app-header h1 {
+  margin: 0;
+  color: #17202e;
+  font-size: 2.4rem;
+  line-height: 1;
+}
+
+.toolbar,
+.task-section {
+  padding: 24px;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.toolbar {
+  margin-bottom: 18px;
+}
+
+.create-form {
+  display: grid;
+  gap: 10px;
+}
+
+.create-form label {
+  color: #435064;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.create-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+}
+
+input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0 12px;
+  min-height: 42px;
+  color: #17202e;
+  background: #f8fafc;
+  font: inherit;
+}
+
+button {
+  min-height: 42px;
+  border: 1px solid #1f6f68;
+  border-radius: 6px;
+  padding: 0 16px;
+  color: #ffffff;
+  background: #1f6f68;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #185a55;
+}
+
+.ghost-button {
+  color: #1f6f68;
+  background: #ffffff;
+}
+
+.ghost-button:hover {
+  color: #ffffff;
+}
+
+.error-message {
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border: 1px solid #f3b4af;
+  border-radius: 6px;
+  color: #9f2f2b;
+  background: #fff1f0;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.section-heading h2 {
+  margin: 0;
+  color: #17202e;
+  font-size: 1.1rem;
+}
+
+.section-heading span {
+  color: #617085;
+  font-weight: 700;
+}
+
+.empty-state {
+  margin: 0;
+  color: #617085;
+}
+
+.task-list {
+  display: grid;
+  gap: 12px;
+}
+
+.task-card {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 2fr;
+  gap: 20px;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.task-card h3 {
+  margin: 0 0 6px;
+  color: #17202e;
+  font-size: 1rem;
+}
+
+.task-card p {
+  margin: 0;
+  color: #617085;
+}
+
+.task-card dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.task-card dt {
+  color: #617085;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.task-card dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  color: #17202e;
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    width: min(100vw - 28px, 1040px);
+    padding: 24px 0;
   }
-  to {
-    transform: rotate(360deg);
+
+  .app-header,
+  .create-row,
+  .task-card,
+  .task-card dl {
+    grid-template-columns: 1fr;
   }
-}
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
+  .app-header {
+    align-items: stretch;
   }
-}
-
-.card {
-  padding: 2em;
-}
-
-.read-the-docs {
-  color: #888;
 }

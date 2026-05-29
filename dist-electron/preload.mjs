@@ -1,5 +1,22 @@
 "use strict";
 const electron = require("electron");
+const pastelFlowApi = {
+  tasks: {
+    list() {
+      return electron.ipcRenderer.invoke("tasks:list");
+    },
+    create(input) {
+      return electron.ipcRenderer.invoke("tasks:create", input);
+    },
+    update(id, input) {
+      return electron.ipcRenderer.invoke("tasks:update", id, input);
+    },
+    delete(id) {
+      return electron.ipcRenderer.invoke("tasks:delete", id);
+    }
+  }
+};
+electron.contextBridge.exposeInMainWorld("pastelFlow", pastelFlowApi);
 electron.contextBridge.exposeInMainWorld("ipcRenderer", {
   on(...args) {
     const [channel, listener] = args;

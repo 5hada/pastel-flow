@@ -12,13 +12,22 @@ import {
 } from './shared/settings'
 import {
   createDefaultBrowserTabGroupConfig,
+  getDeviceExecutionPolicyLabel,
+  getDeviceVisibilityPolicyLabel,
+  isRestrictedDevicePolicy,
+  normalizeDevicePolicy,
   normalizeBrowserTabGroupConfig,
   type BrowserKind,
   type BrowserTabGroupConfig,
   type BrowserTabGroupTask,
+  type DeviceExecutionPolicy,
+  type DevicePolicy,
+  type DeviceVisibilityPolicy,
+  type SecretRef,
   type TaskState,
   type TaskTemplate,
 } from './shared/tasks'
+import type { LocalSecretMetadata } from './shared/secrets'
 import type { CreateBrowserTabGroupTaskInput } from './renderer/api/tasksApi'
 import './App.css'
 
@@ -26,6 +35,16 @@ type BrowserTaskFormState = {
   name: string
   browserKind: BrowserKind
   initialUrls: string
+  visibility: DeviceVisibilityPolicy
+  execution: DeviceExecutionPolicy
+  allowedDeviceIds: string
+  secretRefIds: string
+}
+
+type SecretFormState = {
+  name: string
+  value: string
+  description: string
 }
 
 const defaultCreateForm = createBrowserTaskForm(defaultAppSettings)
@@ -43,6 +62,10 @@ function createBrowserTaskForm(settings: AppSettings): BrowserTaskFormState {
     name: settings.defaultTaskName,
     browserKind: settings.defaultBrowserKind,
     initialUrls: '',
+    visibility: 'local_only',
+    execution: 'local_only',
+    allowedDeviceIds: '',
+    secretRefIds: '',
   }
 }
 
@@ -59,10 +82,21 @@ const defaultEditForm: BrowserTaskFormState = {
   name: defaultAppSettings.defaultTaskName,
   browserKind: defaultAppSettings.defaultBrowserKind,
   initialUrls: '',
+  visibility: 'local_only',
+  execution: 'local_only',
+  allowedDeviceIds: '',
+  secretRefIds: '',
+}
+
+const defaultSecretForm: SecretFormState = {
+  name: '',
+  value: '',
+  description: '',
 }
 
 function App() {
   const [tasks, setTasks] = useState<TaskTemplate[]>([])
+  const [secrets, setSecrets] = useState<LocalSecretMetadata[]>([])
   const [appSettings, setAppSettings] = useState<AppSettings>(
     initialSettingsSnapshot.settings,
   )
@@ -91,6 +125,8 @@ function App() {
   const [settingsErrorMessage, setSettingsErrorMessage] = useState<
     string | null
   >(null)
+  const [secretForm, setSecretForm] =
+    useState<SecretFormState>(defaultSecretForm)
 
   const browserTasks = useMemo(
     () =>
@@ -107,6 +143,7 @@ function App() {
 
   useEffect(() => {
     void loadAppSettings()
+    void loadSecrets()
     void loadTasks()
   }, [])
 
@@ -187,6 +224,18 @@ function App() {
     }
   }
 
+  async function loadSecrets() {
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      setSecrets(await window.pastelFlow.secrets.list())
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    }
+  }
+
   async function handleCreateTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -205,6 +254,7 @@ function App() {
       name: trimmedName,
       type: 'browser_tab_group',
       config,
+      permissions: createDevicePolicyFromForm(createForm, currentDevice),
     }
 
     try {
@@ -287,11 +337,18 @@ function App() {
 
   function startEditing(task: BrowserTabGroupTask) {
     const config = normalizeBrowserTabGroupConfig(task.config)
+    const permissions = normalizeDevicePolicy(task.permissions)
     setConfirmDeleteTaskId(null)
     setEditForm({
       name: task.name,
       browserKind: config.browserKind,
       initialUrls: config.initialUrls.join('\n'),
+      visibility: permissions.visibility,
+      execution: permissions.execution,
+      allowedDeviceIds: permissions.allowedDeviceIds?.join('\n') ?? '',
+      secretRefIds:
+        permissions.secretRefs?.map((secretRef) => secretRef.id).join('\n') ??
+        '',
     })
   }
 
@@ -319,6 +376,7 @@ function App() {
       const updatedTask = await window.pastelFlow.tasks.update(selectedTask.id, {
         name: trimmedName,
         config,
+        permissions: createDevicePolicyFromForm(editForm, currentDevice),
       })
       setTasks((currentTasks) =>
         currentTasks.map((task) =>
@@ -379,6 +437,37 @@ function App() {
       setErrorMessage(getErrorMessage(error))
     } finally {
       setRunningTaskId(null)
+    }
+  }
+
+  async function handleCreateSecret() {
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      setSettingsErrorMessage(null)
+      const createdSecret = await window.pastelFlow.secrets.create(secretForm)
+      setSecrets((currentSecrets) => [...currentSecrets, createdSecret])
+      setSecretForm(defaultSecretForm)
+    } catch (error) {
+      setSettingsErrorMessage(getErrorMessage(error))
+    }
+  }
+
+  async function handleDeleteSecret(secretId: string) {
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      setSettingsErrorMessage(null)
+      await window.pastelFlow.secrets.delete(secretId)
+      setSecrets((currentSecrets) =>
+        currentSecrets.filter((secret) => secret.id !== secretId),
+      )
+    } catch (error) {
+      setSettingsErrorMessage(getErrorMessage(error))
     }
   }
 
@@ -461,6 +550,8 @@ function App() {
       {workspaceMode === 'create' ? (
         <CreateTaskPanel
           createForm={createForm}
+          currentDevice={currentDevice}
+          secrets={secrets}
           onCancel={openRunMode}
           onChange={setCreateForm}
           onSubmit={handleCreateTask}
@@ -471,8 +562,10 @@ function App() {
         <EditWorkspace
           browserTasks={browserTasks}
           confirmDeleteTaskId={confirmDeleteTaskId}
+          currentDevice={currentDevice}
           editForm={editForm}
           isLoading={isLoading}
+          secrets={secrets}
           onChange={setEditForm}
           onConfirmDelete={handleDeleteTask}
           onDeleteRequest={setConfirmDeleteTaskId}
@@ -494,8 +587,13 @@ function App() {
             onSubmit={handleSaveSettings}
             saveState={settingsSaveState}
             settingsErrorMessage={settingsErrorMessage}
+            secretForm={secretForm}
+            secrets={secrets}
             currentDevice={currentDevice}
             userDataPath={userDataPath}
+            onCreateSecret={handleCreateSecret}
+            onDeleteSecret={handleDeleteSecret}
+            onSecretFormChange={setSecretForm}
           />
         </section>
       ) : null}
@@ -504,7 +602,9 @@ function App() {
 }
 
 type TaskEditPanelProps = {
+  currentDevice: CurrentDevice
   editForm: BrowserTaskFormState
+  secrets: LocalSecretMetadata[]
   onChange(value: BrowserTaskFormState): void
   onSubmit(event: FormEvent<HTMLFormElement>): void
 }
@@ -570,6 +670,9 @@ function TaskLaunchPanel({
                     {formatDate(task.state.lastRunAt)}
                   </span>
                 </button>
+                {isRestrictedDevicePolicy(task.permissions) ? (
+                  <span className="sensitive-pill">제한됨</span>
+                ) : null}
                 <span className={`status-pill status-${task.state.status}`}>
                   {getTaskStatusLabel(task.state.status)}
                 </span>
@@ -591,6 +694,8 @@ function TaskLaunchPanel({
 
 type CreateTaskPanelProps = {
   createForm: BrowserTaskFormState
+  currentDevice: CurrentDevice
+  secrets: LocalSecretMetadata[]
   onCancel(): void
   onChange(value: BrowserTaskFormState): void
   onSubmit(event: FormEvent<HTMLFormElement>): void
@@ -598,9 +703,11 @@ type CreateTaskPanelProps = {
 
 function CreateTaskPanel({
   createForm,
+  currentDevice,
   onCancel,
   onChange,
   onSubmit,
+  secrets,
 }: CreateTaskPanelProps) {
   return (
     <section className="mode-panel" aria-label="새 브라우저 작업 생성">
@@ -663,6 +770,12 @@ function CreateTaskPanel({
             rows={5}
           />
         </label>
+        <PolicyFields
+          currentDevice={currentDevice}
+          form={createForm}
+          onChange={onChange}
+          secrets={secrets}
+        />
         <div className="form-actions">
           <button type="submit">생성</button>
         </div>
@@ -674,8 +787,10 @@ function CreateTaskPanel({
 type EditWorkspaceProps = {
   browserTasks: BrowserTabGroupTask[]
   confirmDeleteTaskId: string | null
+  currentDevice: CurrentDevice
   editForm: BrowserTaskFormState
   isLoading: boolean
+  secrets: LocalSecretMetadata[]
   selectedTask: BrowserTabGroupTask | null
   onChange(value: BrowserTaskFormState): void
   onConfirmDelete(taskId: string): Promise<void>
@@ -687,6 +802,7 @@ type EditWorkspaceProps = {
 function EditWorkspace({
   browserTasks,
   confirmDeleteTaskId,
+  currentDevice,
   editForm,
   isLoading,
   onChange,
@@ -694,6 +810,7 @@ function EditWorkspace({
   onDeleteRequest,
   onSelect,
   onSubmit,
+  secrets,
   selectedTask,
 }: EditWorkspaceProps) {
   if (isLoading) {
@@ -746,9 +863,11 @@ function EditWorkspace({
 
       <section className="mode-panel" aria-label="선택한 작업 수정">
         <TaskEditPanel
+          currentDevice={currentDevice}
           editForm={editForm}
           onChange={onChange}
           onSubmit={onSubmit}
+          secrets={secrets}
         />
 
         <dl className="detail-list">
@@ -763,6 +882,14 @@ function EditWorkspace({
           />
           <DetailItem label="생성 시간" value={formatDate(selectedTask.createdAt)} />
           <DetailItem label="수정 시간" value={formatDate(selectedTask.updatedAt)} />
+          <DetailItem
+            label="표시 정책"
+            value={getDeviceVisibilityPolicyLabel(selectedTask.permissions.visibility)}
+          />
+          <DetailItem
+            label="실행 정책"
+            value={getDeviceExecutionPolicyLabel(selectedTask.permissions.execution)}
+          />
         </dl>
 
         {selectedTask.state.lastError ? (
@@ -811,22 +938,32 @@ function EditWorkspace({
 type AppSettingsPanelProps = {
   form: AppSettings
   currentDevice: CurrentDevice
+  secretForm: SecretFormState
+  secrets: LocalSecretMetadata[]
   saveState: SettingsSaveState
   settingsErrorMessage: string | null
   userDataPath: string
   onChange(value: AppSettings): void
   onClose(): void
+  onCreateSecret(): void
+  onDeleteSecret(secretId: string): void
+  onSecretFormChange(value: SecretFormState): void
   onSubmit(event: FormEvent<HTMLFormElement>): void
 }
 
 function AppSettingsPanel({
   currentDevice,
   form,
+  secretForm,
   onChange,
   onClose,
+  onCreateSecret,
+  onDeleteSecret,
+  onSecretFormChange,
   onSubmit,
   saveState,
   settingsErrorMessage,
+  secrets,
   userDataPath,
 }: AppSettingsPanelProps) {
   return (
@@ -1024,6 +1161,81 @@ function AppSettingsPanel({
           )}
         </section>
 
+        <section className="settings-subsection" aria-label="로컬 Secret">
+          <div className="section-heading compact-heading">
+            <div>
+              <p className="eyebrow">Secrets</p>
+              <h3>로컬 Secret</h3>
+            </div>
+            <span>{secrets.length}개</span>
+          </div>
+
+          <div className="secret-form">
+            <label>
+              이름
+              <input
+                value={secretForm.name}
+                onChange={(event) =>
+                  onSecretFormChange({
+                    ...secretForm,
+                    name: event.target.value,
+                  })
+                }
+              />
+            </label>
+            <label>
+              값
+              <input
+                type="password"
+                value={secretForm.value}
+                onChange={(event) =>
+                  onSecretFormChange({
+                    ...secretForm,
+                    value: event.target.value,
+                  })
+                }
+              />
+            </label>
+            <label>
+              설명
+              <input
+                value={secretForm.description}
+                onChange={(event) =>
+                  onSecretFormChange({
+                    ...secretForm,
+                    description: event.target.value,
+                  })
+                }
+              />
+            </label>
+            <button type="button" onClick={onCreateSecret}>
+              추가
+            </button>
+          </div>
+
+          {secrets.length === 0 ? (
+            <p className="muted-text">저장된 로컬 Secret이 없습니다.</p>
+          ) : (
+            <div className="secret-list">
+              {secrets.map((secret) => (
+                <div className="secret-row" key={secret.id}>
+                  <div>
+                    <strong>{secret.name}</strong>
+                    <small>{secret.description ?? secret.id}</small>
+                  </div>
+                  <button
+                    className="danger-button"
+                    type="button"
+                    onClick={() => onDeleteSecret(secret.id)}
+                  >
+                    삭제
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
         {settingsErrorMessage ? (
           <p className="panel-error">{settingsErrorMessage}</p>
         ) : null}
@@ -1040,9 +1252,11 @@ function AppSettingsPanel({
 }
 
 function TaskEditPanel({
+  currentDevice,
   editForm,
   onChange,
   onSubmit,
+  secrets,
 }: TaskEditPanelProps) {
   return (
     <>
@@ -1098,6 +1312,12 @@ function TaskEditPanel({
             rows={5}
           />
         </label>
+        <PolicyFields
+          currentDevice={currentDevice}
+          form={editForm}
+          onChange={onChange}
+          secrets={secrets}
+        />
         <div className="form-actions">
           <button type="submit">저장</button>
         </div>
@@ -1121,10 +1341,40 @@ function DetailItem({ label, value }: DetailItemProps) {
 }
 
 function parseInitialUrls(value: string): string[] {
+  return parseLines(value)
+}
+
+function parseLines(value: string): string[] {
   return value
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
+}
+
+function createDevicePolicyFromForm(
+  form: BrowserTaskFormState,
+  currentDevice: CurrentDevice,
+): DevicePolicy {
+  const allowedDeviceIds = parseLines(form.allowedDeviceIds)
+  const secretRefs = parseLines(form.secretRefIds).map(
+    (secretId): SecretRef => ({
+      id: secretId,
+      scope: 'local_device',
+    }),
+  )
+  const shouldUseCurrentDevice =
+    allowedDeviceIds.length === 0 &&
+    (form.visibility === 'local_only' || form.execution === 'local_only') &&
+    currentDevice.id
+
+  return normalizeDevicePolicy({
+    visibility: form.visibility,
+    execution: form.execution,
+    allowedDeviceIds: shouldUseCurrentDevice
+      ? [currentDevice.id]
+      : allowedDeviceIds,
+    secretRefs,
+  })
 }
 
 function isSettingsDirty(form: AppSettings, settings: AppSettings): boolean {
@@ -1205,6 +1455,112 @@ function LinkedDeviceEditor({
         제거
       </button>
     </div>
+  )
+}
+
+type PolicyFieldsProps = {
+  currentDevice: CurrentDevice
+  form: BrowserTaskFormState
+  secrets: LocalSecretMetadata[]
+  onChange(value: BrowserTaskFormState): void
+}
+
+function PolicyFields({
+  currentDevice,
+  form,
+  onChange,
+  secrets,
+}: PolicyFieldsProps) {
+  return (
+    <fieldset className="settings-fieldset">
+      <legend>작업 정책</legend>
+      <div className="form-grid">
+        <label>
+          표시 정책
+          <select
+            value={form.visibility}
+            onChange={(event) =>
+              onChange({
+                ...form,
+                visibility: event.target.value as DeviceVisibilityPolicy,
+              })
+            }
+          >
+            {(
+              [
+                'all_devices',
+                'trusted_devices',
+                'specific_devices',
+                'local_only',
+              ] as const
+            ).map((visibility) => (
+              <option key={visibility} value={visibility}>
+                {getDeviceVisibilityPolicyLabel(visibility)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          실행 정책
+          <select
+            value={form.execution}
+            onChange={(event) =>
+              onChange({
+                ...form,
+                execution: event.target.value as DeviceExecutionPolicy,
+              })
+            }
+          >
+            {(
+              ['anywhere', 'trusted_only', 'specific_devices', 'local_only'] as const
+            ).map((execution) => (
+              <option key={execution} value={execution}>
+                {getDeviceExecutionPolicyLabel(execution)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          현재 기기 ID
+          <input value={currentDevice.id || '아직 없음'} readOnly />
+        </label>
+      </div>
+      <label>
+        허용 기기 ID
+        <textarea
+          value={form.allowedDeviceIds}
+          onChange={(event) =>
+            onChange({
+              ...form,
+              allowedDeviceIds: event.target.value,
+            })
+          }
+          placeholder="한 줄에 하나씩 입력"
+          rows={3}
+        />
+      </label>
+      <label>
+        Secret 참조
+        <select
+          multiple
+          value={parseLines(form.secretRefIds)}
+          onChange={(event) =>
+            onChange({
+              ...form,
+              secretRefIds: Array.from(event.target.selectedOptions)
+                .map((option) => option.value)
+                .join('\n'),
+            })
+          }
+        >
+          {secrets.map((secret) => (
+            <option key={secret.id} value={secret.id}>
+              {secret.name}
+            </option>
+          ))}
+        </select>
+      </label>
+    </fieldset>
   )
 }
 

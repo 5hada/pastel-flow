@@ -2,6 +2,8 @@ import { app, BrowserWindow, ipcMain } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { createDeviceStore } from './devices/store/deviceStore'
+import { registerSecretIpc } from './secrets/ipc/secretIpc'
+import { createSecretStore } from './secrets/store/secretStore'
 import { registerAppSettingsIpc } from './settings/ipc/appSettingsIpc'
 import { createAppSettingsStore } from './settings/store/appSettingsStore'
 import { browserTabGroupAdapter } from './tasks/adapters/browserTabGroupAdapter'
@@ -84,6 +86,9 @@ app.whenReady().then(async () => {
   const taskStore = createTaskStore({
     dataDir,
   })
+  const secretStore = createSecretStore({
+    dataDir,
+  })
   const adapterRegistry = createTaskAdapterRegistry([browserTabGroupAdapter])
   const taskRunner = createTaskRunner({
     taskStore,
@@ -114,6 +119,7 @@ app.whenReady().then(async () => {
   })
 
   registerAppSettingsIpc(ipcMain, appSettingsStore, deviceStore)
+  registerSecretIpc(ipcMain, secretStore)
   registerTaskIpc(ipcMain, taskStore, taskRunner, appSettingsStore, deviceStore)
   createWindow()
 })

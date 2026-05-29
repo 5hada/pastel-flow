@@ -366,7 +366,7 @@ button:disabled {
 
 .task-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: 10px;
   align-items: center;
   padding: 12px;
@@ -635,6 +635,20 @@ button:disabled {
   background: #dff3ef;
 }
 
+.sensitive-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  border-radius: 999px;
+  padding: 0 10px;
+  color: var(--warning-text);
+  background: var(--warning);
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .settings-subsection {
   display: grid;
   gap: 12px;
@@ -678,6 +692,39 @@ button:disabled {
   background: var(--surface-muted);
 }
 
+.secret-form {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(160px, 1fr) minmax(160px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.secret-list {
+  display: grid;
+  gap: 8px;
+}
+
+.secret-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface-muted);
+}
+
+.secret-row div {
+  display: grid;
+  gap: 4px;
+}
+
+.secret-row small {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
 @media (prefers-color-scheme: dark) {
   .theme-preview[data-preview-theme='system'] {
     border-color: #303a47;
@@ -706,6 +753,7 @@ button:disabled {
   .app-header,
   .panel-heading,
   .linked-device-row,
+  .secret-form,
   .task-row,
   .detail-list {
     grid-template-columns: 1fr;

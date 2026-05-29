@@ -3,6 +3,8 @@ import type {
   BrowserTabGroupConfig,
   BrowserRunMode,
   DevicePolicy,
+  DeviceExecutionPolicy,
+  DeviceVisibilityPolicy,
   RestorePolicy,
   TaskState,
 } from './types'
@@ -48,6 +50,35 @@ export function normalizeBrowserTabGroupConfig(
   }
 }
 
+export function normalizeDevicePolicy(
+  policy: Partial<DevicePolicy> | null | undefined,
+): DevicePolicy {
+  return {
+    visibility: isDeviceVisibilityPolicy(policy?.visibility)
+      ? policy.visibility
+      : defaultDevicePolicy.visibility,
+    execution: isDeviceExecutionPolicy(policy?.execution)
+      ? policy.execution
+      : defaultDevicePolicy.execution,
+    allowedDeviceIds: Array.isArray(policy?.allowedDeviceIds)
+      ? policy.allowedDeviceIds
+          .map((deviceId) =>
+            typeof deviceId === 'string' ? deviceId.trim() : '',
+          )
+          .filter(Boolean)
+      : undefined,
+    secretRefs: Array.isArray(policy?.secretRefs)
+      ? policy.secretRefs.filter(
+          (secretRef) =>
+            typeof secretRef.id === 'string' &&
+            secretRef.id.trim() &&
+            (secretRef.scope === 'local_device' ||
+              secretRef.scope === 'trusted_devices'),
+        )
+      : undefined,
+  }
+}
+
 export function getBrowserRunModeLabel(runMode?: BrowserRunMode): string {
   switch (runMode ?? defaultBrowserRunMode) {
     case 'dedicated_profile':
@@ -57,6 +88,44 @@ export function getBrowserRunModeLabel(runMode?: BrowserRunMode): string {
     case 'default_browser_deeplink':
       return '기본 브라우저 연결'
   }
+}
+
+export function getDeviceVisibilityPolicyLabel(
+  visibility: DeviceVisibilityPolicy,
+): string {
+  switch (visibility) {
+    case 'all_devices':
+      return '모든 기기'
+    case 'trusted_devices':
+      return '신뢰 기기'
+    case 'specific_devices':
+      return '지정 기기'
+    case 'local_only':
+      return '로컬 전용'
+  }
+}
+
+export function getDeviceExecutionPolicyLabel(
+  execution: DeviceExecutionPolicy,
+): string {
+  switch (execution) {
+    case 'anywhere':
+      return '어디서나'
+    case 'trusted_only':
+      return '신뢰 기기'
+    case 'specific_devices':
+      return '지정 기기'
+    case 'local_only':
+      return '로컬 전용'
+  }
+}
+
+export function isRestrictedDevicePolicy(policy: DevicePolicy): boolean {
+  return (
+    policy.visibility !== 'all_devices' ||
+    policy.execution !== 'anywhere' ||
+    Boolean(policy.secretRefs?.length)
+  )
 }
 
 function isBrowserKind(value: unknown): value is BrowserKind {
@@ -72,5 +141,27 @@ function isBrowserRunMode(value: unknown): value is BrowserRunMode {
     value === 'dedicated_profile' ||
     value === 'extension_controlled' ||
     value === 'default_browser_deeplink'
+  )
+}
+
+function isDeviceVisibilityPolicy(
+  value: unknown,
+): value is DeviceVisibilityPolicy {
+  return (
+    value === 'all_devices' ||
+    value === 'trusted_devices' ||
+    value === 'specific_devices' ||
+    value === 'local_only'
+  )
+}
+
+function isDeviceExecutionPolicy(
+  value: unknown,
+): value is DeviceExecutionPolicy {
+  return (
+    value === 'anywhere' ||
+    value === 'trusted_only' ||
+    value === 'specific_devices' ||
+    value === 'local_only'
   )
 }

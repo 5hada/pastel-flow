@@ -9,6 +9,17 @@ const pastelFlowApi = {
       return electron.ipcRenderer.invoke("settings:update", settings);
     }
   },
+  secrets: {
+    list() {
+      return electron.ipcRenderer.invoke("secrets:list");
+    },
+    create(input) {
+      return electron.ipcRenderer.invoke("secrets:create", input);
+    },
+    delete(id) {
+      return electron.ipcRenderer.invoke("secrets:delete", id);
+    }
+  },
   tasks: {
     list() {
       return electron.ipcRenderer.invoke("tasks:list");

@@ -3,6 +3,10 @@ import type {
   AppSettingsSnapshot,
 } from '../../shared/settings'
 import type {
+  CreateLocalSecretInput,
+  LocalSecretMetadata,
+} from '../../shared/secrets'
+import type {
   BrowserTabGroupConfig,
   DevicePolicy,
   TaskState,
@@ -47,7 +51,14 @@ export type SettingsApi = {
   update(settings: AppSettings): Promise<AppSettingsSnapshot>
 }
 
+export type SecretsApi = {
+  list(): Promise<LocalSecretMetadata[]>
+  create(input: CreateLocalSecretInput): Promise<LocalSecretMetadata>
+  delete(id: string): Promise<void>
+}
+
 export type PastelFlowApi = {
+  secrets: SecretsApi
   settings: SettingsApi
   tasks: TasksApi
 }

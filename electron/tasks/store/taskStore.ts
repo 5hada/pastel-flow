@@ -4,6 +4,7 @@ import path from 'node:path'
 import {
   defaultDevicePolicy,
   defaultTaskState,
+  normalizeDevicePolicy,
   type DevicePolicy,
   type TaskState,
   type TaskTemplate,
@@ -91,7 +92,9 @@ export function createTaskStore({ dataDir }: TaskStoreOptions): TaskStore {
         type: input.type,
         config: input.config,
         state: input.state ?? defaultTaskState,
-        permissions: input.permissions ?? defaultDevicePolicy,
+        permissions: normalizeDevicePolicy(
+          input.permissions ?? defaultDevicePolicy,
+        ),
         createdAt: now,
         updatedAt: now,
       }
@@ -117,6 +120,9 @@ export function createTaskStore({ dataDir }: TaskStoreOptions): TaskStore {
         ...currentTask,
         ...input,
         name: input.name?.trim() ?? currentTask.name,
+        permissions: input.permissions
+          ? normalizeDevicePolicy(input.permissions)
+          : currentTask.permissions,
         updatedAt: new Date().toISOString(),
       }
 

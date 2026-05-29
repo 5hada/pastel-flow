@@ -9,6 +9,17 @@ const pastelFlowApi = {
       return ipcRenderer.invoke('settings:update', settings)
     },
   },
+  secrets: {
+    list() {
+      return ipcRenderer.invoke('secrets:list')
+    },
+    create(input: unknown) {
+      return ipcRenderer.invoke('secrets:create', input)
+    },
+    delete(id: string) {
+      return ipcRenderer.invoke('secrets:delete', id)
+    },
+  },
   tasks: {
     list() {
       return ipcRenderer.invoke('tasks:list')

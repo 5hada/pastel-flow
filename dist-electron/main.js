@@ -20,7 +20,7 @@ function createDeviceStore({ dataDir }) {
       }
       return null;
     } catch (error) {
-      if (isNodeError$2(error) && error.code === "ENOENT") {
+      if (isNodeError$3(error) && error.code === "ENOENT") {
         return null;
       }
       throw error;
@@ -48,6 +48,92 @@ function createDeviceStore({ dataDir }) {
       await writeCurrentDevice(device);
       return device;
     }
+  };
+}
+function isNodeError$3(error) {
+  return error instanceof Error && "code" in error;
+}
+function registerSecretIpc(ipcMain2, secretStore) {
+  ipcMain2.handle("secrets:list", () => secretStore.listSecrets());
+  ipcMain2.handle(
+    "secrets:create",
+    (_event, input) => secretStore.createSecret(input)
+  );
+  ipcMain2.handle(
+    "secrets:delete",
+    (_event, id) => secretStore.deleteSecret(id)
+  );
+}
+function normalizeLocalSecretName(value) {
+  return value.trim();
+}
+function createSecretStore({ dataDir }) {
+  const secretsFilePath = path.join(dataDir, "secrets.json");
+  async function readSecretFile() {
+    try {
+      const raw = await readFile(secretsFilePath, "utf8");
+      const parsed = JSON.parse(raw);
+      return {
+        secrets: Array.isArray(parsed.secrets) ? parsed.secrets : []
+      };
+    } catch (error) {
+      if (isNodeError$2(error) && error.code === "ENOENT") {
+        return { secrets: [] };
+      }
+      throw error;
+    }
+  }
+  async function writeSecretFile(secretFile) {
+    await mkdir(dataDir, { recursive: true });
+    await writeFile(
+      secretsFilePath,
+      `${JSON.stringify(secretFile, null, 2)}
+`,
+      "utf8"
+    );
+  }
+  return {
+    async listSecrets() {
+      const secretFile = await readSecretFile();
+      return secretFile.secrets.map(toMetadata);
+    },
+    async createSecret(input) {
+      var _a;
+      const name = normalizeLocalSecretName(input.name);
+      const value = input.value.trim();
+      if (!name || !value) {
+        throw new Error("Secret 이름과 값이 필요합니다.");
+      }
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      const secret = {
+        id: randomUUID(),
+        name,
+        value,
+        description: ((_a = input.description) == null ? void 0 : _a.trim()) || void 0,
+        createdAt: now,
+        updatedAt: now
+      };
+      const secretFile = await readSecretFile();
+      await writeSecretFile({
+        secrets: [...secretFile.secrets, secret]
+      });
+      return toMetadata(secret);
+    },
+    async deleteSecret(id) {
+      const secretFile = await readSecretFile();
+      await writeSecretFile({
+        secrets: secretFile.secrets.filter((secret) => secret.id !== id)
+      });
+    }
+  };
+}
+function toMetadata(secret) {
+  return {
+    id: secret.id,
+    name: secret.name,
+    description: secret.description,
+    createdAt: secret.createdAt,
+    updatedAt: secret.updatedAt
   };
 }
 function isNodeError$2(error) {
@@ -196,6 +282,18 @@ function normalizeBrowserTabGroupConfig(config) {
     runMode: isBrowserRunMode(config.runMode) ? config.runMode : defaultBrowserRunMode
   };
 }
+function normalizeDevicePolicy(policy) {
+  return {
+    visibility: isDeviceVisibilityPolicy(policy == null ? void 0 : policy.visibility) ? policy.visibility : defaultDevicePolicy.visibility,
+    execution: isDeviceExecutionPolicy(policy == null ? void 0 : policy.execution) ? policy.execution : defaultDevicePolicy.execution,
+    allowedDeviceIds: Array.isArray(policy == null ? void 0 : policy.allowedDeviceIds) ? policy.allowedDeviceIds.map(
+      (deviceId) => typeof deviceId === "string" ? deviceId.trim() : ""
+    ).filter(Boolean) : void 0,
+    secretRefs: Array.isArray(policy == null ? void 0 : policy.secretRefs) ? policy.secretRefs.filter(
+      (secretRef) => typeof secretRef.id === "string" && secretRef.id.trim() && (secretRef.scope === "local_device" || secretRef.scope === "trusted_devices")
+    ) : void 0
+  };
+}
 function isBrowserKind(value) {
   return value === "chrome" || value === "edge" || value === "chromium";
 }
@@ -204,6 +302,12 @@ function isRestorePolicy(value) {
 }
 function isBrowserRunMode(value) {
   return value === "dedicated_profile" || value === "extension_controlled" || value === "default_browser_deeplink";
+}
+function isDeviceVisibilityPolicy(value) {
+  return value === "all_devices" || value === "trusted_devices" || value === "specific_devices" || value === "local_only";
+}
+function isDeviceExecutionPolicy(value) {
+  return value === "anywhere" || value === "trusted_only" || value === "specific_devices" || value === "local_only";
 }
 function canViewTaskOnDevice(task, currentDevice, linkedDevices) {
   const accessLevel = getCurrentDeviceAccessLevel(currentDevice, linkedDevices);
@@ -692,7 +796,9 @@ function createTaskStore({ dataDir }) {
         type: input.type,
         config: input.config,
         state: input.state ?? defaultTaskState,
-        permissions: input.permissions ?? defaultDevicePolicy,
+        permissions: normalizeDevicePolicy(
+          input.permissions ?? defaultDevicePolicy
+        ),
         createdAt: now,
         updatedAt: now
       };
@@ -714,6 +820,7 @@ function createTaskStore({ dataDir }) {
         ...currentTask,
         ...input,
         name: ((_a = input.name) == null ? void 0 : _a.trim()) ?? currentTask.name,
+        permissions: input.permissions ? normalizeDevicePolicy(input.permissions) : currentTask.permissions,
         updatedAt: (/* @__PURE__ */ new Date()).toISOString()
       };
       const tasks = [...taskFile.tasks];
@@ -778,6 +885,9 @@ app.whenReady().then(async () => {
   const taskStore = createTaskStore({
     dataDir
   });
+  const secretStore = createSecretStore({
+    dataDir
+  });
   const adapterRegistry = createTaskAdapterRegistry([browserTabGroupAdapter]);
   const taskRunner = createTaskRunner({
     taskStore,
@@ -803,6 +913,7 @@ app.whenReady().then(async () => {
     }
   });
   registerAppSettingsIpc(ipcMain, appSettingsStore, deviceStore);
+  registerSecretIpc(ipcMain, secretStore);
   registerTaskIpc(ipcMain, taskStore, taskRunner, appSettingsStore, deviceStore);
   createWindow();
 });

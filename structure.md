@@ -10,6 +10,7 @@
 - 초기 저장 방식: Electron `userData` 경로의 `tasks.json`
 - 앱 설정 저장 방식: Electron `userData` 경로의 `appSettings.json`
 - 기기 식별자 저장 방식: Electron `userData` 경로의 `device.json`
+- 로컬 secret 저장 방식: Electron `userData` 경로의 `secrets.json`
 - 현재 MVP: 브라우저 탭 그룹 템플릿 생성, 수정, 삭제, 저장, 실행, 목록 표시
 - 현재 브라우저 실행 기본값: `dedicated_profile`
 
@@ -59,6 +60,11 @@ electron/
       appSettingsIpc.ts           settings:get/update IPC 등록
     store/
       appSettingsStore.ts         appSettings.json 기반 설정 저장소
+  secrets/
+    ipc/
+      secretIpc.ts                secrets:list/create/delete IPC 등록
+    store/
+      secretStore.ts              secrets.json 기반 로컬 secret 저장소
   tasks/
     adapters/
       taskAdapter.ts              작업 adapter 공통 인터페이스
@@ -83,6 +89,7 @@ src/
       global.d.ts                 window.pastelFlow 전역 타입 선언
   shared/
     devices.ts                    현재 기기, 연동 기기, 허용 수준 타입과 helper
+    secrets.ts                    로컬 secret 메타데이터와 생성 입력 타입
     settings.ts                   앱 설정 타입, 기본값, normalize helper
     tasks/
       policies.ts                 기기 visibility/execution 정책 helper
@@ -111,6 +118,8 @@ App.tsx
 
 현재 기기 ID는 `device.json`에 저장한다. `tasks:list`는 main process에서 현재 기기와 연동 기기 허용 수준, 작업 `DevicePolicy.visibility`를 확인한 뒤 허용된 작업만 renderer에 반환한다. 따라서 허용되지 않은 작업은 renderer 상태에 들어오지 않으며 목록에도 표시되지 않는다. `tasks:run`, `tasks:update`, `tasks:delete`는 `DevicePolicy.execution`을 확인한 뒤 허용되지 않으면 오류를 반환한다.
 
+작업 생성/수정 UI는 작업별 표시 정책, 실행 정책, 허용 기기 ID, secret 참조를 편집한다. 제한 정책이나 secret 참조가 있는 작업은 목록에서 `제한됨` 배지를 표시한다. Secret 값은 `secrets.json`에 저장하지만 renderer에는 메타데이터만 반환한다. 현재 secret 저장소는 로컬 초안이며, OS keychain/암호화 연동은 후속 단계에서 다룬다.
+
 작업 adapter는 `TaskRunContext.updateState`를 통해 실행 이후의 비동기 상태 변화를 저장할 수 있다. 브라우저 탭 그룹 adapter는 브라우저 프로세스 종료 이벤트를 감지해 정상 종료 시 `idle`, 비정상 종료 시 `failed`와 오류 메시지를 저장한다. `taskRunner`는 작업 상태가 저장될 때 `onTaskUpdated` 콜백을 호출하고, `electron/main.ts`는 모든 BrowserWindow에 `tasks:changed` 이벤트를 보낸다. renderer는 `window.pastelFlow.tasks.onChanged`로 이벤트를 구독해 목록의 작업 상태를 실시간으로 병합한다.
 
 ## 5. 다음 구현 위치
@@ -119,6 +128,7 @@ App.tsx
 - 작업 기본값 변경: `src/shared/tasks/defaults.ts`
 - 앱 설정 변경: `src/shared/settings.ts`, `electron/settings/store/appSettingsStore.ts`, `src/App.tsx`
 - 기기 정책 변경: `src/shared/devices.ts`, `src/shared/tasks/policies.ts`, `electron/devices/store/deviceStore.ts`, `electron/tasks/ipc/taskIpc.ts`
+- Secret 저장소 변경: `src/shared/secrets.ts`, `electron/secrets/store/secretStore.ts`, `electron/secrets/ipc/secretIpc.ts`
 - 로컬 저장 방식 변경: `electron/tasks/store/taskStore.ts`
 - 새 IPC 추가: `electron/tasks/ipc/taskIpc.ts`, `electron/preload.ts`, `src/renderer/api/tasksApi.ts`
 - 브라우저 실행 구현: `electron/tasks/adapters/browserTabGroupAdapter.ts`

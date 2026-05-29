@@ -213,12 +213,15 @@ type TaskRunResult<TState> = {
 - [x] 연동 기기별 허용 수준 설정을 추가한다.
 - [x] 허용되지 않은 작업이 renderer에 표시되지 않도록 main process에서 목록을 필터링한다.
 - [x] 작업 실행, 수정, 삭제 전에 execution policy를 확인한다.
+- [x] 작업별 visibility/execution policy를 편집하는 UI를 추가한다.
+- [x] 민감 작업과 일반 작업을 구분할 최소 UI 표시를 추가한다.
+- [x] secret 참조 모델과 로컬 secret 저장소 초안을 구현한다.
 
 다음 구현 우선순위:
 
-1. 작업별 visibility/execution policy를 편집하는 UI를 추가한다.
-2. 민감 작업과 일반 작업을 구분할 최소 UI 표시를 추가한다.
-3. secret 참조 모델과 로컬 secret 저장소 초안을 구현한다.
+1. Secret 값 암호화와 OS keychain 연동 방식을 검토한다.
+2. Secret 삭제 시 작업의 `secretRefs` 정리 정책을 구현한다.
+3. 연동 기기 동기화 모델과 서버 DB schema 초안을 작성한다.
 
 ### Phase 2: 권한과 Secret 기반
 

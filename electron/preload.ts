@@ -10,6 +10,9 @@ const pastelFlowApi = {
     },
   },
   secrets: {
+    status() {
+      return ipcRenderer.invoke('secrets:status')
+    },
     list() {
       return ipcRenderer.invoke('secrets:list')
     },
@@ -18,6 +21,17 @@ const pastelFlowApi = {
     },
     delete(id: string) {
       return ipcRenderer.invoke('secrets:delete', id)
+    },
+  },
+  sync: {
+    status() {
+      return ipcRenderer.invoke('sync:status')
+    },
+    export() {
+      return ipcRenderer.invoke('sync:export')
+    },
+    import(snapshot?: unknown) {
+      return ipcRenderer.invoke('sync:import', snapshot)
     },
   },
   tasks: {

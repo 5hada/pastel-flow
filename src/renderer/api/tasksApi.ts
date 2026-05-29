@@ -5,8 +5,14 @@ import type {
 import type {
   CreateLocalSecretInput,
   LocalSecretMetadata,
+  SecretStorageStatus,
 } from '../../shared/secrets'
 import type { TaskRunEvent } from '../../shared/taskRunEvents'
+import type {
+  SyncExportSnapshot,
+  SyncImportResult,
+  SyncStatus,
+} from '../../shared/sync'
 import type {
   BrowserTabGroupConfig,
   DevicePolicy,
@@ -54,13 +60,21 @@ export type SettingsApi = {
 }
 
 export type SecretsApi = {
+  status(): Promise<SecretStorageStatus>
   list(): Promise<LocalSecretMetadata[]>
   create(input: CreateLocalSecretInput): Promise<LocalSecretMetadata>
   delete(id: string): Promise<void>
 }
 
+export type SyncApi = {
+  status(): Promise<SyncStatus>
+  export(): Promise<SyncExportSnapshot>
+  import(snapshot?: SyncExportSnapshot): Promise<SyncImportResult>
+}
+
 export type PastelFlowApi = {
   secrets: SecretsApi
   settings: SettingsApi
+  sync: SyncApi
   tasks: TasksApi
 }

@@ -9,20 +9,21 @@ import type {
 export type TaskRunEventStore = {
   listEvents(taskId?: string): Promise<TaskRunEvent[]>
   appendEvent(input: CreateTaskRunEventInput): Promise<TaskRunEvent>
+  importEvents(events: TaskRunEvent[]): Promise<number>
 }
 
 export type TaskRunEventStoreOptions = {
   dataDir: string
+  getRetentionLimit(): Promise<number>
 }
 
 type TaskRunEventFile = {
   events: TaskRunEvent[]
 }
 
-const maxStoredEvents = 300
-
 export function createTaskRunEventStore({
   dataDir,
+  getRetentionLimit,
 }: TaskRunEventStoreOptions): TaskRunEventStore {
   const eventsFilePath = path.join(dataDir, 'taskRunEvents.json')
 
@@ -71,11 +72,31 @@ export function createTaskRunEventStore({
         createdAt: new Date().toISOString(),
       }
       const eventFile = await readEventFile()
+      const retentionLimit = await getRetentionLimit()
       await writeEventFile({
-        events: [...eventFile.events, event].slice(-maxStoredEvents),
+        events: [...eventFile.events, event].slice(-retentionLimit),
       })
 
       return event
+    },
+
+    async importEvents(events) {
+      const eventFile = await readEventFile()
+      const existingIds = new Set(eventFile.events.map((event) => event.id))
+      const incomingEvents = events.filter((event) => !existingIds.has(event.id))
+      const retentionLimit = await getRetentionLimit()
+
+      if (incomingEvents.length === 0) {
+        return 0
+      }
+
+      await writeEventFile({
+        events: [...eventFile.events, ...incomingEvents]
+          .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+          .slice(-retentionLimit),
+      })
+
+      return incomingEvents.length
     },
   }
 }

@@ -10,6 +10,9 @@ const pastelFlowApi = {
     }
   },
   secrets: {
+    status() {
+      return electron.ipcRenderer.invoke("secrets:status");
+    },
     list() {
       return electron.ipcRenderer.invoke("secrets:list");
     },
@@ -18,6 +21,17 @@ const pastelFlowApi = {
     },
     delete(id) {
       return electron.ipcRenderer.invoke("secrets:delete", id);
+    }
+  },
+  sync: {
+    status() {
+      return electron.ipcRenderer.invoke("sync:status");
+    },
+    export() {
+      return electron.ipcRenderer.invoke("sync:export");
+    },
+    import(snapshot) {
+      return electron.ipcRenderer.invoke("sync:import", snapshot);
     }
   },
   tasks: {

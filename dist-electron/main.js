@@ -1,10 +1,11 @@
 import { app, BrowserWindow, safeStorage, ipcMain } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
-import { readFile, mkdir, writeFile, access } from "node:fs/promises";
+import { randomUUID, randomBytes } from "node:crypto";
+import { readFile, mkdir, writeFile, stat, access } from "node:fs/promises";
 import os from "node:os";
 import { spawn } from "node:child_process";
+import { createConnection } from "node:net";
 import { constants } from "node:fs";
 function createDeviceStore({ dataDir }) {
   const deviceFilePath = path.join(dataDir, "device.json");
@@ -20,7 +21,7 @@ function createDeviceStore({ dataDir }) {
       }
       return null;
     } catch (error) {
-      if (isNodeError$4(error) && error.code === "ENOENT") {
+      if (isNodeError$5(error) && error.code === "ENOENT") {
         return null;
       }
       throw error;
@@ -50,10 +51,11 @@ function createDeviceStore({ dataDir }) {
     }
   };
 }
-function isNodeError$4(error) {
+function isNodeError$5(error) {
   return error instanceof Error && "code" in error;
 }
 function registerSecretIpc(ipcMain2, secretStore, taskStore) {
+  ipcMain2.handle("secrets:status", () => secretStore.getStorageStatus());
   ipcMain2.handle("secrets:list", () => secretStore.listSecrets());
   ipcMain2.handle(
     "secrets:create",
@@ -90,6 +92,7 @@ function normalizeLocalSecretName(value) {
 function createSecretStore({
   dataDir,
   encrypt,
+  encryptionBackend,
   encryptionAvailable
 }) {
   const secretsFilePath = path.join(dataDir, "secrets.json");
@@ -101,7 +104,7 @@ function createSecretStore({
         secrets: Array.isArray(parsed.secrets) ? parsed.secrets : []
       };
     } catch (error) {
-      if (isNodeError$3(error) && error.code === "ENOENT") {
+      if (isNodeError$4(error) && error.code === "ENOENT") {
         return { secrets: [] };
       }
       throw error;
@@ -141,6 +144,13 @@ function createSecretStore({
     return { secrets };
   }
   return {
+    async getStorageStatus() {
+      return {
+        encryptionAvailable,
+        backend: encryptionBackend,
+        message: encryptionAvailable ? "Secret 암호화 저장을 사용할 수 있습니다." : "이 기기에서는 Electron safeStorage 암호화 저장을 사용할 수 없습니다."
+      };
+    },
     async listSecrets() {
       const secretFile = await readMigratedSecretFile();
       return secretFile.secrets.map(toMetadata);
@@ -190,7 +200,7 @@ function toMetadata(secret) {
     updatedAt: secret.updatedAt
   };
 }
-function isNodeError$3(error) {
+function isNodeError$4(error) {
   return error instanceof Error && "code" in error;
 }
 function registerAppSettingsIpc(ipcMain2, appSettingsStore, deviceStore) {
@@ -232,7 +242,8 @@ const defaultAppSettings = {
   initialUrlInputMode: "line",
   taskListDisplayMode: "grid",
   browserExecutablePaths: {},
-  linkedDevices: []
+  linkedDevices: [],
+  taskRunEventRetentionLimit: 300
 };
 function normalizeAppSettings(settings) {
   return {
@@ -244,8 +255,17 @@ function normalizeAppSettings(settings) {
     browserExecutablePaths: normalizeBrowserExecutablePaths(
       settings == null ? void 0 : settings.browserExecutablePaths
     ),
-    linkedDevices: normalizeLinkedDevices(settings == null ? void 0 : settings.linkedDevices)
+    linkedDevices: normalizeLinkedDevices(settings == null ? void 0 : settings.linkedDevices),
+    taskRunEventRetentionLimit: normalizeRetentionLimit(
+      settings == null ? void 0 : settings.taskRunEventRetentionLimit
+    )
   };
+}
+function normalizeRetentionLimit(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return defaultAppSettings.taskRunEventRetentionLimit;
+  }
+  return Math.min(Math.max(Math.round(value), 50), 2e3);
 }
 function normalizeBrowserExecutablePaths(browserExecutablePaths) {
   if (!browserExecutablePaths || typeof browserExecutablePaths !== "object") {
@@ -289,7 +309,7 @@ function createAppSettingsStore({
       const parsed = JSON.parse(raw);
       return normalizeAppSettings(parsed.settings);
     } catch (error) {
-      if (isNodeError$2(error) && error.code === "ENOENT") {
+      if (isNodeError$3(error) && error.code === "ENOENT") {
         return defaultAppSettings;
       }
       throw error;
@@ -321,6 +341,158 @@ function createAppSettingsStore({
     }
   };
 }
+function isNodeError$3(error) {
+  return error instanceof Error && "code" in error;
+}
+function registerSyncIpc(ipcMain2, mockSyncStore) {
+  ipcMain2.handle("sync:status", () => mockSyncStore.getStatus());
+  ipcMain2.handle("sync:export", () => mockSyncStore.exportSnapshot());
+  ipcMain2.handle(
+    "sync:import",
+    (_event, snapshot) => mockSyncStore.importSnapshot(snapshot)
+  );
+}
+function normalizeSyncExportSnapshot(value) {
+  if (!value || typeof value !== "object") {
+    throw new Error("동기화 스냅샷 형식이 올바르지 않습니다.");
+  }
+  const candidate = value;
+  if (candidate.schemaVersion !== 1) {
+    throw new Error("지원하지 않는 동기화 스냅샷 버전입니다.");
+  }
+  if (typeof candidate.exportedAt !== "string" || !candidate.sourceDevice || typeof candidate.sourceDevice.id !== "string" || typeof candidate.sourceDevice.name !== "string" || !Array.isArray(candidate.tasks) || !Array.isArray(candidate.taskRunEvents) || !Array.isArray(candidate.linkedDevices)) {
+    throw new Error("동기화 스냅샷 필수 필드가 누락되었습니다.");
+  }
+  return candidate;
+}
+function createMockSyncStore({
+  appSettingsStore,
+  dataDir,
+  deviceStore,
+  taskRunEventStore,
+  taskStore
+}) {
+  const exportPath = path.join(dataDir, "syncExport.json");
+  return {
+    async getStatus() {
+      return {
+        exportPath,
+        lastExportedAt: await getLastExportedAt(exportPath)
+      };
+    },
+    async exportSnapshot() {
+      const [currentDevice, settingsSnapshot, tasks, taskRunEvents] = await Promise.all([
+        deviceStore.getCurrentDevice(),
+        appSettingsStore.getSnapshot(),
+        taskStore.listTasks(),
+        taskRunEventStore.listEvents()
+      ]);
+      const snapshot = {
+        schemaVersion: 1,
+        exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        sourceDevice: currentDevice,
+        tasks: stripLocalTaskState(tasks),
+        taskRunEvents,
+        linkedDevices: settingsSnapshot.settings.linkedDevices
+      };
+      await mkdir(dataDir, { recursive: true });
+      await writeFile(exportPath, `${JSON.stringify(snapshot, null, 2)}
+`, "utf8");
+      return snapshot;
+    },
+    async importSnapshot(snapshot) {
+      const nextSnapshot = snapshot ?? await readSnapshot(exportPath);
+      const normalizedSnapshot = normalizeSyncExportSnapshot(nextSnapshot);
+      const currentTasks = await taskStore.listTasks();
+      const mergedTasks = mergeTasks(currentTasks, normalizedSnapshot.tasks);
+      const taskRunEventsAdded = await taskRunEventStore.importEvents(
+        normalizedSnapshot.taskRunEvents
+      );
+      const settingsSnapshot = await appSettingsStore.getSnapshot();
+      const linkedDevices = mergeLinkedDevices(
+        settingsSnapshot.settings.linkedDevices,
+        normalizedSnapshot.linkedDevices
+      );
+      await Promise.all([
+        taskStore.replaceTasks(mergedTasks.tasks),
+        appSettingsStore.updateSettings({
+          ...settingsSnapshot.settings,
+          linkedDevices
+        })
+      ]);
+      return {
+        importedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        tasksCreated: mergedTasks.created,
+        tasksUpdated: mergedTasks.updated,
+        taskRunEventsAdded,
+        linkedDevicesMerged: linkedDevices.length - settingsSnapshot.settings.linkedDevices.length
+      };
+    }
+  };
+}
+async function getLastExportedAt(exportPath) {
+  try {
+    const fileStat = await stat(exportPath);
+    return fileStat.mtime.toISOString();
+  } catch (error) {
+    if (isNodeError$2(error) && error.code === "ENOENT") {
+      return void 0;
+    }
+    throw error;
+  }
+}
+async function readSnapshot(exportPath) {
+  const raw = await readFile(exportPath, "utf8");
+  return normalizeSyncExportSnapshot(JSON.parse(raw));
+}
+function stripLocalTaskState(tasks) {
+  return tasks.map((task) => ({
+    ...task,
+    state: {
+      ...task.state,
+      localProfilePath: void 0
+    }
+  }));
+}
+function mergeTasks(currentTasks, incomingTasks) {
+  const taskMap = new Map(currentTasks.map((task) => [task.id, task]));
+  let created = 0;
+  let updated = 0;
+  for (const incomingTask of incomingTasks) {
+    const currentTask = taskMap.get(incomingTask.id);
+    if (!currentTask) {
+      taskMap.set(incomingTask.id, incomingTask);
+      created += 1;
+      continue;
+    }
+    if (incomingTask.updatedAt > currentTask.updatedAt) {
+      taskMap.set(incomingTask.id, {
+        ...incomingTask,
+        state: {
+          ...incomingTask.state,
+          localProfilePath: currentTask.state.localProfilePath
+        }
+      });
+      updated += 1;
+    }
+  }
+  return {
+    tasks: [...taskMap.values()].sort(
+      (left, right) => left.createdAt.localeCompare(right.createdAt)
+    ),
+    created,
+    updated
+  };
+}
+function mergeLinkedDevices(currentDevices, incomingDevices) {
+  const deviceMap = new Map(
+    normalizeLinkedDevices(currentDevices).map((device) => [device.id, device])
+  );
+  for (const device of normalizeLinkedDevices(incomingDevices)) {
+    deviceMap.set(device.id, device);
+  }
+  return [...deviceMap.values()];
+}
 function isNodeError$2(error) {
   return error instanceof Error && "code" in error;
 }
@@ -340,7 +512,10 @@ function normalizeBrowserTabGroupConfig(config) {
     browserKind: isBrowserKind(config.browserKind) ? config.browserKind : "chrome",
     restorePolicy: isRestorePolicy(config.restorePolicy) ? config.restorePolicy : "browser_profile",
     runMode: isBrowserRunMode(config.runMode) ? config.runMode : defaultBrowserRunMode,
-    dynamicTemplateUpdates: typeof config.dynamicTemplateUpdates === "boolean" ? config.dynamicTemplateUpdates : defaultDynamicTemplateUpdates
+    dynamicTemplateUpdates: typeof config.dynamicTemplateUpdates === "boolean" ? config.dynamicTemplateUpdates : defaultDynamicTemplateUpdates,
+    tabGroupSnapshot: normalizeBrowserTabGroupStateSnapshot(
+      config.tabGroupSnapshot
+    )
   };
 }
 function normalizeDevicePolicy(policy) {
@@ -366,6 +541,57 @@ function isBrowserRunMode(value) {
 }
 function isDeviceVisibilityPolicy(value) {
   return value === "all_devices" || value === "trusted_devices" || value === "specific_devices" || value === "local_only";
+}
+function normalizeBrowserTabGroupStateSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") {
+    return void 0;
+  }
+  const candidate = snapshot;
+  if (typeof candidate.capturedAt !== "string" || !Array.isArray(candidate.tabs) || !Array.isArray(candidate.groups)) {
+    return void 0;
+  }
+  const tabs = candidate.tabs.reduce((result, tab) => {
+    if (!tab || typeof tab !== "object") {
+      return result;
+    }
+    const normalizedTab = {
+      id: typeof tab.id === "number" && Number.isFinite(tab.id) ? tab.id : void 0,
+      windowId: typeof tab.windowId === "number" && Number.isFinite(tab.windowId) ? tab.windowId : 0,
+      index: typeof tab.index === "number" && Number.isFinite(tab.index) ? tab.index : 0,
+      url: typeof tab.url === "string" ? tab.url : "",
+      title: typeof tab.title === "string" ? tab.title : void 0,
+      groupId: typeof tab.groupId === "number" && Number.isFinite(tab.groupId) ? tab.groupId : void 0,
+      active: tab.active === true,
+      pinned: tab.pinned === true
+    };
+    return normalizedTab.url ? [...result, normalizedTab] : result;
+  }, []);
+  const groups = candidate.groups.reduce(
+    (result, group) => {
+      if (!group || typeof group !== "object") {
+        return result;
+      }
+      return [
+        ...result,
+        {
+          id: typeof group.id === "number" && Number.isFinite(group.id) ? group.id : 0,
+          windowId: typeof group.windowId === "number" && Number.isFinite(group.windowId) ? group.windowId : 0,
+          title: typeof group.title === "string" && group.title.trim() ? group.title : void 0,
+          color: isBrowserTabGroupColor(group.color) ? group.color : "grey",
+          collapsed: group.collapsed === true
+        }
+      ];
+    },
+    []
+  );
+  return {
+    capturedAt: candidate.capturedAt,
+    tabs,
+    groups
+  };
+}
+function isBrowserTabGroupColor(value) {
+  return value === "grey" || value === "blue" || value === "red" || value === "yellow" || value === "green" || value === "pink" || value === "purple" || value === "cyan" || value === "orange";
 }
 function isDeviceExecutionPolicy(value) {
   return value === "anywhere" || value === "trusted_only" || value === "specific_devices" || value === "local_only";
@@ -593,7 +819,7 @@ const browserTabGroupAdapter = {
   },
   async run({ appSettings, dataDir, task, updateConfig, updateState }) {
     const config = normalizeBrowserTabGroupConfig(task.config);
-    if (config.runMode !== "dedicated_profile") {
+    if (config.runMode === "default_browser_deeplink") {
       throw new Error(
         `${config.runMode} 실행 방식은 아직 지원하지 않습니다.`
       );
@@ -608,27 +834,38 @@ const browserTabGroupAdapter = {
       config.browserKind,
       appSettings.browserExecutablePaths
     );
-    const remoteDebuggingPort = config.dynamicTemplateUpdates ? getRemoteDebuggingPort(task.id) : null;
+    const shouldLoadExtensionBridge = config.runMode === "extension_controlled";
+    const extensionBridgePath = shouldLoadExtensionBridge ? await ensureBrowserExtensionBridge(dataDir) : null;
+    const remoteDebuggingPort = config.dynamicTemplateUpdates || shouldLoadExtensionBridge ? getRemoteDebuggingPort(task.id) : null;
     const browserProcess = await launchBrowser(browserExecutable.path, [
       `--user-data-dir=${localProfilePath}`,
       "--no-first-run",
       "--new-window",
       ...remoteDebuggingPort ? [`--remote-debugging-port=${remoteDebuggingPort}`] : [],
+      ...extensionBridgePath ? [
+        `--disable-extensions-except=${extensionBridgePath}`,
+        `--load-extension=${extensionBridgePath}`
+      ] : [],
       ...config.initialUrls
     ]);
-    const tabUrlSnapshotter = remoteDebuggingPort ? startTabUrlSnapshotter(remoteDebuggingPort) : null;
+    const browserStateSnapshotter = remoteDebuggingPort ? startBrowserStateSnapshotter(
+      remoteDebuggingPort,
+      shouldLoadExtensionBridge
+    ) : null;
     browserProcess.once("exit", (code, signal) => {
       void (async () => {
-        const openUrls = (tabUrlSnapshotter == null ? void 0 : tabUrlSnapshotter.stop()) ?? [];
+        const snapshot = browserStateSnapshotter == null ? void 0 : browserStateSnapshotter.stop();
+        const openUrls = (snapshot == null ? void 0 : snapshot.urls) ?? [];
         const nextState = getBrowserExitState(
           browserExecutable.displayName,
           code,
           signal
         );
-        if (openUrls.length > 0 && nextState.status !== "failed") {
+        if ((openUrls.length > 0 || (snapshot == null ? void 0 : snapshot.tabGroupSnapshot)) && nextState.status !== "failed") {
           await updateConfig({
             ...config,
-            initialUrls: openUrls
+            initialUrls: openUrls.length > 0 ? openUrls : config.initialUrls,
+            tabGroupSnapshot: snapshot == null ? void 0 : snapshot.tabGroupSnapshot
           });
         }
         await updateState(nextState);
@@ -642,10 +879,32 @@ const browserTabGroupAdapter = {
         lastError: void 0,
         localProfilePath
       },
-      message: `${browserExecutable.displayName}을 전용 프로필로 실행했습니다.`
+      message: `${browserExecutable.displayName}을 ${getRunModeLabel(
+        config.runMode
+      )}로 실행했습니다.`
     };
   }
 };
+const extensionManifest = {
+  manifest_version: 3,
+  name: "Pastel Flow Tab Group Bridge",
+  version: "0.1.0",
+  description: "Captures browser tab and tab group metadata for Pastel Flow.",
+  permissions: ["tabs", "tabGroups"],
+  background: {
+    service_worker: "background.js"
+  }
+};
+const extensionBackground = `
+chrome.runtime.onInstalled.addListener(() => undefined)
+chrome.runtime.onStartup.addListener(() => undefined)
+chrome.tabs.onCreated.addListener(() => undefined)
+chrome.tabs.onUpdated.addListener(() => undefined)
+chrome.tabs.onRemoved.addListener(() => undefined)
+chrome.tabGroups.onCreated.addListener(() => undefined)
+chrome.tabGroups.onUpdated.addListener(() => undefined)
+chrome.tabGroups.onRemoved.addListener(() => undefined)
+`;
 async function launchBrowser(executablePath, args) {
   const browserProcess = spawn(executablePath, args, {
     detached: true,
@@ -676,6 +935,16 @@ function getBrowserExitState(displayName, code, signal) {
     lastError: `${displayName} 프로세스가 오류 코드 ${code}로 종료되었습니다.`
   };
 }
+function getRunModeLabel(runMode) {
+  switch (runMode) {
+    case "dedicated_profile":
+      return "전용 프로필";
+    case "extension_controlled":
+      return "확장 프로그램 제어";
+    case "default_browser_deeplink":
+      return "기본 브라우저 연결";
+  }
+}
 function getRemoteDebuggingPort(taskId) {
   const hash = [...taskId].reduce(
     (currentHash, character) => (currentHash * 31 + character.charCodeAt(0)) % 1e3,
@@ -683,38 +952,242 @@ function getRemoteDebuggingPort(taskId) {
   );
   return 9200 + hash;
 }
-function startTabUrlSnapshotter(port) {
-  let latestUrls = [];
+async function ensureBrowserExtensionBridge(dataDir) {
+  const extensionDirectory = path.join(dataDir, "browser-extension-bridge");
+  await mkdir(extensionDirectory, { recursive: true });
+  await Promise.all([
+    writeFile(
+      path.join(extensionDirectory, "manifest.json"),
+      `${JSON.stringify(extensionManifest, null, 2)}
+`,
+      "utf8"
+    ),
+    writeFile(
+      path.join(extensionDirectory, "background.js"),
+      extensionBackground.trimStart(),
+      "utf8"
+    )
+  ]);
+  return extensionDirectory;
+}
+function startBrowserStateSnapshotter(port, shouldReadTabGroups) {
+  let latestSnapshot = { urls: [] };
   const interval = setInterval(() => {
-    void readOpenTabUrls(port).then((urls) => {
-      if (urls.length > 0) {
-        latestUrls = urls;
+    void readBrowserStateSnapshot(port, shouldReadTabGroups).then((snapshot) => {
+      if (snapshot.urls.length > 0 || snapshot.tabGroupSnapshot) {
+        latestSnapshot = snapshot;
       }
     });
   }, 2e3);
   return {
     stop() {
       clearInterval(interval);
-      return latestUrls;
+      return latestSnapshot;
     }
   };
 }
+async function readBrowserStateSnapshot(port, shouldReadTabGroups) {
+  const urls = await readOpenTabUrls(port);
+  const tabGroupSnapshot = shouldReadTabGroups ? await readExtensionTabGroupSnapshot(port) : void 0;
+  return {
+    urls: tabGroupSnapshot ? dedupe(tabGroupSnapshot.tabs.map((tab) => tab.url).filter(isTemplateUrl)) : urls,
+    tabGroupSnapshot
+  };
+}
 async function readOpenTabUrls(port) {
+  const targets = await readDevToolsTargets(port);
+  return dedupe(
+    targets.filter((target) => target.type === "page").map((target) => {
+      var _a;
+      return ((_a = target.url) == null ? void 0 : _a.trim()) ?? "";
+    }).filter(isTemplateUrl)
+  );
+}
+async function readExtensionTabGroupSnapshot(port) {
+  const targets = await readDevToolsTargets(port);
+  const extensionTarget = targets.find(
+    (target) => {
+      var _a;
+      return target.type === "service_worker" && ((_a = target.url) == null ? void 0 : _a.endsWith("/background.js")) && target.webSocketDebuggerUrl;
+    }
+  );
+  if (!(extensionTarget == null ? void 0 : extensionTarget.webSocketDebuggerUrl)) {
+    return void 0;
+  }
+  const value = await evaluateDevToolsExpression(
+    extensionTarget.webSocketDebuggerUrl,
+    tabGroupSnapshotExpression
+  );
+  return isBrowserTabGroupStateSnapshot(value) ? value : void 0;
+}
+async function readDevToolsTargets(port) {
   try {
     const response = await fetch(`http://127.0.0.1:${port}/json/list`);
     if (!response.ok) {
       return [];
     }
-    const targets = await response.json();
-    return dedupe(
-      targets.filter((target) => target.type === "page").map((target) => {
-        var _a;
-        return ((_a = target.url) == null ? void 0 : _a.trim()) ?? "";
-      }).filter(isTemplateUrl)
-    );
+    return await response.json();
   } catch {
     return [];
   }
+}
+const tabGroupSnapshotExpression = `
+new Promise((resolve) => {
+  chrome.tabs.query({}, (tabs) => {
+    chrome.tabGroups.query({}, (groups) => {
+      resolve({
+        capturedAt: new Date().toISOString(),
+        tabs: tabs.map((tab) => ({
+          id: tab.id,
+          windowId: tab.windowId,
+          index: tab.index,
+          url: tab.url || '',
+          title: tab.title || undefined,
+          groupId: tab.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE ? undefined : tab.groupId,
+          active: Boolean(tab.active),
+          pinned: Boolean(tab.pinned),
+        })),
+        groups: groups.map((group) => ({
+          id: group.id,
+          windowId: group.windowId,
+          title: group.title || undefined,
+          color: group.color,
+          collapsed: Boolean(group.collapsed),
+        })),
+      })
+    })
+  })
+})
+`;
+async function evaluateDevToolsExpression(webSocketUrl, expression) {
+  var _a, _b;
+  const client = await connectDevToolsWebSocket(webSocketUrl);
+  try {
+    const response = await client.request({
+      id: 1,
+      method: "Runtime.evaluate",
+      params: {
+        awaitPromise: true,
+        expression,
+        returnByValue: true
+      }
+    });
+    return (_b = (_a = response.result) == null ? void 0 : _a.result) == null ? void 0 : _b.value;
+  } finally {
+    client.close();
+  }
+}
+async function connectDevToolsWebSocket(webSocketUrl) {
+  const url = new URL(webSocketUrl);
+  const socket = createConnection({
+    host: url.hostname,
+    port: Number(url.port)
+  });
+  const acceptKey = cryptoRandomBase64(16);
+  let readBuffer = Buffer.alloc(0);
+  await new Promise((resolve, reject) => {
+    socket.once("error", reject);
+    socket.once("connect", () => {
+      socket.write(
+        [
+          `GET ${url.pathname}${url.search} HTTP/1.1`,
+          `Host: ${url.host}`,
+          "Upgrade: websocket",
+          "Connection: Upgrade",
+          `Sec-WebSocket-Key: ${acceptKey}`,
+          "Sec-WebSocket-Version: 13",
+          "\r\n"
+        ].join("\r\n")
+      );
+    });
+    socket.once("data", (chunk) => {
+      readBuffer = Buffer.concat([readBuffer, chunk]);
+      const headerEnd = readBuffer.indexOf("\r\n\r\n");
+      if (headerEnd === -1) {
+        reject(new Error("DevTools WebSocket handshake failed."));
+        return;
+      }
+      const header = readBuffer.subarray(0, headerEnd).toString("utf8");
+      if (!header.includes(" 101 ")) {
+        reject(new Error("DevTools WebSocket upgrade was rejected."));
+        return;
+      }
+      readBuffer = readBuffer.subarray(headerEnd + 4);
+      resolve();
+    });
+  });
+  return {
+    request(message) {
+      socket.write(encodeWebSocketFrame(JSON.stringify(message)));
+      return new Promise((resolve, reject) => {
+        const handleData = (chunk) => {
+          readBuffer = Buffer.concat([readBuffer, chunk]);
+          const decodedFrame = decodeWebSocketFrame(readBuffer);
+          if (!decodedFrame) {
+            return;
+          }
+          readBuffer = decodedFrame.remaining;
+          socket.off("error", reject);
+          socket.off("data", handleData);
+          resolve(JSON.parse(decodedFrame.payload.toString("utf8")));
+        };
+        socket.on("data", handleData);
+        socket.once("error", reject);
+      });
+    },
+    close() {
+      socket.end();
+    }
+  };
+}
+function encodeWebSocketFrame(payloadText) {
+  const payload = Buffer.from(payloadText);
+  const mask = randomBytes(4);
+  const headerLength = payload.length < 126 ? 6 : 8;
+  const frame = Buffer.alloc(headerLength + payload.length);
+  frame[0] = 129;
+  if (payload.length < 126) {
+    frame[1] = 128 | payload.length;
+    mask.copy(frame, 2);
+  } else {
+    frame[1] = 128 | 126;
+    frame.writeUInt16BE(payload.length, 2);
+    mask.copy(frame, 4);
+  }
+  const payloadOffset = headerLength;
+  for (let index = 0; index < payload.length; index += 1) {
+    frame[payloadOffset + index] = payload[index] ^ mask[index % 4];
+  }
+  return frame;
+}
+function decodeWebSocketFrame(buffer) {
+  if (buffer.length < 2) {
+    return null;
+  }
+  const payloadLengthIndicator = buffer[1] & 127;
+  const payloadOffset = payloadLengthIndicator === 126 ? 4 : 2;
+  const payloadLength = payloadLengthIndicator === 126 ? buffer.readUInt16BE(2) : payloadLengthIndicator;
+  if (buffer.length < payloadOffset + payloadLength) {
+    return null;
+  }
+  return {
+    payload: buffer.subarray(payloadOffset, payloadOffset + payloadLength),
+    remaining: buffer.subarray(payloadOffset + payloadLength)
+  };
+}
+function cryptoRandomBase64(byteLength) {
+  return randomBytes(byteLength).toString("base64");
+}
+function isBrowserTabGroupStateSnapshot(value) {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const snapshot = value;
+  return typeof snapshot.capturedAt === "string" && Array.isArray(snapshot.tabs) && Array.isArray(snapshot.groups) && snapshot.tabs.every(
+    (tab) => typeof tab === "object" && typeof tab.windowId === "number" && typeof tab.index === "number" && typeof tab.url === "string" && typeof tab.active === "boolean" && typeof tab.pinned === "boolean"
+  ) && snapshot.groups.every(
+    (group) => typeof group === "object" && typeof group.id === "number" && typeof group.windowId === "number" && typeof group.color === "string" && typeof group.collapsed === "boolean"
+  );
 }
 function isTemplateUrl(value) {
   return Boolean(value) && !value.startsWith("devtools://") && !value.startsWith("chrome://") && !value.startsWith("edge://") && value !== "about:blank";
@@ -933,7 +1406,8 @@ function getErrorMessage(error) {
   return "알 수 없는 실행 오류가 발생했습니다.";
 }
 function createTaskRunEventStore({
-  dataDir
+  dataDir,
+  getRetentionLimit
 }) {
   const eventsFilePath = path.join(dataDir, "taskRunEvents.json");
   async function readEventFile() {
@@ -974,10 +1448,24 @@ function createTaskRunEventStore({
         createdAt: (/* @__PURE__ */ new Date()).toISOString()
       };
       const eventFile = await readEventFile();
+      const retentionLimit = await getRetentionLimit();
       await writeEventFile({
-        events: [...eventFile.events, event].slice(-300)
+        events: [...eventFile.events, event].slice(-retentionLimit)
       });
       return event;
+    },
+    async importEvents(events) {
+      const eventFile = await readEventFile();
+      const existingIds = new Set(eventFile.events.map((event) => event.id));
+      const incomingEvents = events.filter((event) => !existingIds.has(event.id));
+      const retentionLimit = await getRetentionLimit();
+      if (incomingEvents.length === 0) {
+        return 0;
+      }
+      await writeEventFile({
+        events: [...eventFile.events, ...incomingEvents].sort((left, right) => left.createdAt.localeCompare(right.createdAt)).slice(-retentionLimit)
+      });
+      return incomingEvents.length;
     }
   };
 }
@@ -1062,6 +1550,15 @@ function createTaskStore({ dataDir }) {
       await writeTaskFile({ tasks });
       return updatedTask;
     },
+    async replaceTasks(tasks) {
+      await writeTaskFile({
+        tasks: tasks.map((task) => ({
+          ...task,
+          name: task.name.trim(),
+          permissions: normalizeDevicePolicy(task.permissions)
+        }))
+      });
+    },
     async deleteTask(id) {
       const taskFile = await readTaskFile();
       await writeTaskFile({
@@ -1120,16 +1617,28 @@ app.whenReady().then(async () => {
     dataDir
   });
   const taskRunEventStore = createTaskRunEventStore({
-    dataDir
+    dataDir,
+    async getRetentionLimit() {
+      const snapshot = await appSettingsStore.getSnapshot();
+      return snapshot.settings.taskRunEventRetentionLimit;
+    }
   });
   const secretStore = createSecretStore({
     dataDir,
     encryptionAvailable: safeStorage.isEncryptionAvailable(),
+    encryptionBackend: typeof safeStorage.getSelectedStorageBackend === "function" ? safeStorage.getSelectedStorageBackend() : "unknown",
     encrypt(value) {
       return safeStorage.encryptString(value).toString("base64");
     }
   });
   const adapterRegistry = createTaskAdapterRegistry([browserTabGroupAdapter]);
+  const mockSyncStore = createMockSyncStore({
+    dataDir,
+    appSettingsStore,
+    deviceStore,
+    taskRunEventStore,
+    taskStore
+  });
   const taskRunner = createTaskRunner({
     taskStore,
     taskRunEventStore,
@@ -1156,6 +1665,7 @@ app.whenReady().then(async () => {
   });
   registerAppSettingsIpc(ipcMain, appSettingsStore, deviceStore);
   registerSecretIpc(ipcMain, secretStore, taskStore);
+  registerSyncIpc(ipcMain, mockSyncStore);
   registerTaskIpc(
     ipcMain,
     taskStore,

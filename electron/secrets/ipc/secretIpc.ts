@@ -8,6 +8,7 @@ export function registerSecretIpc(
   secretStore: SecretStore,
   taskStore: TaskStore,
 ): void {
+  ipcMain.handle('secrets:status', () => secretStore.getStorageStatus())
   ipcMain.handle('secrets:list', () => secretStore.listSecrets())
   ipcMain.handle('secrets:create', (_event, input: CreateLocalSecretInput) =>
     secretStore.createSecret(input),

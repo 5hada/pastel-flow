@@ -4,10 +4,12 @@ import path from 'node:path'
 import type {
   CreateLocalSecretInput,
   LocalSecretMetadata,
+  SecretStorageStatus,
 } from '../../../src/shared/secrets'
 import { normalizeLocalSecretName } from '../../../src/shared/secrets'
 
 export type SecretStore = {
+  getStorageStatus(): Promise<SecretStorageStatus>
   listSecrets(): Promise<LocalSecretMetadata[]>
   createSecret(input: CreateLocalSecretInput): Promise<LocalSecretMetadata>
   deleteSecret(id: string): Promise<void>
@@ -17,6 +19,7 @@ export type SecretStoreOptions = {
   dataDir: string
   encrypt(value: string): string
   encryptionAvailable: boolean
+  encryptionBackend: string
 }
 
 type StoredLocalSecret = LocalSecretMetadata & {
@@ -32,6 +35,7 @@ type SecretFile = {
 export function createSecretStore({
   dataDir,
   encrypt,
+  encryptionBackend,
   encryptionAvailable,
 }: SecretStoreOptions): SecretStore {
   const secretsFilePath = path.join(dataDir, 'secrets.json')
@@ -93,6 +97,16 @@ export function createSecretStore({
   }
 
   return {
+    async getStorageStatus() {
+      return {
+        encryptionAvailable,
+        backend: encryptionBackend,
+        message: encryptionAvailable
+          ? 'Secret 암호화 저장을 사용할 수 있습니다.'
+          : '이 기기에서는 Electron safeStorage 암호화 저장을 사용할 수 없습니다.',
+      }
+    },
+
     async listSecrets() {
       const secretFile = await readMigratedSecretFile()
       return secretFile.secrets.map(toMetadata)

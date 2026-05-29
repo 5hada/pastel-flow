@@ -82,7 +82,29 @@ tasks.json         -> task_templates 일부
 appSettings.json   -> devices access_level 일부, 로컬 UI 설정
 device.json        -> devices 현재 기기 레코드
 secrets.json       -> local-only secret metadata and encrypted values
+syncExport.json    -> 서버 DB sync 전 단계의 mock export snapshot
 ```
+
+## Mock sync export/import
+
+서버 구현 전에는 Electron `userData/syncExport.json`을 mock sync snapshot으로 사용한다. 내보내기 대상은 서버 DB에 올라갈 수 있는 데이터만 포함한다.
+
+```text
+schemaVersion      1
+exportedAt         ISO datetime
+sourceDevice       현재 기기 id/name
+tasks              task_templates 대응 데이터
+taskRunEvents      task_run_events 대응 데이터
+linkedDevices      기기별 access_level 정책
+```
+
+가져오기는 같은 `syncExport.json`을 읽어 로컬 저장소에 병합한다.
+
+- 작업은 `id` 기준으로 병합하고, 양쪽에 모두 있으면 `updatedAt`이 더 최신인 쪽을 사용한다.
+- 로컬 전용 `state.localProfilePath`는 가져온 작업으로 덮어쓰지 않는다.
+- 실행 이벤트는 `id` 기준으로 중복을 제거해 추가한다.
+- 연동 기기 정책은 `id` 기준으로 병합한다.
+- secret 값, 브라우저 프로필, 로그인 세션, 브라우저 실행 파일 절대 경로는 export/import하지 않는다.
 
 ## 후속 결정 필요
 

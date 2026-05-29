@@ -16,6 +16,42 @@ export type BrowserRunMode =
   | 'extension_controlled'
   | 'default_browser_deeplink'
 
+export type BrowserTabGroupColor =
+  | 'grey'
+  | 'blue'
+  | 'red'
+  | 'yellow'
+  | 'green'
+  | 'pink'
+  | 'purple'
+  | 'cyan'
+  | 'orange'
+
+export type BrowserTabGroupSnapshot = {
+  id: number
+  windowId: number
+  title?: string
+  color: BrowserTabGroupColor
+  collapsed: boolean
+}
+
+export type BrowserTabSnapshot = {
+  id?: number
+  windowId: number
+  index: number
+  url: string
+  title?: string
+  groupId?: number
+  active: boolean
+  pinned: boolean
+}
+
+export type BrowserTabGroupStateSnapshot = {
+  capturedAt: string
+  tabs: BrowserTabSnapshot[]
+  groups: BrowserTabGroupSnapshot[]
+}
+
 export type DeviceVisibilityPolicy =
   | 'all_devices'
   | 'trusted_devices'
@@ -57,6 +93,7 @@ export type BrowserTabGroupConfig = {
   restorePolicy: RestorePolicy
   runMode: BrowserRunMode
   dynamicTemplateUpdates: boolean
+  tabGroupSnapshot?: BrowserTabGroupStateSnapshot
 }
 
 export type TaskTemplate<TConfig = unknown, TState = TaskState> = {

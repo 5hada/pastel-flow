@@ -12,6 +12,7 @@
 - 기기 식별자 저장 방식: Electron `userData` 경로의 `device.json`
 - 로컬 secret 저장 방식: Electron `userData` 경로의 `secrets.json`
 - 실행 이벤트 저장 방식: Electron `userData` 경로의 `taskRunEvents.json`
+- mock sync export 저장 방식: Electron `userData` 경로의 `syncExport.json`
 - 현재 MVP: 브라우저 탭 그룹 템플릿 생성, 수정, 삭제, 저장, 실행, 목록 표시
 - 현재 브라우저 실행 기본값: `dedicated_profile`
 
@@ -114,15 +115,19 @@ App.tsx
   -> Electron userData/tasks.json / appSettings.json
 ```
 
-현재 UI는 브라우저 탭 그룹 생성, 수정, 삭제, 실행, 목록 표시와 앱 설정 편집을 지원한다. 이름, 브라우저 종류, 실행 방식, 초기 URL 목록을 renderer에서 편집하고 `tasks.json`에 저장한다. `dedicated_profile` 실행 방식에서는 전용 프로필 디렉터리를 만든 뒤 Chrome, Edge, Chromium 실행 파일을 찾아 `--user-data-dir` 인자로 브라우저 프로세스를 연다. 초기 URL이 있으면 브라우저 실행 인자로 같이 전달한다.
+현재 UI는 브라우저 탭 그룹 생성, 수정, 삭제, 실행, 목록 표시와 앱 설정 편집을 지원한다. 이름, 브라우저 종류, 실행 방식, 초기 URL 목록을 renderer에서 편집하고 `tasks.json`에 저장한다. `dedicated_profile` 실행 방식에서는 전용 프로필 디렉터리를 만든 뒤 Chrome, Edge, Chromium 실행 파일을 찾아 `--user-data-dir` 인자로 브라우저 프로세스를 연다. 초기 URL이 있으면 브라우저 실행 인자로 같이 전달한다. `extension_controlled` 실행 방식은 같은 전용 프로필에 Pastel Flow companion extension을 로드하고, DevTools 포트로 확장 서비스워커를 호출해 열린 탭 URL과 탭 그룹 이름, 색, 접힘 상태, 그룹-탭 관계를 `config.tabGroupSnapshot`에 저장한다.
 
 브라우저 작업에는 `dynamicTemplateUpdates` 토글이 있다. 이 값이 켜져 있으면 adapter가 브라우저를 `--remote-debugging-port`와 함께 실행하고, 실행 중 DevTools target 목록을 주기적으로 읽어 열린 탭 URL 스냅샷을 유지한다. 브라우저 정상 종료 시 마지막 URL 목록을 작업 config의 `initialUrls`로 저장한다. 이 기능은 전용 프로필 MVP에서 가능한 URL 목록 반영이며, 실제 탭 그룹 이름, 색, 그룹 관계는 확장 프로그램 기반 실행 방식에서 다룬다.
 
 앱 설정은 `appSettings.json`에 저장한다. 설정에는 테마, 기본 브라우저, 새 작업 기본 이름, 브라우저별 실행 파일 수동 경로, 연동 기기별 허용 수준이 포함된다. 브라우저 실행 파일 경로가 설정되어 있으면 자동 탐색보다 우선 사용하고, 경로가 비어 있으면 OS별 기본 경로와 `PATH`를 탐색한다.
 
+설정에는 실행 이벤트 보존 개수도 포함된다. `taskRunEventStore`는 이벤트 추가 시 현재 설정값을 읽어 `taskRunEvents.json`의 저장 개수를 제한한다. renderer는 선택한 작업의 최근 실행 이벤트를 검색어와 상태별로 필터링한다.
+
 현재 기기 ID는 `device.json`에 저장한다. `tasks:list`는 main process에서 현재 기기와 연동 기기 허용 수준, 작업 `DevicePolicy.visibility`를 확인한 뒤 허용된 작업만 renderer에 반환한다. 따라서 허용되지 않은 작업은 renderer 상태에 들어오지 않으며 목록에도 표시되지 않는다. `tasks:run`, `tasks:update`, `tasks:delete`는 `DevicePolicy.execution`을 확인한 뒤 허용되지 않으면 오류를 반환한다.
 
 작업 생성/수정 UI는 작업별 표시 정책, 실행 정책, 허용 기기 ID, secret 참조를 편집한다. 제한 정책이나 secret 참조가 있는 작업은 목록에서 `제한됨` 배지를 표시한다. Secret 값은 Electron `safeStorage`로 암호화해 `secrets.json`에 저장하고, renderer에는 메타데이터만 반환한다. 기존 평문 `value`가 남아 있으면 secret 목록 조회/생성/삭제 시 암호화 형식으로 자동 마이그레이션한다. Secret을 삭제하면 main process가 모든 작업의 `secretRefs`에서 해당 ID를 제거한다.
+
+Secret 설정 화면은 Electron `safeStorage` 사용 가능 여부, 선택된 backend, 안내 메시지를 표시한다. 암호화가 불가능한 환경에서는 secret 생성이 main process에서 거부되고, renderer는 해당 오류를 설정 화면에 표시한다.
 
 작업 실행 이벤트는 `taskRunEvents.json`에 append-only 형태로 저장한다. `taskRunner`는 실행 시작, 실행 요청 처리, 실행 이후 상태 변경, 실패를 이벤트로 기록한다. renderer는 선택한 작업의 최근 실행 이벤트를 수정 화면에 표시한다. 이벤트 조회도 task visibility policy를 통과한 작업에 대해서만 허용한다.
 
@@ -139,6 +144,7 @@ App.tsx
 - Secret 저장소 변경: `src/shared/secrets.ts`, `electron/secrets/store/secretStore.ts`, `electron/secrets/ipc/secretIpc.ts`
 - 실행 이벤트 변경: `src/shared/taskRunEvents.ts`, `electron/tasks/store/taskRunEventStore.ts`, `electron/tasks/runner/taskRunner.ts`, `src/App.tsx`
 - 동기화 스키마 변경: `sync-schema.md`
+- mock sync export/import 변경: `src/shared/sync.ts`, `electron/sync/store/mockSyncStore.ts`, `electron/sync/ipc/syncIpc.ts`, `electron/preload.ts`, `src/renderer/api/tasksApi.ts`, `src/App.tsx`
 - 로컬 저장 방식 변경: `electron/tasks/store/taskStore.ts`
 - 새 IPC 추가: `electron/tasks/ipc/taskIpc.ts`, `electron/preload.ts`, `src/renderer/api/tasksApi.ts`
 - 브라우저 실행 구현: `electron/tasks/adapters/browserTabGroupAdapter.ts`
@@ -158,6 +164,7 @@ App.tsx
 - Electron/Node API는 renderer에서 직접 사용하지 않는다.
 - main/renderer 공유 타입은 `src/shared`에 두고, Electron 의존 코드는 `electron`에 둔다.
 - 작업 타입별 실행 로직은 `TaskAdapter` 형태로 추가한다.
+- 구현 검증을 위해 dev 서버 응답 확인이나 UI 직접 확인을 하지 않는다.
 
 ## 7. 검증 명령
 
@@ -167,12 +174,3 @@ App.tsx
 npx tsc --noEmit
 npm run lint
 ```
-
-브라우저 실행 기능을 구현한 뒤에는 추가로 다음을 확인한다.
-
-- 앱에서 브라우저 탭 그룹 템플릿 생성
-- 생성된 작업의 `profileId` 유지
-- 전용 프로필 디렉터리 생성
-- 브라우저 종료 후 재실행 시 세션 유지
-- 실행 성공 시 `lastRunAt`, `localProfilePath`, `status` 저장
-- 실행 실패 시 `lastError`, `status` 저장

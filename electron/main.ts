@@ -6,6 +6,8 @@ import { registerSecretIpc } from './secrets/ipc/secretIpc'
 import { createSecretStore } from './secrets/store/secretStore'
 import { registerAppSettingsIpc } from './settings/ipc/appSettingsIpc'
 import { createAppSettingsStore } from './settings/store/appSettingsStore'
+import { registerSyncIpc } from './sync/ipc/syncIpc'
+import { createMockSyncStore } from './sync/store/mockSyncStore'
 import { browserTabGroupAdapter } from './tasks/adapters/browserTabGroupAdapter'
 import { createTaskAdapterRegistry } from './tasks/adapters/taskAdapterRegistry'
 import { registerTaskIpc } from './tasks/ipc/taskIpc'
@@ -89,15 +91,30 @@ app.whenReady().then(async () => {
   })
   const taskRunEventStore = createTaskRunEventStore({
     dataDir,
+    async getRetentionLimit() {
+      const snapshot = await appSettingsStore.getSnapshot()
+      return snapshot.settings.taskRunEventRetentionLimit
+    },
   })
   const secretStore = createSecretStore({
     dataDir,
     encryptionAvailable: safeStorage.isEncryptionAvailable(),
+    encryptionBackend:
+      typeof safeStorage.getSelectedStorageBackend === 'function'
+        ? safeStorage.getSelectedStorageBackend()
+        : 'unknown',
     encrypt(value) {
       return safeStorage.encryptString(value).toString('base64')
     },
   })
   const adapterRegistry = createTaskAdapterRegistry([browserTabGroupAdapter])
+  const mockSyncStore = createMockSyncStore({
+    dataDir,
+    appSettingsStore,
+    deviceStore,
+    taskRunEventStore,
+    taskStore,
+  })
   const taskRunner = createTaskRunner({
     taskStore,
     taskRunEventStore,
@@ -129,6 +146,7 @@ app.whenReady().then(async () => {
 
   registerAppSettingsIpc(ipcMain, appSettingsStore, deviceStore)
   registerSecretIpc(ipcMain, secretStore, taskStore)
+  registerSyncIpc(ipcMain, mockSyncStore)
   registerTaskIpc(
     ipcMain,
     taskStore,

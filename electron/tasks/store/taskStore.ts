@@ -27,6 +27,7 @@ export type TaskStore = {
   listTasks(): Promise<TaskTemplate[]>
   createTask(input: CreateTaskInput): Promise<TaskTemplate>
   updateTask(id: string, input: UpdateTaskInput): Promise<TaskTemplate>
+  replaceTasks(tasks: TaskTemplate[]): Promise<void>
   deleteTask(id: string): Promise<void>
 }
 
@@ -131,6 +132,16 @@ export function createTaskStore({ dataDir }: TaskStoreOptions): TaskStore {
       await writeTaskFile({ tasks })
 
       return updatedTask
+    },
+
+    async replaceTasks(tasks) {
+      await writeTaskFile({
+        tasks: tasks.map((task) => ({
+          ...task,
+          name: task.name.trim(),
+          permissions: normalizeDevicePolicy(task.permissions),
+        })),
+      })
     },
 
     async deleteTask(id) {

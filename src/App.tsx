@@ -15,10 +15,12 @@ import {
   createDefaultBrowserTabGroupConfig,
   getDeviceExecutionPolicyLabel,
   getDeviceVisibilityPolicyLabel,
+  getBrowserRunModeLabel,
   isRestrictedDevicePolicy,
   normalizeDevicePolicy,
   normalizeBrowserTabGroupConfig,
   type BrowserKind,
+  type BrowserRunMode,
   type BrowserTabGroupConfig,
   type BrowserTabGroupTask,
   type DeviceExecutionPolicy,
@@ -29,13 +31,16 @@ import {
   type TaskTemplate,
 } from './shared/tasks'
 import type { LocalSecretMetadata } from './shared/secrets'
-import type { TaskRunEvent } from './shared/taskRunEvents'
+import type { SecretStorageStatus } from './shared/secrets'
+import type { SyncImportResult, SyncStatus } from './shared/sync'
+import type { TaskRunEvent, TaskRunEventStatus } from './shared/taskRunEvents'
 import type { CreateBrowserTabGroupTaskInput } from './renderer/api/tasksApi'
 import './App.css'
 
 type BrowserTaskFormState = {
   name: string
   browserKind: BrowserKind
+  runMode: BrowserRunMode
   initialUrls: string
   dynamicTemplateUpdates: boolean
   visibility: DeviceVisibilityPolicy
@@ -71,6 +76,7 @@ function createBrowserTaskForm(settings: AppSettings): BrowserTaskFormState {
   return {
     name: settings.defaultTaskName,
     browserKind: settings.defaultBrowserKind,
+    runMode: 'dedicated_profile',
     initialUrls: '',
     dynamicTemplateUpdates: false,
     visibility: 'local_only',
@@ -92,6 +98,7 @@ const initialSettingsSnapshot = {
 const defaultEditForm: BrowserTaskFormState = {
   name: defaultAppSettings.defaultTaskName,
   browserKind: defaultAppSettings.defaultBrowserKind,
+  runMode: 'dedicated_profile',
   initialUrls: '',
   dynamicTemplateUpdates: false,
   visibility: 'local_only',
@@ -106,10 +113,25 @@ const defaultSecretForm: SecretFormState = {
   description: '',
 }
 
+const defaultSecretStorageStatus: SecretStorageStatus = {
+  encryptionAvailable: false,
+  backend: 'unknown',
+  message: 'Secret 암호화 상태를 아직 불러오지 못했습니다.',
+}
+
+const defaultSyncStatus: SyncStatus = {
+  exportPath: '',
+}
+
 function App() {
   const [tasks, setTasks] = useState<TaskTemplate[]>([])
   const [taskRunEvents, setTaskRunEvents] = useState<TaskRunEvent[]>([])
   const [secrets, setSecrets] = useState<LocalSecretMetadata[]>([])
+  const [secretStorageStatus, setSecretStorageStatus] =
+    useState<SecretStorageStatus>(defaultSecretStorageStatus)
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(defaultSyncStatus)
+  const [syncResult, setSyncResult] = useState<SyncImportResult | null>(null)
+  const [syncMessage, setSyncMessage] = useState<string | null>(null)
   const [appSettings, setAppSettings] = useState<AppSettings>(
     initialSettingsSnapshot.settings,
   )
@@ -167,6 +189,8 @@ function App() {
   useEffect(() => {
     void loadAppSettings()
     void loadSecrets()
+    void loadSecretStorageStatus()
+    void loadSyncStatus()
     void loadTasks()
   }, [])
 
@@ -271,6 +295,30 @@ function App() {
     }
   }
 
+  async function loadSecretStorageStatus() {
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      setSecretStorageStatus(await window.pastelFlow.secrets.status())
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    }
+  }
+
+  async function loadSyncStatus() {
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      setSyncStatus(await window.pastelFlow.sync.status())
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    }
+  }
+
   async function loadTaskRunEvents(taskId: string) {
     if (!window.pastelFlow) {
       return
@@ -295,6 +343,7 @@ function App() {
     const config = {
       ...createDefaultBrowserTabGroupConfig(profileId),
       browserKind: createForm.browserKind,
+      runMode: createForm.runMode,
       initialUrls: parseInitialUrls(createForm.initialUrls),
       dynamicTemplateUpdates: createForm.dynamicTemplateUpdates,
     }
@@ -396,6 +445,7 @@ function App() {
     setEditForm({
       name: task.name,
       browserKind: config.browserKind,
+      runMode: config.runMode,
       initialUrls: config.initialUrls.join('\n'),
       dynamicTemplateUpdates: config.dynamicTemplateUpdates,
       visibility: permissions.visibility,
@@ -458,6 +508,7 @@ function App() {
     const config: BrowserTabGroupConfig = {
       ...currentConfig,
       browserKind: editForm.browserKind,
+      runMode: editForm.runMode,
       initialUrls: parseInitialUrls(editForm.initialUrls),
       dynamicTemplateUpdates: editForm.dynamicTemplateUpdates,
     }
@@ -560,6 +611,40 @@ function App() {
       )
     } catch (error) {
       setSettingsErrorMessage(getErrorMessage(error))
+    }
+  }
+
+  async function handleExportSyncSnapshot() {
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      setErrorMessage(null)
+      setSyncResult(null)
+      const snapshot = await window.pastelFlow.sync.export()
+      setSyncMessage(
+        `${snapshot.tasks.length}개 작업과 ${snapshot.taskRunEvents.length}개 실행 이벤트를 내보냈습니다.`,
+      )
+      await loadSyncStatus()
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    }
+  }
+
+  async function handleImportSyncSnapshot() {
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      setErrorMessage(null)
+      setSyncMessage(null)
+      const result = await window.pastelFlow.sync.import()
+      setSyncResult(result)
+      await Promise.all([loadTasks(), loadAppSettings(), loadSyncStatus()])
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
     }
   }
 
@@ -669,7 +754,15 @@ function App() {
             />
           ) : null}
 
-          {workspaceMode === 'tools' ? <ToolsPanel /> : null}
+          {workspaceMode === 'tools' ? (
+            <ToolsPanel
+              syncMessage={syncMessage}
+              syncResult={syncResult}
+              syncStatus={syncStatus}
+              onExportSyncSnapshot={handleExportSyncSnapshot}
+              onImportSyncSnapshot={handleImportSyncSnapshot}
+            />
+          ) : null}
 
           {workspaceMode === 'settings' ? (
             <section className="mode-panel" aria-label="앱 설정">
@@ -680,10 +773,11 @@ function App() {
                 onSubmit={handleSaveSettings}
                 saveState={settingsSaveState}
                 settingsErrorMessage={settingsErrorMessage}
-                secretForm={secretForm}
-                secrets={secrets}
-                currentDevice={currentDevice}
-                userDataPath={userDataPath}
+            secretForm={secretForm}
+            secretStorageStatus={secretStorageStatus}
+            secrets={secrets}
+  currentDevice={currentDevice}
+  userDataPath={userDataPath}
                 onCreateSecret={handleCreateSecret}
                 onDeleteSecret={handleDeleteSecret}
                 onSecretFormChange={setSecretForm}
@@ -885,7 +979,21 @@ function WorkspaceSidebar({
   )
 }
 
-function ToolsPanel() {
+type ToolsPanelProps = {
+  syncMessage: string | null
+  syncResult: SyncImportResult | null
+  syncStatus: SyncStatus
+  onExportSyncSnapshot(): Promise<void>
+  onImportSyncSnapshot(): Promise<void>
+}
+
+function ToolsPanel({
+  onExportSyncSnapshot,
+  onImportSyncSnapshot,
+  syncMessage,
+  syncResult,
+  syncStatus,
+}: ToolsPanelProps) {
   return (
     <section className="mode-panel tool-panel" aria-label="도구">
       <div className="panel-heading">
@@ -894,10 +1002,43 @@ function ToolsPanel() {
           <h2>도구</h2>
         </div>
       </div>
-      <div className="empty-state empty-state-action">
-        <p>내장 응용 도구 화면을 준비했습니다.</p>
-        <p className="muted-text">포함할 도구 범위는 이후 단계에서 확정합니다.</p>
-      </div>
+      <section className="settings-subsection" aria-label="mock sync">
+        <div className="section-heading compact-heading">
+          <div>
+            <p className="eyebrow">Mock sync</p>
+            <h3>로컬 동기화 스냅샷</h3>
+          </div>
+        </div>
+        <dl className="detail-list">
+          <DetailItem
+            label="내보내기 파일"
+            value={syncStatus.exportPath || '아직 없음'}
+          />
+          <DetailItem
+            label="마지막 내보내기"
+            value={formatDate(syncStatus.lastExportedAt)}
+          />
+        </dl>
+        <div className="form-actions">
+          <button type="button" onClick={() => void onExportSyncSnapshot()}>
+            내보내기
+          </button>
+          <button
+            className="ghost-button"
+            type="button"
+            onClick={() => void onImportSyncSnapshot()}
+          >
+            가져오기
+          </button>
+        </div>
+        {syncMessage ? <p className="panel-success">{syncMessage}</p> : null}
+        {syncResult ? (
+          <p className="panel-success">
+            가져오기 완료: 생성 {syncResult.tasksCreated}개, 업데이트{' '}
+            {syncResult.tasksUpdated}개, 이벤트 {syncResult.taskRunEventsAdded}개
+          </p>
+        ) : null}
+      </section>
     </section>
   )
 }
@@ -1099,7 +1240,18 @@ function CreateTaskPanel({
           </label>
           <label>
             실행 방식
-            <input value="전용 프로필" readOnly />
+            <select
+              value={createForm.runMode}
+              onChange={(event) =>
+                onChange({
+                  ...createForm,
+                  runMode: event.target.value as BrowserRunMode,
+                })
+              }
+            >
+              <option value="dedicated_profile">전용 프로필</option>
+              <option value="extension_controlled">확장 프로그램 제어</option>
+            </select>
           </label>
         </div>
         <label>
@@ -1204,10 +1356,14 @@ function EditWorkspace({
 
         <dl className="detail-list">
           <DetailItem label="브라우저" value={getBrowserKindLabel(config.browserKind)} />
-          <DetailItem label="실행 방식" value="전용 프로필" />
+          <DetailItem label="실행 방식" value={getBrowserRunModeLabel(config.runMode)} />
           <DetailItem
             label="동적 업데이트"
             value={config.dynamicTemplateUpdates ? '사용' : '사용 안 함'}
+          />
+          <DetailItem
+            label="탭 그룹 스냅샷"
+            value={getTabGroupSnapshotLabel(config)}
           />
           <DetailItem label="상태" value={getTaskStatusLabel(selectedTask.state.status)} />
           <DetailItem label="마지막 실행" value={formatDate(selectedTask.state.lastRunAt)} />
@@ -1277,6 +1433,7 @@ type AppSettingsPanelProps = {
   form: AppSettings
   currentDevice: CurrentDevice
   secretForm: SecretFormState
+  secretStorageStatus: SecretStorageStatus
   selectedCategory: SettingsCategory
   secrets: LocalSecretMetadata[]
   saveState: SettingsSaveState
@@ -1294,6 +1451,7 @@ function AppSettingsPanel({
   currentDevice,
   form,
   secretForm,
+  secretStorageStatus,
   selectedCategory,
   onChange,
   onClose,
@@ -1394,6 +1552,22 @@ function AppSettingsPanel({
                 <option value="grid">그리드</option>
                 <option value="list">목록</option>
               </select>
+            </label>
+
+            <label>
+              실행 이벤트 보존 개수
+              <input
+                max={2000}
+                min={50}
+                type="number"
+                value={form.taskRunEventRetentionLimit}
+                onChange={(event) =>
+                  onChange({
+                    ...form,
+                    taskRunEventRetentionLimit: Number(event.target.value),
+                  })
+                }
+              />
             </label>
 
             <label>
@@ -1533,6 +1707,20 @@ function AppSettingsPanel({
             <span>{secrets.length}개</span>
           </div>
 
+          <div
+            className={`secret-storage-status${
+              secretStorageStatus.encryptionAvailable ? ' is-ok' : ' is-warning'
+            }`}
+          >
+            <strong>
+              {secretStorageStatus.encryptionAvailable
+                ? '암호화 사용 가능'
+                : '암호화 사용 불가'}
+            </strong>
+            <span>{secretStorageStatus.message}</span>
+            <code>{secretStorageStatus.backend}</code>
+          </div>
+
           <div className="secret-form">
             <label>
               이름
@@ -1661,7 +1849,18 @@ function TaskEditPanel({
         </label>
         <label>
           실행 방식
-          <input value="전용 프로필" readOnly />
+          <select
+            value={editForm.runMode}
+            onChange={(event) =>
+              onChange({
+                ...editForm,
+                runMode: event.target.value as BrowserRunMode,
+              })
+            }
+          >
+            <option value="dedicated_profile">전용 프로필</option>
+            <option value="extension_controlled">확장 프로그램 제어</option>
+          </select>
         </label>
         <label>
           초기 URL
@@ -1761,6 +1960,7 @@ function isSettingsDirty(form: AppSettings, settings: AppSettings): boolean {
     form.defaultTaskName.trim() !== settings.defaultTaskName ||
     form.initialUrlInputMode !== settings.initialUrlInputMode ||
     form.taskListDisplayMode !== settings.taskListDisplayMode ||
+    form.taskRunEventRetentionLimit !== settings.taskRunEventRetentionLimit ||
     normalizeSettingsPath(form.browserExecutablePaths.chrome) !==
       normalizeSettingsPath(settings.browserExecutablePaths.chrome) ||
     normalizeSettingsPath(form.browserExecutablePaths.edge) !==
@@ -1947,14 +2147,48 @@ type TaskRunEventsPanelProps = {
 }
 
 function TaskRunEventsPanel({ events }: TaskRunEventsPanelProps) {
+  const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<TaskRunEventStatus | 'all'>(
+    'all',
+  )
+  const filteredEvents = events.filter((event) => {
+    const matchesStatus =
+      statusFilter === 'all' || event.status === statusFilter
+    const normalizedQuery = query.trim().toLowerCase()
+    const matchesQuery =
+      !normalizedQuery ||
+      (event.message ?? '').toLowerCase().includes(normalizedQuery) ||
+      event.deviceId.toLowerCase().includes(normalizedQuery)
+
+    return matchesStatus && matchesQuery
+  })
+
   return (
     <section className="run-events" aria-label="최근 실행 이벤트">
       <h3>최근 실행 이벤트</h3>
-      {events.length === 0 ? (
+      <div className="run-event-filters">
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="이벤트 검색"
+        />
+        <select
+          value={statusFilter}
+          onChange={(event) =>
+            setStatusFilter(event.target.value as TaskRunEventStatus | 'all')
+          }
+        >
+          <option value="all">전체 상태</option>
+          <option value="running">실행 중</option>
+          <option value="idle">대기</option>
+          <option value="failed">실패</option>
+        </select>
+      </div>
+      {filteredEvents.length === 0 ? (
         <p className="muted-text">아직 실행 이벤트가 없습니다.</p>
       ) : (
         <div className="run-event-list">
-          {events.slice(0, 8).map((event) => (
+          {filteredEvents.slice(0, 8).map((event) => (
             <div className="run-event-row" key={event.id}>
               <span className={`status-pill status-${event.status}`}>
                 {getTaskStatusLabel(event.status)}
@@ -2069,6 +2303,16 @@ function getBrowserKindLabel(browserKind: BrowserKind): string {
     case 'chromium':
       return 'Chromium'
   }
+}
+
+function getTabGroupSnapshotLabel(config: BrowserTabGroupConfig): string {
+  if (!config.tabGroupSnapshot) {
+    return '아직 없음'
+  }
+
+  return `${config.tabGroupSnapshot.groups.length}개 그룹, ${
+    config.tabGroupSnapshot.tabs.length
+  }개 탭 · ${formatDate(config.tabGroupSnapshot.capturedAt)}`
 }
 
 function formatDate(value?: string): string {

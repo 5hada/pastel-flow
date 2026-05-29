@@ -12,6 +12,12 @@ export type CreateLocalSecretInput = {
   description?: string
 }
 
+export type SecretStorageStatus = {
+  encryptionAvailable: boolean
+  backend: string
+  message: string
+}
+
 export function normalizeLocalSecretName(value: string): string {
   return value.trim()
 }

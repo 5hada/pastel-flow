@@ -100,6 +100,7 @@ type BrowserTabGroupConfig = {
   restorePolicy: 'browser_profile' | 'initial_urls_only';
   runMode: 'dedicated_profile' | 'extension_controlled' | 'default_browser_deeplink';
   dynamicTemplateUpdates: boolean;
+  tabGroupSnapshot?: BrowserTabGroupStateSnapshot;
 };
 
 type TaskState = {
@@ -173,15 +174,15 @@ type TaskRunResult<TState> = {
 - Chrome, Edge, Chromium 실행 파일 자동 탐색과 앱 설정 기반 수동 경로 지정을 지원한다.
 - 브라우저 실행 성공, 실패, 종료 이후 상태를 `tasks.json`에 저장한다.
 - 앱 재시작 후 작업 설정과 실행 상태가 유지되는 것을 직접 실행으로 확인했다.
+- `extension_controlled` 실행 방식에서 전용 프로필에 Pastel Flow companion extension을 로드하고, 실행 종료 시 열린 탭 URL과 탭 그룹 이름, 색, 접힘 상태, 그룹-탭 관계를 템플릿에 저장한다.
 
 ### 부분 완료
 
-- 실행 이후 상태 변경은 저장되지만 renderer로 실시간 push되지는 않는다.
-- `extension_controlled`, `default_browser_deeplink` 실행 방식은 모델에만 있고 아직 실행되지 않는다.
+- `default_browser_deeplink` 실행 방식은 모델에만 있고 아직 실행되지 않는다.
 
 ### 미완료
 
-- secret 저장소, 기기 식별자, 권한 정책 적용 로직.
+- 서버 DB sync용 export/import 또는 mock sync adapter.
 
 ### 현재 단계 완료 기준
 
@@ -225,12 +226,16 @@ type TaskRunResult<TState> = {
 - [x] 기존 평문 `secrets.json` 데이터를 암호화 형식으로 마이그레이션한다.
 - [x] 작업별 실행 로그를 표준화하고 UI에 최근 실행 이벤트를 표시한다.
 - [x] 브라우저 실행 후 열린 탭 URL 변경사항을 템플릿에 반영하는 동적 업데이트 토글을 추가한다.
+- [x] Secret 생성 실패 시 `safeStorage` 사용 가능 여부와 backend를 UI에 표시한다.
+- [x] 실행 이벤트에 검색/상태 필터와 보존 개수 설정을 추가한다.
+- [x] 확장 프로그램 기반 실행에서 실제 탭 그룹 이름, 색, 그룹 관계를 템플릿에 반영한다.
+- [x] 서버 DB sync 전 단계의 mock export/import adapter를 구현한다.
 
 다음 구현 우선순위:
 
-1. 확장 프로그램 기반 실행에서 실제 탭 그룹 이름, 색, 그룹 관계를 템플릿에 반영한다.
-2. Secret 생성 실패 시 `safeStorage` 사용 불가 원인을 UI에 더 구체적으로 표시한다.
-3. 실행 이벤트에 검색/필터와 보존 기간 설정을 추가한다.
+1. 실행 이벤트의 오래된 항목 정리와 export 범위를 정책화한다.
+2. `default_browser_deeplink` 실행 방식의 범위와 보안 정책을 결정한다.
+3. mock sync conflict resolution을 task config/policy 필드 단위로 세분화한다.
 
 ### Phase 2: 권한과 Secret 기반
 
@@ -305,3 +310,4 @@ MVP 1은 다음 조건을 만족하면 성공으로 본다.
 - 전용 프로필의 로그인 반복 한계를 인정하고, 향후 `extension_controlled` 실행 방식으로 확장 가능하게 유지한다.
 - 기기별 권한, secret 암호화, 서버 DB 동기화는 설계에 포함하되 MVP에서는 후순위로 둔다.
 - 확장 기능은 `TaskAdapter` 방식으로 추가한다.
+- 에이전트 구현 검증 시 dev 서버 응답 확인과 UI 직접 확인은 수행하지 않는다. 필요한 검증은 `npx tsc --noEmit`, `npm run lint` 같은 정적 명령 중심으로 진행한다.

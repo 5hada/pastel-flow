@@ -2,6 +2,10 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import {
   createDefaultBrowserTabGroupConfig,
   getBrowserRunModeLabel,
+  normalizeBrowserTabGroupConfig,
+  type BrowserKind,
+  type BrowserRunMode,
+  type BrowserTabGroupConfig,
   type BrowserTabGroupTask,
   type TaskTemplate,
 } from './shared/tasks'
@@ -10,9 +14,27 @@ import './App.css'
 
 const defaultTaskName = '새 브라우저 작업'
 
+type BrowserTaskFormState = {
+  name: string
+  browserKind: BrowserKind
+  runMode: BrowserRunMode
+  initialUrls: string
+}
+
+const defaultCreateForm: BrowserTaskFormState = {
+  name: defaultTaskName,
+  browserKind: 'chrome',
+  runMode: 'dedicated_profile',
+  initialUrls: '',
+}
+
 function App() {
   const [tasks, setTasks] = useState<TaskTemplate[]>([])
-  const [taskName, setTaskName] = useState(defaultTaskName)
+  const [createForm, setCreateForm] =
+    useState<BrowserTaskFormState>(defaultCreateForm)
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
+  const [editForm, setEditForm] =
+    useState<BrowserTaskFormState>(defaultCreateForm)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
@@ -49,23 +71,97 @@ function App() {
   async function handleCreateTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    const trimmedName = taskName.trim()
+    const trimmedName = createForm.name.trim()
     if (!trimmedName || !window.pastelFlow) {
       return
     }
 
     const profileId = `browser-${crypto.randomUUID()}`
+    const config = {
+      ...createDefaultBrowserTabGroupConfig(profileId),
+      browserKind: createForm.browserKind,
+      runMode: createForm.runMode,
+      initialUrls: parseInitialUrls(createForm.initialUrls),
+    }
     const input: CreateBrowserTabGroupTaskInput = {
       name: trimmedName,
       type: 'browser_tab_group',
-      config: createDefaultBrowserTabGroupConfig(profileId),
+      config,
     }
 
     try {
       setErrorMessage(null)
       const createdTask = await window.pastelFlow.tasks.create(input)
       setTasks((currentTasks) => [...currentTasks, createdTask])
-      setTaskName(defaultTaskName)
+      setCreateForm(defaultCreateForm)
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    }
+  }
+
+  function startEditing(task: BrowserTabGroupTask) {
+    const config = normalizeBrowserTabGroupConfig(task.config)
+    setEditingTaskId(task.id)
+    setEditForm({
+      name: task.name,
+      browserKind: config.browserKind,
+      runMode: config.runMode,
+      initialUrls: config.initialUrls.join('\n'),
+    })
+  }
+
+  async function handleUpdateTask(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!editingTaskId || !window.pastelFlow) {
+      return
+    }
+
+    const currentTask = browserTasks.find((task) => task.id === editingTaskId)
+    const trimmedName = editForm.name.trim()
+    if (!currentTask || !trimmedName) {
+      return
+    }
+
+    const currentConfig = normalizeBrowserTabGroupConfig(currentTask.config)
+    const config: BrowserTabGroupConfig = {
+      ...currentConfig,
+      browserKind: editForm.browserKind,
+      runMode: editForm.runMode,
+      initialUrls: parseInitialUrls(editForm.initialUrls),
+    }
+
+    try {
+      setErrorMessage(null)
+      const updatedTask = await window.pastelFlow.tasks.update(editingTaskId, {
+        name: trimmedName,
+        config,
+      })
+      setTasks((currentTasks) =>
+        currentTasks.map((task) =>
+          task.id === updatedTask.id ? updatedTask : task,
+        ),
+      )
+      setEditingTaskId(null)
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    }
+  }
+
+  async function handleDeleteTask(taskId: string) {
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      setErrorMessage(null)
+      await window.pastelFlow.tasks.delete(taskId)
+      setTasks((currentTasks) =>
+        currentTasks.filter((task) => task.id !== taskId),
+      )
+      if (editingTaskId === taskId) {
+        setEditingTaskId(null)
+      }
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     }
@@ -85,14 +181,70 @@ function App() {
 
       <section className="toolbar" aria-label="작업 생성">
         <form className="create-form" onSubmit={handleCreateTask}>
-          <label htmlFor="task-name">브라우저 탭 그룹 이름</label>
-          <div className="create-row">
-            <input
-              id="task-name"
-              value={taskName}
-              onChange={(event) => setTaskName(event.target.value)}
-              placeholder="예: 리서치 세션"
+          <div className="form-grid">
+            <label>
+              브라우저 탭 그룹 이름
+              <input
+                value={createForm.name}
+                onChange={(event) =>
+                  setCreateForm((current) => ({
+                    ...current,
+                    name: event.target.value,
+                  }))
+                }
+                placeholder="예: 리서치 세션"
+              />
+            </label>
+            <label>
+              브라우저
+              <select
+                value={createForm.browserKind}
+                onChange={(event) =>
+                  setCreateForm((current) => ({
+                    ...current,
+                    browserKind: event.target.value as BrowserKind,
+                  }))
+                }
+              >
+                <option value="chrome">Chrome</option>
+                <option value="edge">Edge</option>
+                <option value="chromium">Chromium</option>
+              </select>
+            </label>
+            <label>
+              실행 방식
+              <select
+                value={createForm.runMode}
+                onChange={(event) =>
+                  setCreateForm((current) => ({
+                    ...current,
+                    runMode: event.target.value as BrowserRunMode,
+                  }))
+                }
+              >
+                <option value="dedicated_profile">전용 프로필</option>
+                <option value="extension_controlled">확장 프로그램</option>
+                <option value="default_browser_deeplink">
+                  기본 브라우저 연결
+                </option>
+              </select>
+            </label>
+          </div>
+          <label>
+            초기 URL
+            <textarea
+              value={createForm.initialUrls}
+              onChange={(event) =>
+                setCreateForm((current) => ({
+                  ...current,
+                  initialUrls: event.target.value,
+                }))
+              }
+              placeholder="한 줄에 하나씩 입력"
+              rows={3}
             />
+          </label>
+          <div className="form-actions">
             <button type="submit">생성</button>
           </div>
         </form>
@@ -114,40 +266,150 @@ function App() {
           </p>
         ) : (
           <div className="task-list">
-            {browserTasks.map((task) => (
-              <article className="task-card" key={task.id}>
-                <div>
-                  <h3>{task.name}</h3>
-                  <p>
-                    {task.config.browserKind} ·{' '}
-                    {getBrowserRunModeLabel(task.config.runMode)}
-                  </p>
-                </div>
-                <dl>
-                  <div>
-                    <dt>상태</dt>
-                    <dd>{task.state.status}</dd>
-                  </div>
-                  <div>
-                    <dt>실행 방식</dt>
-                    <dd>{getBrowserRunModeLabel(task.config.runMode)}</dd>
-                  </div>
-                  <div>
-                    <dt>프로필</dt>
-                    <dd>{task.config.profileId}</dd>
-                  </div>
-                  <div>
-                    <dt>마지막 실행</dt>
-                    <dd>{task.state.lastRunAt ?? '아직 없음'}</dd>
-                  </div>
-                </dl>
-              </article>
-            ))}
+            {browserTasks.map((task) => {
+              const config = normalizeBrowserTabGroupConfig(task.config)
+              const isEditing = editingTaskId === task.id
+
+              return (
+                <article className="task-card" key={task.id}>
+                  {isEditing ? (
+                    <form className="edit-form" onSubmit={handleUpdateTask}>
+                      <div className="form-grid">
+                        <label>
+                          이름
+                          <input
+                            value={editForm.name}
+                            onChange={(event) =>
+                              setEditForm((current) => ({
+                                ...current,
+                                name: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          브라우저
+                          <select
+                            value={editForm.browserKind}
+                            onChange={(event) =>
+                              setEditForm((current) => ({
+                                ...current,
+                                browserKind: event.target.value as BrowserKind,
+                              }))
+                            }
+                          >
+                            <option value="chrome">Chrome</option>
+                            <option value="edge">Edge</option>
+                            <option value="chromium">Chromium</option>
+                          </select>
+                        </label>
+                        <label>
+                          실행 방식
+                          <select
+                            value={editForm.runMode}
+                            onChange={(event) =>
+                              setEditForm((current) => ({
+                                ...current,
+                                runMode: event.target.value as BrowserRunMode,
+                              }))
+                            }
+                          >
+                            <option value="dedicated_profile">전용 프로필</option>
+                            <option value="extension_controlled">
+                              확장 프로그램
+                            </option>
+                            <option value="default_browser_deeplink">
+                              기본 브라우저 연결
+                            </option>
+                          </select>
+                        </label>
+                      </div>
+                      <label>
+                        초기 URL
+                        <textarea
+                          value={editForm.initialUrls}
+                          onChange={(event) =>
+                            setEditForm((current) => ({
+                              ...current,
+                              initialUrls: event.target.value,
+                            }))
+                          }
+                          rows={3}
+                        />
+                      </label>
+                      <div className="form-actions">
+                        <button type="submit">저장</button>
+                        <button
+                          className="ghost-button"
+                          type="button"
+                          onClick={() => setEditingTaskId(null)}
+                        >
+                          취소
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <>
+                      <div className="task-summary">
+                        <div>
+                          <h3>{task.name}</h3>
+                          <p>
+                            {config.browserKind} ·{' '}
+                            {getBrowserRunModeLabel(config.runMode)}
+                          </p>
+                        </div>
+                        <div className="task-actions">
+                          <button type="button" onClick={() => startEditing(task)}>
+                            수정
+                          </button>
+                          <button
+                            className="danger-button"
+                            type="button"
+                            onClick={() => void handleDeleteTask(task.id)}
+                          >
+                            삭제
+                          </button>
+                        </div>
+                      </div>
+                      <dl>
+                        <div>
+                          <dt>상태</dt>
+                          <dd>{task.state.status}</dd>
+                        </div>
+                        <div>
+                          <dt>실행 방식</dt>
+                          <dd>{getBrowserRunModeLabel(config.runMode)}</dd>
+                        </div>
+                        <div>
+                          <dt>프로필</dt>
+                          <dd>{config.profileId}</dd>
+                        </div>
+                        <div>
+                          <dt>초기 URL</dt>
+                          <dd>{config.initialUrls.length}개</dd>
+                        </div>
+                        <div>
+                          <dt>마지막 실행</dt>
+                          <dd>{task.state.lastRunAt ?? '아직 없음'}</dd>
+                        </div>
+                      </dl>
+                    </>
+                  )}
+                </article>
+              )
+            })}
           </div>
         )}
       </section>
     </main>
   )
+}
+
+function parseInitialUrls(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
 }
 
 function getErrorMessage(error: unknown): string {

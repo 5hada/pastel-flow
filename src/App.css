@@ -44,33 +44,48 @@
   margin-bottom: 18px;
 }
 
-.create-form {
+.create-form,
+.edit-form {
   display: grid;
-  gap: 10px;
+  gap: 14px;
 }
 
-.create-form label {
+.create-form label,
+.edit-form label {
+  display: grid;
+  gap: 8px;
   color: #435064;
   font-size: 0.9rem;
   font-weight: 700;
 }
 
-.create-row {
+.form-grid {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
+  grid-template-columns: minmax(220px, 1.5fr) minmax(160px, 1fr) minmax(190px, 1fr);
+  gap: 12px;
 }
 
-input {
+input,
+select,
+textarea {
   width: 100%;
   box-sizing: border-box;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
-  padding: 0 12px;
-  min-height: 42px;
+  padding: 10px 12px;
   color: #17202e;
   background: #f8fafc;
   font: inherit;
+}
+
+input,
+select {
+  min-height: 42px;
+}
+
+textarea {
+  min-height: 84px;
+  resize: vertical;
 }
 
 button {
@@ -96,6 +111,26 @@ button:hover {
 
 .ghost-button:hover {
   color: #ffffff;
+}
+
+.danger-button {
+  border-color: #b94a48;
+  background: #b94a48;
+}
+
+.danger-button:hover {
+  background: #9f2f2b;
+}
+
+.form-actions,
+.task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.form-actions {
+  justify-content: flex-end;
 }
 
 .error-message {
@@ -137,13 +172,18 @@ button:hover {
 }
 
 .task-card {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) 2fr;
-  gap: 20px;
   padding: 16px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #fbfdff;
+}
+
+.task-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
 .task-card h3 {
@@ -159,7 +199,7 @@ button:hover {
 
 .task-card dl {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin: 0;
 }
@@ -183,13 +223,26 @@ button:hover {
   }
 
   .app-header,
-  .create-row,
-  .task-card,
+  .form-grid,
+  .task-summary,
   .task-card dl {
     grid-template-columns: 1fr;
   }
 
   .app-header {
     align-items: stretch;
+  }
+
+  .task-summary {
+    display: grid;
+  }
+
+  .form-actions {
+    justify-content: stretch;
+  }
+
+  .form-actions button,
+  .task-actions button {
+    flex: 1 1 120px;
   }
 }

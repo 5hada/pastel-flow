@@ -161,10 +161,12 @@ type TaskRunResult<TState> = {
 - `electron/tasks/ipc/taskIpc.ts`에 작업 CRUD IPC 핸들러를 분리했다.
 - `electron/preload.ts`에서 renderer가 사용할 `window.pastelFlow.tasks` API를 노출했다.
 - `src/App.tsx`를 Pastel Flow 최소 UI로 교체해 브라우저 탭 그룹 생성과 목록 표시를 지원한다.
+- 브라우저 탭 그룹의 이름, 브라우저 종류, 실행 방식, 초기 URL을 UI에서 생성/수정할 수 있게 했다.
+- 저장된 브라우저 탭 그룹을 UI에서 삭제할 수 있게 했다.
 
 ### 부분 완료
 
-- 저장소 레벨의 CRUD는 구현됐지만 renderer UI는 현재 생성과 목록 표시 중심이다.
+- 저장소 레벨의 CRUD와 renderer의 기본 CRUD UI는 구현됐지만 실행 버튼과 실행 상태 갱신 UI는 아직 없다.
 - `browser_tab_group` adapter 파일은 존재하지만 실행 로직은 아직 구현되지 않았다.
 - `TaskAdapter` 인터페이스는 준비됐지만 adapter registry, 실행 IPC, 실행 상태 업데이트 흐름은 아직 없다.
 
@@ -173,7 +175,6 @@ type TaskRunResult<TState> = {
 - 템플릿별 브라우저 프로필 디렉터리 생성과 경로 저장.
 - Chrome, Edge, Chromium 실행 파일 탐색과 전용 프로필 실행.
 - 작업 실행 시 `lastRunAt`, `lastError`, `localProfilePath` 상태 저장.
-- 작업 수정, 삭제, 브라우저 종류 선택, 초기 URL 입력 UI.
 - secret 저장소, 기기 식별자, 권한 정책 적용 로직.
 
 ### 현재 단계 완료 기준
@@ -191,8 +192,8 @@ type TaskRunResult<TState> = {
 - [x] 브라우저 작업 실행 방식 `runMode`를 모델에 반영한다.
 - [x] `tasks.json` 기반 로컬 저장소를 만든다.
 - [x] 작업 목록 조회와 브라우저 탭 그룹 생성 UI를 만든다.
-- [ ] 작업 수정과 삭제 UI를 만든다.
-- [ ] 브라우저 종류 선택과 초기 URL 입력 UI를 만든다.
+- [x] 작업 수정과 삭제 UI를 만든다.
+- [x] 브라우저 종류 선택과 초기 URL 입력 UI를 만든다.
 - [ ] `browser_tab_group` adapter 실행 로직을 구현한다.
 - [ ] 템플릿별 전용 브라우저 프로필 디렉터리를 만든다.
 - [ ] Chrome, Edge, Chromium 실행 파일 탐색과 오류 처리를 구현한다.
@@ -202,10 +203,11 @@ type TaskRunResult<TState> = {
 
 다음 구현 우선순위:
 
-1. `browser_tab_group` adapter가 전용 프로필 디렉터리를 계산하고 생성한다.
-2. 실행 가능한 브라우저 경로를 탐색하고, 찾지 못한 경우 사용자에게 명확한 오류를 반환한다.
-3. 작업 실행 IPC와 preload API를 추가한다.
+1. 작업 실행 IPC와 preload API를 추가한다.
+2. adapter registry와 task runner를 추가해 작업 실행 요청을 `TaskAdapter`로 전달한다.
+3. `browser_tab_group` adapter가 `dedicated_profile` 실행 방식에서 전용 프로필 디렉터리를 계산하고 생성한다.
 4. 실행 성공 시 `lastRunAt`, `localProfilePath`, `status`를 저장하고, 실패 시 `lastError`를 저장한다.
+5. 이후 Chrome, Edge, Chromium 실행 파일 탐색과 실제 브라우저 실행을 붙인다.
 
 ### Phase 2: 권한과 Secret 기반
 

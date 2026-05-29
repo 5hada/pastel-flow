@@ -1,7 +1,9 @@
 import type {
+  BrowserKind,
   BrowserTabGroupConfig,
   BrowserRunMode,
   DevicePolicy,
+  RestorePolicy,
   TaskState,
 } from './types'
 
@@ -28,6 +30,24 @@ export function createDefaultBrowserTabGroupConfig(
   }
 }
 
+export function normalizeBrowserTabGroupConfig(
+  config: Partial<BrowserTabGroupConfig>,
+): BrowserTabGroupConfig {
+  return {
+    profileId: config.profileId ?? '',
+    initialUrls: Array.isArray(config.initialUrls) ? config.initialUrls : [],
+    browserKind: isBrowserKind(config.browserKind)
+      ? config.browserKind
+      : 'chrome',
+    restorePolicy: isRestorePolicy(config.restorePolicy)
+      ? config.restorePolicy
+      : 'browser_profile',
+    runMode: isBrowserRunMode(config.runMode)
+      ? config.runMode
+      : defaultBrowserRunMode,
+  }
+}
+
 export function getBrowserRunModeLabel(runMode?: BrowserRunMode): string {
   switch (runMode ?? defaultBrowserRunMode) {
     case 'dedicated_profile':
@@ -37,4 +57,20 @@ export function getBrowserRunModeLabel(runMode?: BrowserRunMode): string {
     case 'default_browser_deeplink':
       return '기본 브라우저 연결'
   }
+}
+
+function isBrowserKind(value: unknown): value is BrowserKind {
+  return value === 'chrome' || value === 'edge' || value === 'chromium'
+}
+
+function isRestorePolicy(value: unknown): value is RestorePolicy {
+  return value === 'browser_profile' || value === 'initial_urls_only'
+}
+
+function isBrowserRunMode(value: unknown): value is BrowserRunMode {
+  return (
+    value === 'dedicated_profile' ||
+    value === 'extension_controlled' ||
+    value === 'default_browser_deeplink'
+  )
 }

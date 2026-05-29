@@ -8,7 +8,7 @@
 - Renderer: React + TypeScript
 - 번들러/개발 서버: Vite
 - 초기 저장 방식: Electron `userData` 경로의 `tasks.json`
-- 현재 MVP: 브라우저 탭 그룹 템플릿 생성, 저장, 목록 표시
+- 현재 MVP: 브라우저 탭 그룹 템플릿 생성, 수정, 삭제, 저장, 목록 표시
 - 현재 브라우저 실행 기본값: `dedicated_profile`
 
 ## 2. 책임 경계
@@ -86,7 +86,7 @@ App.tsx
   -> Electron userData/tasks.json
 ```
 
-현재 UI는 브라우저 탭 그룹 생성과 목록 표시를 지원한다. 저장소는 update/delete 메서드를 갖고 있지만 renderer에는 아직 수정/삭제 UI가 없다.
+현재 UI는 브라우저 탭 그룹 생성, 수정, 삭제, 목록 표시를 지원한다. 이름, 브라우저 종류, 실행 방식, 초기 URL 목록을 renderer에서 편집하고 `tasks.json`에 저장한다.
 
 ## 5. 다음 구현 위치
 

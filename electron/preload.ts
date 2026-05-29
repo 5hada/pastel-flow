@@ -1,6 +1,14 @@
 import { ipcRenderer, contextBridge } from 'electron'
 
 const pastelFlowApi = {
+  settings: {
+    get() {
+      return ipcRenderer.invoke('settings:get')
+    },
+    update(settings: unknown) {
+      return ipcRenderer.invoke('settings:update', settings)
+    },
+  },
   tasks: {
     list() {
       return ipcRenderer.invoke('tasks:list')
@@ -13,6 +21,9 @@ const pastelFlowApi = {
     },
     delete(id: string) {
       return ipcRenderer.invoke('tasks:delete', id)
+    },
+    run(id: string) {
+      return ipcRenderer.invoke('tasks:run', id)
     },
   },
 }

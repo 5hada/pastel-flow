@@ -163,18 +163,18 @@ type TaskRunResult<TState> = {
 - `src/App.tsx`를 Pastel Flow 최소 UI로 교체해 브라우저 탭 그룹 생성과 목록 표시를 지원한다.
 - 브라우저 탭 그룹의 이름, 브라우저 종류, 실행 방식, 초기 URL을 UI에서 생성/수정할 수 있게 했다.
 - 저장된 브라우저 탭 그룹을 UI에서 삭제할 수 있게 했다.
+- 작업 실행 IPC, preload API, adapter registry, task runner를 추가했다.
+- `dedicated_profile` 실행 방식에서 전용 브라우저 프로필 디렉터리를 생성하고 실행 상태를 저장한다.
 
 ### 부분 완료
 
-- 저장소 레벨의 CRUD와 renderer의 기본 CRUD UI는 구현됐지만 실행 버튼과 실행 상태 갱신 UI는 아직 없다.
-- `browser_tab_group` adapter 파일은 존재하지만 실행 로직은 아직 구현되지 않았다.
-- `TaskAdapter` 인터페이스는 준비됐지만 adapter registry, 실행 IPC, 실행 상태 업데이트 흐름은 아직 없다.
+- 실행 버튼과 실행 상태 갱신 흐름은 구현됐지만 실제 Chrome, Edge, Chromium 프로세스 실행은 아직 없다.
+- `browser_tab_group` adapter는 전용 프로필 디렉터리 준비까지만 처리한다.
+- `extension_controlled`, `default_browser_deeplink` 실행 방식은 모델에만 있고 아직 실행되지 않는다.
 
 ### 미완료
 
-- 템플릿별 브라우저 프로필 디렉터리 생성과 경로 저장.
 - Chrome, Edge, Chromium 실행 파일 탐색과 전용 프로필 실행.
-- 작업 실행 시 `lastRunAt`, `lastError`, `localProfilePath` 상태 저장.
 - secret 저장소, 기기 식별자, 권한 정책 적용 로직.
 
 ### 현재 단계 완료 기준
@@ -194,20 +194,21 @@ type TaskRunResult<TState> = {
 - [x] 작업 목록 조회와 브라우저 탭 그룹 생성 UI를 만든다.
 - [x] 작업 수정과 삭제 UI를 만든다.
 - [x] 브라우저 종류 선택과 초기 URL 입력 UI를 만든다.
-- [ ] `browser_tab_group` adapter 실행 로직을 구현한다.
-- [ ] 템플릿별 전용 브라우저 프로필 디렉터리를 만든다.
+- [x] 작업 실행 IPC와 preload API를 추가한다.
+- [x] adapter registry와 task runner를 추가한다.
+- [x] `browser_tab_group` adapter에서 전용 프로필 디렉터리를 준비한다.
+- [x] 실행 상태, 마지막 실행 시간, 오류, 로컬 프로필 경로를 저장한다.
 - [ ] Chrome, Edge, Chromium 실행 파일 탐색과 오류 처리를 구현한다.
 - [ ] 템플릿 실행 시 지정 브라우저를 전용 프로필로 실행한다.
-- [ ] 실행 상태, 마지막 실행 시간, 오류, 로컬 프로필 경로를 저장한다.
 - [ ] 앱 재시작 후 작업 설정과 실행 상태가 유지되는지 검증한다.
 
 다음 구현 우선순위:
 
-1. 작업 실행 IPC와 preload API를 추가한다.
-2. adapter registry와 task runner를 추가해 작업 실행 요청을 `TaskAdapter`로 전달한다.
-3. `browser_tab_group` adapter가 `dedicated_profile` 실행 방식에서 전용 프로필 디렉터리를 계산하고 생성한다.
-4. 실행 성공 시 `lastRunAt`, `localProfilePath`, `status`를 저장하고, 실패 시 `lastError`를 저장한다.
-5. 이후 Chrome, Edge, Chromium 실행 파일 탐색과 실제 브라우저 실행을 붙인다.
+1. Chrome, Edge, Chromium 실행 파일 탐색을 구현한다.
+2. `browser_tab_group` adapter에서 `--user-data-dir`로 실제 브라우저 프로세스를 실행한다.
+3. `initialUrls`가 있으면 브라우저 실행 인자로 전달한다.
+4. 브라우저 실행 실패 시 사용자가 이해할 수 있는 오류 메시지를 저장한다.
+5. 앱 재시작 후 작업 설정과 실행 상태가 유지되는지 검증한다.
 
 ### Phase 2: 권한과 Secret 기반
 

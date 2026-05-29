@@ -1,16 +1,79 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { readFile, mkdir, writeFile } from "node:fs/promises";
-function registerTaskIpc(ipcMain2, taskStore) {
-  ipcMain2.handle("tasks:list", () => taskStore.listTasks());
-  ipcMain2.handle("tasks:create", (_event, input) => taskStore.createTask(input));
+function registerAppSettingsIpc(ipcMain2, appSettingsStore) {
+  ipcMain2.handle("settings:get", () => appSettingsStore.getSnapshot());
   ipcMain2.handle(
-    "tasks:update",
-    (_event, id, input) => taskStore.updateTask(id, input)
+    "settings:update",
+    (_event, settings) => appSettingsStore.updateSettings(settings)
   );
-  ipcMain2.handle("tasks:delete", (_event, id) => taskStore.deleteTask(id));
+}
+const defaultAppSettings = {
+  themeMode: "light",
+  defaultBrowserKind: "chrome",
+  defaultTaskName: "새 브라우저 작업",
+  initialUrlInputMode: "line"
+};
+function normalizeAppSettings(settings) {
+  return {
+    themeMode: isThemeMode(settings == null ? void 0 : settings.themeMode) ? settings.themeMode : defaultAppSettings.themeMode,
+    defaultBrowserKind: isBrowserKind$1(settings == null ? void 0 : settings.defaultBrowserKind) ? settings.defaultBrowserKind : defaultAppSettings.defaultBrowserKind,
+    defaultTaskName: typeof (settings == null ? void 0 : settings.defaultTaskName) === "string" && settings.defaultTaskName.trim() ? settings.defaultTaskName.trim() : defaultAppSettings.defaultTaskName,
+    initialUrlInputMode: (settings == null ? void 0 : settings.initialUrlInputMode) === "line" ? settings.initialUrlInputMode : defaultAppSettings.initialUrlInputMode
+  };
+}
+function isThemeMode(value) {
+  return value === "system" || value === "light" || value === "dark";
+}
+function isBrowserKind$1(value) {
+  return value === "chrome" || value === "edge" || value === "chromium";
+}
+function createAppSettingsStore({
+  dataDir
+}) {
+  const settingsFilePath = path.join(dataDir, "appSettings.json");
+  async function readSettings() {
+    try {
+      const raw = await readFile(settingsFilePath, "utf8");
+      const parsed = JSON.parse(raw);
+      return normalizeAppSettings(parsed.settings);
+    } catch (error) {
+      if (isNodeError$1(error) && error.code === "ENOENT") {
+        return defaultAppSettings;
+      }
+      throw error;
+    }
+  }
+  async function writeSettings(settings) {
+    await mkdir(dataDir, { recursive: true });
+    await writeFile(
+      settingsFilePath,
+      `${JSON.stringify({ settings: normalizeAppSettings(settings) }, null, 2)}
+`,
+      "utf8"
+    );
+  }
+  return {
+    async getSnapshot() {
+      return {
+        settings: await readSettings(),
+        userDataPath: dataDir
+      };
+    },
+    async updateSettings(settings) {
+      const normalizedSettings = normalizeAppSettings(settings);
+      await writeSettings(normalizedSettings);
+      return {
+        settings: normalizedSettings,
+        userDataPath: dataDir
+      };
+    }
+  };
+}
+function isNodeError$1(error) {
+  return error instanceof Error && "code" in error;
 }
 const defaultDevicePolicy = {
   visibility: "local_only",
@@ -19,6 +82,125 @@ const defaultDevicePolicy = {
 const defaultTaskState = {
   status: "idle"
 };
+const defaultBrowserRunMode = "dedicated_profile";
+function normalizeBrowserTabGroupConfig(config) {
+  return {
+    profileId: config.profileId ?? "",
+    initialUrls: Array.isArray(config.initialUrls) ? config.initialUrls : [],
+    browserKind: isBrowserKind(config.browserKind) ? config.browserKind : "chrome",
+    restorePolicy: isRestorePolicy(config.restorePolicy) ? config.restorePolicy : "browser_profile",
+    runMode: isBrowserRunMode(config.runMode) ? config.runMode : defaultBrowserRunMode
+  };
+}
+function isBrowserKind(value) {
+  return value === "chrome" || value === "edge" || value === "chromium";
+}
+function isRestorePolicy(value) {
+  return value === "browser_profile" || value === "initial_urls_only";
+}
+function isBrowserRunMode(value) {
+  return value === "dedicated_profile" || value === "extension_controlled" || value === "default_browser_deeplink";
+}
+const browserTabGroupAdapter = {
+  type: "browser_tab_group",
+  validateConfig(config) {
+    const normalizedConfig = normalizeBrowserTabGroupConfig(config);
+    if (!normalizedConfig.profileId.trim()) {
+      throw new Error("Browser tab group tasks require a profileId.");
+    }
+  },
+  async run({ dataDir, task }) {
+    const config = normalizeBrowserTabGroupConfig(task.config);
+    if (config.runMode !== "dedicated_profile") {
+      throw new Error(
+        `${config.runMode} 실행 방식은 아직 지원하지 않습니다.`
+      );
+    }
+    const localProfilePath = path.join(
+      dataDir,
+      "browser-profiles",
+      config.profileId
+    );
+    await mkdir(localProfilePath, { recursive: true });
+    return {
+      state: {
+        ...task.state,
+        status: "running",
+        lastRunAt: (/* @__PURE__ */ new Date()).toISOString(),
+        lastError: void 0,
+        localProfilePath
+      },
+      message: "브라우저 프로필 디렉터리를 준비했습니다."
+    };
+  }
+};
+function createTaskAdapterRegistry(adapters) {
+  const adaptersByType = /* @__PURE__ */ new Map();
+  for (const adapter of adapters) {
+    adaptersByType.set(adapter.type, adapter);
+  }
+  return {
+    getAdapter(type) {
+      const adapter = adaptersByType.get(type);
+      if (!adapter) {
+        throw new Error(`No task adapter registered for type: ${type}`);
+      }
+      return adapter;
+    }
+  };
+}
+function registerTaskIpc(ipcMain2, taskStore, taskRunner) {
+  ipcMain2.handle("tasks:list", () => taskStore.listTasks());
+  ipcMain2.handle("tasks:create", (_event, input) => taskStore.createTask(input));
+  ipcMain2.handle(
+    "tasks:update",
+    (_event, id, input) => taskStore.updateTask(id, input)
+  );
+  ipcMain2.handle("tasks:delete", (_event, id) => taskStore.deleteTask(id));
+  ipcMain2.handle("tasks:run", (_event, id) => taskRunner.runTask(id));
+}
+function createTaskRunner({
+  taskStore,
+  adapterRegistry,
+  dataDir,
+  deviceId
+}) {
+  return {
+    async runTask(id) {
+      const task = await taskStore.getTask(id);
+      const adapter = adapterRegistry.getAdapter(task.type);
+      try {
+        await adapter.validateConfig(task.config);
+        const result = await adapter.run({
+          task,
+          deviceId,
+          dataDir
+        });
+        const resultState = result.state;
+        return taskStore.updateTask(task.id, {
+          state: {
+            ...task.state,
+            ...resultState
+          }
+        });
+      } catch (error) {
+        return taskStore.updateTask(task.id, {
+          state: {
+            ...task.state,
+            status: "failed",
+            lastError: getErrorMessage(error)
+          }
+        });
+      }
+    }
+  };
+}
+function getErrorMessage(error) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return "알 수 없는 실행 오류가 발생했습니다.";
+}
 function createTaskStore({ dataDir }) {
   const tasksFilePath = path.join(dataDir, "tasks.json");
   async function readTaskFile() {
@@ -45,6 +227,14 @@ function createTaskStore({ dataDir }) {
     );
   }
   return {
+    async getTask(id) {
+      const taskFile = await readTaskFile();
+      const task = taskFile.tasks.find((currentTask) => currentTask.id === id);
+      if (!task) {
+        throw new Error(`Task not found: ${id}`);
+      }
+      return task;
+    },
     async listTasks() {
       const taskFile = await readTaskFile();
       return taskFile.tasks;
@@ -132,10 +322,22 @@ app.on("activate", () => {
   }
 });
 app.whenReady().then(() => {
-  const taskStore = createTaskStore({
-    dataDir: app.getPath("userData")
+  const dataDir = app.getPath("userData");
+  const appSettingsStore = createAppSettingsStore({
+    dataDir
   });
-  registerTaskIpc(ipcMain, taskStore);
+  const taskStore = createTaskStore({
+    dataDir
+  });
+  const adapterRegistry = createTaskAdapterRegistry([browserTabGroupAdapter]);
+  const taskRunner = createTaskRunner({
+    taskStore,
+    adapterRegistry,
+    dataDir,
+    deviceId: "local-device"
+  });
+  registerAppSettingsIpc(ipcMain, appSettingsStore);
+  registerTaskIpc(ipcMain, taskStore, taskRunner);
   createWindow();
 });
 export {

@@ -1,6 +1,14 @@
 "use strict";
 const electron = require("electron");
 const pastelFlowApi = {
+  settings: {
+    get() {
+      return electron.ipcRenderer.invoke("settings:get");
+    },
+    update(settings) {
+      return electron.ipcRenderer.invoke("settings:update", settings);
+    }
+  },
   tasks: {
     list() {
       return electron.ipcRenderer.invoke("tasks:list");
@@ -13,6 +21,9 @@ const pastelFlowApi = {
     },
     delete(id) {
       return electron.ipcRenderer.invoke("tasks:delete", id);
+    },
+    run(id) {
+      return electron.ipcRenderer.invoke("tasks:run", id);
     }
   }
 };

@@ -53,8 +53,11 @@ electron/
     adapters/
       taskAdapter.ts              작업 adapter 공통 인터페이스
       browserTabGroupAdapter.ts   브라우저 탭 그룹 adapter 자리
+      taskAdapterRegistry.ts      작업 타입별 adapter 조회
     ipc/
       taskIpc.ts                  tasks:list/create/update/delete IPC 등록
+    runner/
+      taskRunner.ts               작업 조회, adapter 실행, 상태 저장
     store/
       taskStore.ts                tasks.json 기반 로컬 저장소
 
@@ -80,13 +83,15 @@ src/
 App.tsx
   -> window.pastelFlow.tasks
   -> electron/preload.ts
-  -> IPC channel: tasks:list | tasks:create | tasks:update | tasks:delete
+  -> IPC channel: tasks:list | tasks:create | tasks:update | tasks:delete | tasks:run
   -> electron/tasks/ipc/taskIpc.ts
   -> electron/tasks/store/taskStore.ts
+  -> electron/tasks/runner/taskRunner.ts
+  -> electron/tasks/adapters/browserTabGroupAdapter.ts
   -> Electron userData/tasks.json
 ```
 
-현재 UI는 브라우저 탭 그룹 생성, 수정, 삭제, 목록 표시를 지원한다. 이름, 브라우저 종류, 실행 방식, 초기 URL 목록을 renderer에서 편집하고 `tasks.json`에 저장한다.
+현재 UI는 브라우저 탭 그룹 생성, 수정, 삭제, 실행, 목록 표시를 지원한다. 이름, 브라우저 종류, 실행 방식, 초기 URL 목록을 renderer에서 편집하고 `tasks.json`에 저장한다. 실행은 아직 실제 브라우저 프로세스를 열지 않고, `dedicated_profile` 실행 방식에서 전용 프로필 디렉터리 생성과 상태 저장까지만 처리한다.
 
 ## 5. 다음 구현 위치
 

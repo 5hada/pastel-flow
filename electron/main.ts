@@ -1,7 +1,12 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { registerAppSettingsIpc } from './settings/ipc/appSettingsIpc'
+import { createAppSettingsStore } from './settings/store/appSettingsStore'
+import { browserTabGroupAdapter } from './tasks/adapters/browserTabGroupAdapter'
+import { createTaskAdapterRegistry } from './tasks/adapters/taskAdapterRegistry'
 import { registerTaskIpc } from './tasks/ipc/taskIpc'
+import { createTaskRunner } from './tasks/runner/taskRunner'
 import { createTaskStore } from './tasks/store/taskStore'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -66,10 +71,22 @@ app.on('activate', () => {
 })
 
 app.whenReady().then(() => {
+  const dataDir = app.getPath('userData')
+  const appSettingsStore = createAppSettingsStore({
+    dataDir,
+  })
   const taskStore = createTaskStore({
-    dataDir: app.getPath('userData'),
+    dataDir,
+  })
+  const adapterRegistry = createTaskAdapterRegistry([browserTabGroupAdapter])
+  const taskRunner = createTaskRunner({
+    taskStore,
+    adapterRegistry,
+    dataDir,
+    deviceId: 'local-device',
   })
 
-  registerTaskIpc(ipcMain, taskStore)
+  registerAppSettingsIpc(ipcMain, appSettingsStore)
+  registerTaskIpc(ipcMain, taskStore, taskRunner)
   createWindow()
 })

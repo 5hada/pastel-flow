@@ -22,6 +22,7 @@ export type UpdateTaskInput<TConfig = unknown> = Partial<
 >
 
 export type TaskStore = {
+  getTask(id: string): Promise<TaskTemplate>
   listTasks(): Promise<TaskTemplate[]>
   createTask(input: CreateTaskInput): Promise<TaskTemplate>
   updateTask(id: string, input: UpdateTaskInput): Promise<TaskTemplate>
@@ -66,6 +67,17 @@ export function createTaskStore({ dataDir }: TaskStoreOptions): TaskStore {
   }
 
   return {
+    async getTask(id) {
+      const taskFile = await readTaskFile()
+      const task = taskFile.tasks.find((currentTask) => currentTask.id === id)
+
+      if (!task) {
+        throw new Error(`Task not found: ${id}`)
+      }
+
+      return task
+    },
+
     async listTasks() {
       const taskFile = await readTaskFile()
       return taskFile.tasks

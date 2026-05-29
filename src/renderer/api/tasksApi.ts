@@ -1,4 +1,8 @@
 import type {
+  AppSettings,
+  AppSettingsSnapshot,
+} from '../../shared/settings'
+import type {
   BrowserTabGroupConfig,
   DevicePolicy,
   TaskState,
@@ -34,8 +38,15 @@ export type TasksApi = {
     input: UpdateTaskInput<TConfig>,
   ): Promise<TaskTemplate<TConfig>>
   delete(id: string): Promise<void>
+  run(id: string): Promise<TaskTemplate>
+}
+
+export type SettingsApi = {
+  get(): Promise<AppSettingsSnapshot>
+  update(settings: AppSettings): Promise<AppSettingsSnapshot>
 }
 
 export type PastelFlowApi = {
+  settings: SettingsApi
   tasks: TasksApi
 }

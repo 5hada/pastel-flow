@@ -146,16 +146,61 @@ type TaskRunResult<TState> = {
 
 초기에는 `browser_tab_group` adapter만 구현한다. 이후 Discord bot, crawler, Notion sync, trading bot은 같은 인터페이스를 따르는 adapter로 추가한다.
 
-## 7. 로드맵
+## 7. 현재 구현 상태
+
+이 섹션은 다음 구현자가 현재 코드 상태를 빠르게 파악하기 위한 기준이다.
+
+### 완료
+
+- `src/shared/tasks`에 작업 템플릿 타입, 브라우저 탭 그룹 config, 기본 상태, 기본 권한 정책을 정의했다.
+- `electron/tasks/store/taskStore.ts`에 `tasks.json` 기반 로컬 저장소를 구현했다.
+- `electron/tasks/ipc/taskIpc.ts`에 작업 CRUD IPC 핸들러를 분리했다.
+- `electron/preload.ts`에서 renderer가 사용할 `window.pastelFlow.tasks` API를 노출했다.
+- `src/App.tsx`를 Pastel Flow 최소 UI로 교체해 브라우저 탭 그룹 생성과 목록 표시를 지원한다.
+
+### 부분 완료
+
+- 저장소 레벨의 CRUD는 구현됐지만 renderer UI는 현재 생성과 목록 표시 중심이다.
+- `browser_tab_group` adapter 파일은 존재하지만 실행 로직은 아직 구현되지 않았다.
+- `TaskAdapter` 인터페이스는 준비됐지만 adapter registry, 실행 IPC, 실행 상태 업데이트 흐름은 아직 없다.
+
+### 미완료
+
+- 템플릿별 브라우저 프로필 디렉터리 생성과 경로 저장.
+- Chrome, Edge, Chromium 실행 파일 탐색과 전용 프로필 실행.
+- 작업 실행 시 `lastRunAt`, `lastError`, `localProfilePath` 상태 저장.
+- 작업 수정, 삭제, 브라우저 종류 선택, 초기 URL 입력 UI.
+- secret 저장소, 기기 식별자, 권한 정책 적용 로직.
+
+### 현재 단계 완료 기준
+
+- 앱에서 브라우저 탭 그룹 템플릿을 생성할 수 있다.
+- 생성된 템플릿이 Electron `userData` 경로의 `tasks.json`에 저장된다.
+- 앱 재시작 후에도 저장된 템플릿 목록을 다시 불러올 수 있다.
+
+## 8. 로드맵
 
 ### Phase 1: Local MVP
 
-- 기본 앱 레이아웃을 Pastel Flow 전용 UI로 교체한다.
-- 작업 템플릿 CRUD를 만든다.
-- `browser_tab_group` 타입을 지원한다.
-- 템플릿별 전용 브라우저 프로필 디렉터리를 만든다.
-- 템플릿 실행 시 지정 브라우저를 전용 프로필로 실행한다.
-- 실행 상태와 마지막 실행 시간을 로컬에 저장한다.
+- [x] 기본 앱 레이아웃을 Pastel Flow 전용 UI로 교체한다.
+- [x] 작업 템플릿 타입과 기본값을 정의한다.
+- [x] `tasks.json` 기반 로컬 저장소를 만든다.
+- [x] 작업 목록 조회와 브라우저 탭 그룹 생성 UI를 만든다.
+- [ ] 작업 수정과 삭제 UI를 만든다.
+- [ ] 브라우저 종류 선택과 초기 URL 입력 UI를 만든다.
+- [ ] `browser_tab_group` adapter 실행 로직을 구현한다.
+- [ ] 템플릿별 전용 브라우저 프로필 디렉터리를 만든다.
+- [ ] Chrome, Edge, Chromium 실행 파일 탐색과 오류 처리를 구현한다.
+- [ ] 템플릿 실행 시 지정 브라우저를 전용 프로필로 실행한다.
+- [ ] 실행 상태, 마지막 실행 시간, 오류, 로컬 프로필 경로를 저장한다.
+- [ ] 앱 재시작 후 작업 설정과 실행 상태가 유지되는지 검증한다.
+
+다음 구현 우선순위:
+
+1. `browser_tab_group` adapter가 전용 프로필 디렉터리를 계산하고 생성한다.
+2. 실행 가능한 브라우저 경로를 탐색하고, 찾지 못한 경우 사용자에게 명확한 오류를 반환한다.
+3. 작업 실행 IPC와 preload API를 추가한다.
+4. 실행 성공 시 `lastRunAt`, `localProfilePath`, `status`를 저장하고, 실패 시 `lastError`를 저장한다.
 
 ### Phase 2: 권한과 Secret 기반
 
@@ -189,7 +234,7 @@ type TaskRunResult<TState> = {
 - export/import를 지원한다.
 - 플러그인 또는 외부 adapter 배포 구조를 검토한다.
 
-## 8. 개발 우선순위
+## 9. 개발 우선순위
 
 우선순위가 높은 작업:
 
@@ -209,7 +254,7 @@ type TaskRunResult<TState> = {
 - 외부 플러그인 설치 시스템
 - 복잡한 조직/팀 권한 모델
 
-## 9. 검증 기준
+## 10. 검증 기준
 
 MVP 1은 다음 조건을 만족하면 성공으로 본다.
 
@@ -220,7 +265,7 @@ MVP 1은 다음 조건을 만족하면 성공으로 본다.
 - 작업 설정과 실행 상태가 앱 재시작 후에도 유지된다.
 - 이후 adapter 타입이 추가되어도 기존 브라우저 작업 모델을 크게 바꾸지 않아도 된다.
 
-## 10. 현재 결정 사항
+## 11. 현재 결정 사항
 
 - 문서는 한국어로 유지한다.
 - 앱 이름은 `Pastel Flow`를 사용한다.

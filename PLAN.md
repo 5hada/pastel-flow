@@ -33,6 +33,8 @@ Pastel Flow는 반복적으로 사용하는 작업 환경을 템플릿으로 저
 - MVP에서는 기존 사용자의 기본 브라우저 프로필을 직접 조작하지 않는다.
 - 브라우저 확장 프로그램 방식은 이후 고급 기능으로 검토한다.
 
+전용 프로필 방식은 작업별 격리와 구현 단순성이 장점이지만, 로그인 측면에서는 한계가 있다. 같은 서비스라도 작업마다 다시 로그인해야 할 수 있고, SSO, 2FA, 보안 알림이 반복될 수 있다. 따라서 브라우저 작업 config에는 실행 방식을 나타내는 `runMode`를 포함한다. MVP 기본값은 `dedicated_profile`이며, 이후 확장 프로그램 기반 제어가 가능해지면 `extension_controlled` 실행 방식을 같은 작업 모델 안에 추가한다.
+
 ## 4. 아키텍처 방향
 
 현재 프로젝트는 `Electron + React + TypeScript + Vite` 기반이다. 이 구조를 유지하면서 역할을 다음처럼 나눈다.
@@ -94,6 +96,7 @@ type BrowserTabGroupConfig = {
   initialUrls: string[];
   browserKind: 'chrome' | 'edge' | 'chromium';
   restorePolicy: 'browser_profile' | 'initial_urls_only';
+  runMode: 'dedicated_profile' | 'extension_controlled' | 'default_browser_deeplink';
 };
 
 type TaskState = {
@@ -153,6 +156,7 @@ type TaskRunResult<TState> = {
 ### 완료
 
 - `src/shared/tasks`에 작업 템플릿 타입, 브라우저 탭 그룹 config, 기본 상태, 기본 권한 정책을 정의했다.
+- 브라우저 탭 그룹 config에 `runMode`를 추가해 전용 프로필 방식과 향후 확장 프로그램 기반 실행을 구분할 수 있게 했다.
 - `electron/tasks/store/taskStore.ts`에 `tasks.json` 기반 로컬 저장소를 구현했다.
 - `electron/tasks/ipc/taskIpc.ts`에 작업 CRUD IPC 핸들러를 분리했다.
 - `electron/preload.ts`에서 renderer가 사용할 `window.pastelFlow.tasks` API를 노출했다.
@@ -184,6 +188,7 @@ type TaskRunResult<TState> = {
 
 - [x] 기본 앱 레이아웃을 Pastel Flow 전용 UI로 교체한다.
 - [x] 작업 템플릿 타입과 기본값을 정의한다.
+- [x] 브라우저 작업 실행 방식 `runMode`를 모델에 반영한다.
 - [x] `tasks.json` 기반 로컬 저장소를 만든다.
 - [x] 작업 목록 조회와 브라우저 탭 그룹 생성 UI를 만든다.
 - [ ] 작업 수정과 삭제 UI를 만든다.
@@ -272,5 +277,6 @@ MVP 1은 다음 조건을 만족하면 성공으로 본다.
 - 첫 MVP는 브라우저 탭 그룹 실행과 상태 유지에 집중한다.
 - 초기 저장 방식은 로컬 우선이다.
 - 브라우저 탭 그룹은 템플릿별 전용 프로필 방식으로 구현한다.
+- 전용 프로필의 로그인 반복 한계를 인정하고, 향후 `extension_controlled` 실행 방식으로 확장 가능하게 유지한다.
 - 기기별 권한, secret 암호화, 서버 DB 동기화는 설계에 포함하되 MVP에서는 후순위로 둔다.
 - 확장 기능은 `TaskAdapter` 방식으로 추가한다.

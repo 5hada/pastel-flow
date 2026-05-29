@@ -11,6 +11,11 @@ export type BrowserKind = 'chrome' | 'edge' | 'chromium'
 
 export type RestorePolicy = 'browser_profile' | 'initial_urls_only'
 
+export type BrowserRunMode =
+  | 'dedicated_profile'
+  | 'extension_controlled'
+  | 'default_browser_deeplink'
+
 export type DeviceVisibilityPolicy =
   | 'all_devices'
   | 'trusted_devices'
@@ -50,6 +55,7 @@ export type BrowserTabGroupConfig = {
   initialUrls: string[]
   browserKind: BrowserKind
   restorePolicy: RestorePolicy
+  runMode: BrowserRunMode
 }
 
 export type TaskTemplate<TConfig = unknown, TState = TaskState> = {

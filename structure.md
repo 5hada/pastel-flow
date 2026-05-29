@@ -9,6 +9,7 @@
 - 번들러/개발 서버: Vite
 - 초기 저장 방식: Electron `userData` 경로의 `tasks.json`
 - 현재 MVP: 브라우저 탭 그룹 템플릿 생성, 저장, 목록 표시
+- 현재 브라우저 실행 기본값: `dedicated_profile`
 
 ## 2. 책임 경계
 
@@ -102,6 +103,8 @@ App.tsx
 
 - 기본 브라우저 프로필은 직접 조작하지 않는다.
 - 템플릿별 전용 프로필 디렉터리를 사용한다.
+- `BrowserTabGroupConfig.runMode`는 실행 전략을 나타낸다. MVP 기본값은 `dedicated_profile`이고, 향후 확장 프로그램 기반 제어는 `extension_controlled`로 추가한다.
+- 전용 프로필 방식은 작업별 로그인을 반복시킬 수 있으므로, 로그인 공유가 필요한 기능은 확장 프로그램 기반 실행 전략에서 다룬다.
 - API key, token, 로그인 세션 같은 secret은 task `config`에 직접 저장하지 않는다.
 - `dist-electron`은 빌드 산출물이므로 직접 수정하지 않는다.
 - Electron/Node API는 renderer에서 직접 사용하지 않는다.

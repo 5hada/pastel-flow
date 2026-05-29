@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import {
   createDefaultBrowserTabGroupConfig,
+  getBrowserRunModeLabel,
   type BrowserTabGroupTask,
   type TaskTemplate,
 } from './shared/tasks'
@@ -117,12 +118,19 @@ function App() {
               <article className="task-card" key={task.id}>
                 <div>
                   <h3>{task.name}</h3>
-                  <p>{task.config.browserKind} 전용 프로필</p>
+                  <p>
+                    {task.config.browserKind} ·{' '}
+                    {getBrowserRunModeLabel(task.config.runMode)}
+                  </p>
                 </div>
                 <dl>
                   <div>
                     <dt>상태</dt>
                     <dd>{task.state.status}</dd>
+                  </div>
+                  <div>
+                    <dt>실행 방식</dt>
+                    <dd>{getBrowserRunModeLabel(task.config.runMode)}</dd>
                   </div>
                   <div>
                     <dt>프로필</dt>

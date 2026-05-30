@@ -105,8 +105,31 @@ src/
   index.css                       전역 스타일
   renderer/
     app/
-      PastelFlowApp.tsx           Pastel Flow renderer UI 조립과 화면 상태/IPC orchestration
+      PastelFlowApp.tsx           Pastel Flow renderer 상태, IPC 호출, 화면 모드 orchestration
       taskFormState.ts            작업/설정/Secret 폼 상태 타입, 기본값, 초기 snapshot
+      components/
+        shell/
+          TopModeBar.tsx          상단 모드 전환 컨트롤
+          WorkspaceSidebar.tsx    모드별 좌측 탐색/필터 패널
+        run/
+          TaskLaunchPanel.tsx     실행 페이지 Workflow 런처 목록
+          TaskListDisplayToggle.tsx 실행 목록/그리드 표시 전환 컨트롤
+        actions/
+          ActionWorkspacePanel.tsx Action 목록/상세와 legacy Action 생성 진입
+        tasks/
+          CreateTaskPanel.tsx     단일 Action Workflow 생성 폼
+          EditWorkspace.tsx       Workflow 상세/legacy task 편집 화면 조립
+          TaskEditPanel.tsx       작업 설정 편집 폼
+          TaskFormFields.tsx      작업 타입별 config, schedule, policy 폼 필드
+          TaskRunEventsPanel.tsx  작업 실행 이벤트 검색/상태 필터 패널
+          DetailItem.tsx          상세 정보 dl item 공용 컴포넌트
+        tools/
+          ToolsPanel.tsx          Tool Module 등록/목록/실행/Action 생성 화면
+        settings/
+          AppSettingsPanel.tsx    설정 카테고리별 편집, secret, sync, data management 화면
+      utils/
+        taskFormTransforms.ts     폼 입력을 task config/policy/schedule/settings 값으로 변환
+        viewLabels.ts             renderer 표시 label, 날짜/상태/summary formatter
     api/
       tasksApi.ts                 renderer에서 보는 preload API 타입
     styles/

@@ -16,7 +16,7 @@ Pastel Flow는 반복되는 작업 환경을 로컬 우선 방식으로 정의, 
 - **상태와 로그의 기준 통일**: 예약 실행, 실행 상태, 실행 이벤트, 권한 정책은 Workflow를 중심으로 관리하고, 필요할 때 Action 단위 상세를 함께 기록한다.
 - **secret 분리**: API key, token, 거래소 key, 로그인 세션 같은 민감 정보는 Action config나 Workflow config에 직접 저장하지 않고 secret 참조로 연결한다.
 - **명시적 권한**: 기기 권한, secret 참조, tool module permission은 실행 전에 확인 가능한 형태로 노출한다.
-- **도구 모듈 표준화**: 도구는 `tool-schema.md` 규격을 따르는 독립 모듈로 업로드, 검증, 등록, 실행한다.
+- **도구 모듈 표준화**: 도구는 `tool-schema.md` 규격을 따르는 독립 모듈로 검증, 등록, 실행한다. 등록은 개별 모듈 폴더가 아니라 Tool Module 루트 폴더를 기준으로 한다.
 - **Electron 역할 분리**: main process는 로컬 리소스, 파일 시스템, 외부 프로세스와 실행 엔진을 담당하고, React renderer는 Workflow/Action/설정 UI를 담당한다.
 
 ## 3. 제품 구조
@@ -31,7 +31,7 @@ Action 예시:
 - 브라우저 탭 그룹 snapshot 갱신
 - crawler로 URL 목록 수집
 - Discord/Notion/trading dry-run 실행
-- 업로드된 tool module 실행
+- 등록된 tool module 실행
 
 Action은 타입, config, secret 참조, 입력 정의, 출력 정의, 실행 가능 여부, 상태 요약을 가진다. Action 자체는 재사용 가능한 정의이며, 실제 실행은 Workflow 안에서 수행한다.
 
@@ -56,14 +56,17 @@ Tool Module은 `tool-schema.md`를 따르는 독립형 도구 패키지이다.
 
 도구 페이지는 더 이상 mock sync나 실행 이벤트 정리 화면이 아니다. 도구 페이지의 책임은 다음으로 제한한다.
 
-- tool module 업로드
+- Tool Module 루트 폴더 등록
+- 루트 폴더 내부 계층 구조 기반 Tool Module 목록 관리
 - `manifest.json`, `logic.js`, inputs, outputs, permissions 검증
-- 등록된 도구 목록 관리
+- 좌측 패널 전용 도구 목록 표시
 - inputs 정의 기반 자동 실행 UI 제공
 - tool module 단독 실행
 - Workflow에 `tool_action`으로 추가
 
 `view.html`과 `style.css`는 선택 사항이다. 기본 실행 UI는 manifest inputs 정의로 자동 생성한다. 도구가 요청한 permission은 manifest에 선언된 항목만 허용하며, 실행 전 사용자에게 표시한다.
+
+도구 목록은 좌측 패널에만 표시한다. 우측 작업 영역은 선택된 Tool Module의 상세, 검증 결과, 단독 실행 UI, Workflow 추가 액션만 담당한다. Tool Module 등록은 개별 모듈 폴더를 하나씩 등록하는 방식이 아니라, 전체 Tool Module을 저장하는 루트 폴더 하나를 등록하고 그 내부 계층을 스캔하는 방식으로 전환한다.
 
 ### 3.4 Settings
 
@@ -160,7 +163,10 @@ type WorkflowActionRef = {
 
 ### 도구 페이지
 
-- `tool-schema.md` 규격 도구 모듈 업로드와 검증을 담당한다.
+- `tool-schema.md` 규격 도구 모듈 등록과 검증을 담당한다.
+- 개별 도구 모듈 폴더가 아니라 Tool Module 루트 폴더를 등록한다.
+- 루트 폴더 내부 계층 구조를 좌측 패널의 도구 목록으로 그대로 표시한다.
+- 도구 목록은 좌측 패널에만 표시하고 우측 작업 영역에 중복 표시하지 않는다.
 - 등록된 도구를 단독 실행하거나 Workflow의 `tool_action`으로 추가할 수 있게 한다.
 - mock sync, 실행 이벤트 정리, 로그 보존 설정은 표시하지 않는다.
 
@@ -206,12 +212,12 @@ type WorkflowActionRef = {
 
 ### Phase 5: Tool Module 시스템
 
-- 도구 업로드 위치와 등록 저장소를 정의한다. **완료**
-- 업로드된 폴더에서 `manifest.json`과 `logic.js`를 검증한다. **완료**
+- Tool Module 루트 폴더 위치와 등록 저장소를 정의한다. **완료**
+- 루트 폴더 내부 후보 모듈에서 `manifest.json`과 `logic.js`를 검증한다. **완료**
 - `tool-schema.md`의 input/output/permission 규칙을 검증하는 loader를 만든다. **완료**
 - tool module을 단독 실행할 수 있는 main process 실행 경로와 renderer UI를 만든다. **완료**
 - tool module을 Workflow의 `tool_action`으로 추가할 수 있게 한다. **부분 완료**
-- 현재 구현: renderer 도구 페이지에서 폴더 선택으로 module을 등록하고, manifest inputs 기반 자동 폼으로 단독 실행하며, 등록된 도구를 `tool_action` Action 정의로 생성할 수 있다.
+- 현재 구현: renderer 도구 페이지에서 폴더 선택으로 module을 등록하고, manifest inputs 기반 자동 폼으로 단독 실행하며, 등록된 도구를 `tool_action` Action 정의로 생성할 수 있다. 다음 변경에서는 개별 module 폴더 선택 방식에서 Tool Module 루트 폴더 등록 방식으로 전환한다.
 - 도구 inputs의 `ui` 메타데이터를 지원해 toggle, checkbox, select, radio, color, list, textarea, json 같은 고급 자동 폼 컨트롤을 표시한다. **완료**
 - 남은 작업: 생성된 `tool_action`을 Workflow 작성 화면에서 선택/삽입하고, Workflow runner가 legacy task 위임 없이 순수 Action handler로 `tool_action`을 실행하도록 확장한다.
 
@@ -247,7 +253,7 @@ type WorkflowActionRef = {
 - Action과 Workflow의 차이는 무엇인가: Action은 최소 실행 단위이고 Workflow는 실행 가능한 묶음이다.
 - 기존 Task는 어떻게 이전되는가: 단일 Action을 가진 Workflow로 마이그레이션한다.
 - 도구 페이지와 설정 페이지의 책임은 어떻게 나뉘는가: 도구 페이지는 tool module, 설정 페이지는 sync/event/data management를 담당한다.
-- `tool-schema.md`는 어디에 적용되는가: Tool Module 업로드, 검증, 실행, Workflow `tool_action` 등록 기준으로 적용한다.
+- `tool-schema.md`는 어디에 적용되는가: Tool Module 루트 폴더 스캔, 모듈 검증, 실행, Workflow `tool_action` 등록 기준으로 적용한다.
 - 다음 구현 우선순위는 무엇인가: 데이터 모델 전환, 실행 엔진 전환, UI 전환, Tool Module 시스템, 설정 페이지 재배치 순서이다.
 
 문서만 변경한 경우 필수 테스트는 없다. 구현 변경 시에는 최소한 다음을 실행한다.

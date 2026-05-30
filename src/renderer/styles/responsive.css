@@ -14,7 +14,7 @@
   }
 
   .app-workspace {
-    grid-template-columns: clamp(180px, 34vw, 240px) minmax(340px, 1fr);
+    grid-template-columns: clamp(180px, 34vw, 240px) minmax(0, 1fr);
   }
 }
 
@@ -63,6 +63,6 @@
   }
 
   .app-workspace {
-    grid-template-columns: 180px minmax(320px, 1fr);
+    grid-template-columns: 180px minmax(0, 1fr);
   }
 }

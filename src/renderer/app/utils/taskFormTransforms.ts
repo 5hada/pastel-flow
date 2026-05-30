@@ -184,6 +184,7 @@ export function createTaskEditForm(task: TaskTemplate): BrowserTaskFormState {
   return {
     taskType: task.type,
     name: task.name,
+    createSingleActionWorkflow: false,
     browserKind: browserConfig.browserKind,
     runMode: browserConfig.runMode,
     profileSource: browserConfig.profileSource,

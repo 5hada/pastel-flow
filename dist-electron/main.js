@@ -3055,11 +3055,11 @@ function createTaskStore({ dataDir }) {
       };
       const tasks = [...taskFile.tasks];
       tasks[taskIndex] = updatedTask;
-      await writeTaskFile(upsertLegacyTaskModel({ ...taskFile, tasks }, updatedTask));
+      await writeTaskFile(upsertLegacyTaskModel({ ...taskFile }, updatedTask));
       return updatedTask;
     },
     async replaceTasks(tasks) {
-      const normalizedTasks = tasks.map((task) => ({
+      tasks.map((task) => ({
         ...task,
         name: task.name.trim(),
         permissions: normalizeDevicePolicy(task.permissions),
@@ -3067,14 +3067,13 @@ function createTaskStore({ dataDir }) {
       }));
       await writeTaskFile(
         ensureLegacyWorkflowData({
-          tasks: normalizedTasks,
           actions: [],
           workflows: []
         })
       );
     },
     async replaceTaskData(input) {
-      const normalizedTasks = input.tasks.map((task) => ({
+      input.tasks.map((task) => ({
         ...task,
         name: task.name.trim(),
         permissions: normalizeDevicePolicy(task.permissions),
@@ -3082,7 +3081,6 @@ function createTaskStore({ dataDir }) {
       }));
       await writeTaskFile(
         ensureLegacyWorkflowData({
-          tasks: normalizedTasks,
           actions: input.actions ?? [],
           workflows: input.workflows ?? []
         })
@@ -3103,28 +3101,10 @@ function createTaskStore({ dataDir }) {
   };
 }
 function ensureLegacyWorkflowData(taskFile) {
-  const legacyActionIds = new Set(
-    taskFile.tasks.map((task) => getLegacyActionId(task.id))
-  );
-  const legacyWorkflowIds = new Set(
-    taskFile.tasks.map((task) => getLegacyWorkflowId(task.id))
-  );
-  const nonLegacyActions = taskFile.actions.filter(
-    (action) => !legacyActionIds.has(action.id)
-  );
-  const nonLegacyWorkflows = taskFile.workflows.filter(
-    (workflow) => !legacyWorkflowIds.has(workflow.id)
-  );
   return {
     tasks: [],
-    actions: [
-      ...nonLegacyActions,
-      ...taskFile.tasks.map((task) => createActionFromLegacyTask(task))
-    ],
-    workflows: [
-      ...nonLegacyWorkflows,
-      ...taskFile.tasks.map((task) => createWorkflowFromLegacyTask(task))
-    ]
+    actions: taskFile.actions,
+    workflows: taskFile.workflows
   };
 }
 function upsertLegacyTaskModel(taskFile, task) {

@@ -31,6 +31,7 @@ export function usePastelFlowApp() {
     currentDevice: settings.currentDevice,
     loadActionWorkflowData: actionWorkflow.loadActionWorkflowData,
     selectedCategory,
+    selectAction: actionWorkflow.setSelectedActionId,
     setErrorMessage,
     setWorkspaceMode,
   })

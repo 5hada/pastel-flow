@@ -14,6 +14,7 @@ import type {
 export type BrowserTaskFormState = {
   taskType: TaskType
   name: string
+  createSingleActionWorkflow: boolean
   browserKind: BrowserKind
   runMode: BrowserRunMode
   profileSource: BrowserProfileSource
@@ -75,6 +76,7 @@ export function createBrowserTaskForm(
   return {
     name: settings.defaultActionName,
     taskType: 'browser_tab_group',
+    createSingleActionWorkflow: false,
     browserKind: settings.defaultBrowserKind,
     runMode: 'dedicated_profile',
     profileSource: 'task_profile',
@@ -113,6 +115,7 @@ export const initialSettingsSnapshot = {
 export const defaultEditForm: BrowserTaskFormState = {
   taskType: 'browser_tab_group',
   name: defaultAppSettings.defaultTaskName,
+  createSingleActionWorkflow: false,
   browserKind: defaultAppSettings.defaultBrowserKind,
   runMode: 'dedicated_profile',
   profileSource: 'task_profile',

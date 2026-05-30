@@ -32,8 +32,8 @@ export function CreateTaskPanel({
     >
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">New template</p>
-          <h2>새 단일 Action Workflow</h2>
+          <p className="eyebrow">New action</p>
+          <h2>새 Action</h2>
         </div>
         <button className="ghost-button" type="button" onClick={onCancel}>
           닫기
@@ -74,15 +74,32 @@ export function CreateTaskPanel({
           </label>
         </div>
         <TaskTypeConfigFields form={createForm} onChange={onChange} />
-        <ScheduleFields form={createForm} onChange={onChange} />
-        <PolicyFields
-          currentDevice={currentDevice}
-          form={createForm}
-          onChange={onChange}
-          secrets={secrets}
-        />
+        <label className="inline-check">
+          <input
+            checked={createForm.createSingleActionWorkflow}
+            type="checkbox"
+            onChange={(event) =>
+              onChange({
+                ...createForm,
+                createSingleActionWorkflow: event.target.checked,
+              })
+            }
+          />
+          단일 Action Workflow로 함께 생성
+        </label>
+        {createForm.createSingleActionWorkflow ? (
+          <>
+            <ScheduleFields form={createForm} onChange={onChange} />
+            <PolicyFields
+              currentDevice={currentDevice}
+              form={createForm}
+              onChange={onChange}
+              secrets={secrets}
+            />
+          </>
+        ) : null}
         <div className="form-actions">
-          <button type="submit">생성</button>
+          <button type="submit">Action 생성</button>
         </div>
       </form>
     </section>

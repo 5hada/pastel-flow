@@ -28,6 +28,7 @@ type UseTaskDataOptions = {
   currentDevice: CurrentDevice
   loadActionWorkflowData(): Promise<void>
   selectedCategory: NavigationCategory
+  selectAction(actionId: string | null): void
   setErrorMessage(message: string | null): void
   setWorkspaceMode(mode: WorkspaceMode): void
 }
@@ -37,6 +38,7 @@ export function useTaskData({
   currentDevice,
   loadActionWorkflowData,
   selectedCategory,
+  selectAction,
   setErrorMessage,
   setWorkspaceMode,
 }: UseTaskDataOptions) {
@@ -166,34 +168,41 @@ export function useTaskData({
       type: getActionType(createForm.taskType),
       config: createTaskConfigFromForm(createForm),
     }
-    const permissions = createDevicePolicyFromForm(createForm, currentDevice)
-    const schedule = createTaskScheduleFromForm(createForm)
 
     try {
       setErrorMessage(null)
       const createdAction = await window.pastelFlow.actions.create(action)
-      const createdWorkflow = await window.pastelFlow.workflows.create({
-        name: trimmedName,
-        permissions,
-        schedule,
-        state: { status: 'idle' },
-        actionRefs: [
-          {
-            id: crypto.randomUUID(),
-            actionId: createdAction.id,
-            order: 0,
-            enabled: true,
-          },
-        ],
-      })
-      setTasks((currentTasks) => [
-        ...currentTasks,
-        createWorkflowTemplate(createdAction, createdWorkflow),
-      ])
-      setSelectedTaskId(createdAction.id)
+
+      if (createForm.createSingleActionWorkflow) {
+        const createdWorkflow = await window.pastelFlow.workflows.create({
+          name: trimmedName,
+          permissions: createDevicePolicyFromForm(createForm, currentDevice),
+          schedule: createTaskScheduleFromForm(createForm),
+          state: { status: 'idle' },
+          actionRefs: [
+            {
+              id: crypto.randomUUID(),
+              actionId: createdAction.id,
+              order: 0,
+              enabled: true,
+            },
+          ],
+        })
+        setTasks((currentTasks) => [
+          ...currentTasks,
+          createWorkflowTemplate(createdAction, createdWorkflow),
+        ])
+        setSelectedTaskId(createdAction.id)
+        setWorkspaceMode('run')
+      } else {
+        setWorkspaceMode('actions')
+      }
+
       setCreateForm(createBrowserTaskForm(appSettings))
       await loadActionWorkflowData()
-      setWorkspaceMode('run')
+      if (!createForm.createSingleActionWorkflow) {
+        selectAction(createdAction.id)
+      }
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     }

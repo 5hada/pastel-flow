@@ -429,29 +429,10 @@ export function createTaskStore({ dataDir }: TaskStoreOptions): TaskStore {
 }
 
 function ensureLegacyWorkflowData(taskFile: TaskFile): TaskFile {
-  const legacyActionIds = new Set(
-    taskFile.tasks.map((task) => getLegacyActionId(task.id)),
-  )
-  const legacyWorkflowIds = new Set(
-    taskFile.tasks.map((task) => getLegacyWorkflowId(task.id)),
-  )
-  const nonLegacyActions = taskFile.actions.filter(
-    (action) => !legacyActionIds.has(action.id),
-  )
-  const nonLegacyWorkflows = taskFile.workflows.filter(
-    (workflow) => !legacyWorkflowIds.has(workflow.id),
-  )
-
   return {
     tasks: [],
-    actions: [
-      ...nonLegacyActions,
-      ...taskFile.tasks.map((task) => createActionFromLegacyTask(task)),
-    ],
-    workflows: [
-      ...nonLegacyWorkflows,
-      ...taskFile.tasks.map((task) => createWorkflowFromLegacyTask(task)),
-    ],
+    actions: taskFile.actions,
+    workflows: taskFile.workflows,
   }
 }
 

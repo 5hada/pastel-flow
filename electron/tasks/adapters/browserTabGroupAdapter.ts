@@ -12,6 +12,8 @@ import { normalizeBrowserTabGroupConfig } from '../../../src/shared/tasks'
 import { findBrowserExecutable } from './browserExecutableFinder'
 import type { TaskAdapter } from './taskAdapter'
 
+const runningBrowserProcesses = new Map<string, ChildProcess>()
+
 export const browserTabGroupAdapter: TaskAdapter<
   BrowserTabGroupConfig,
   TaskState
@@ -28,9 +30,17 @@ export const browserTabGroupAdapter: TaskAdapter<
     const config = normalizeBrowserTabGroupConfig(task.config)
 
     if (config.runMode === 'default_browser_deeplink') {
-      throw new Error(
-        `${config.runMode} 실행 방식은 아직 지원하지 않습니다.`,
-      )
+      await openDefaultBrowserUrls(config.initialUrls)
+
+      return {
+        state: {
+          ...task.state,
+          status: 'idle',
+          lastRunAt: new Date().toISOString(),
+          lastError: undefined,
+        },
+        message: '기본 브라우저로 초기 URL을 열었습니다.',
+      }
     }
 
     const localProfilePath = path.join(
@@ -67,6 +77,7 @@ export const browserTabGroupAdapter: TaskAdapter<
         : []),
       ...config.initialUrls,
     ])
+    runningBrowserProcesses.set(task.id, browserProcess)
     const browserStateSnapshotter = remoteDebuggingPort
       ? startBrowserStateSnapshotter(
           remoteDebuggingPort,
@@ -75,6 +86,7 @@ export const browserTabGroupAdapter: TaskAdapter<
       : null
     browserProcess.once('exit', (code, signal) => {
       void (async () => {
+        runningBrowserProcesses.delete(task.id)
         const snapshot = browserStateSnapshotter?.stop()
         const openUrls = snapshot?.urls ?? []
         const nextState = getBrowserExitState(
@@ -110,6 +122,16 @@ export const browserTabGroupAdapter: TaskAdapter<
         config.runMode,
       )}로 실행했습니다.`,
     }
+  },
+  async stop(taskId) {
+    const browserProcess = runningBrowserProcesses.get(taskId)
+
+    if (!browserProcess || browserProcess.killed) {
+      throw new Error('실행 중인 브라우저 프로세스를 찾지 못했습니다.')
+    }
+
+    browserProcess.kill()
+    runningBrowserProcesses.delete(taskId)
   },
 }
 
@@ -166,6 +188,41 @@ async function launchBrowser(
 
   browserProcess.unref()
   return browserProcess
+}
+
+async function openDefaultBrowserUrls(urls: string[]): Promise<void> {
+  const targetUrls = urls.filter(isTemplateUrl)
+
+  if (targetUrls.length === 0) {
+    throw new Error('기본 브라우저 연결 실행에는 하나 이상의 URL이 필요합니다.')
+  }
+
+  await Promise.all(targetUrls.map(openDefaultBrowserUrl))
+}
+
+async function openDefaultBrowserUrl(url: string): Promise<void> {
+  const command =
+    process.platform === 'win32'
+      ? 'cmd'
+      : process.platform === 'darwin'
+        ? 'open'
+        : 'xdg-open'
+  const args =
+    process.platform === 'win32'
+      ? ['/c', 'start', '', url]
+      : [url]
+  const browserProcess = spawn(command, args, {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+  })
+
+  await new Promise<void>((resolve, reject) => {
+    browserProcess.once('error', reject)
+    browserProcess.once('spawn', resolve)
+  })
+
+  browserProcess.unref()
 }
 
 function getBrowserExitState(

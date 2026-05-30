@@ -101,7 +101,10 @@ linkedDevices      기기별 access_level 정책
 가져오기는 같은 `syncExport.json`을 읽어 로컬 저장소에 병합한다.
 
 - 작업은 `id` 기준으로 병합하고, 양쪽에 모두 있으면 `updatedAt`이 더 최신인 쪽을 사용한다.
+- task config, policy, schedule, state는 최신 작업을 기준으로 하되 일부 필드를 병합한다.
 - 로컬 전용 `state.localProfilePath`는 가져온 작업으로 덮어쓰지 않는다.
+- 로컬 작업이 실행 중이면 가져온 상태로 실행 중 상태를 덮어쓰지 않는다.
+- policy의 `allowedDeviceIds`와 `secretRefs`는 ID 기준으로 합친다.
 - 실행 이벤트는 `id` 기준으로 중복을 제거해 추가한다.
 - 연동 기기 정책은 `id` 기준으로 병합한다.
 - secret 값, 브라우저 프로필, 로그인 세션, 브라우저 실행 파일 절대 경로는 export/import하지 않는다.

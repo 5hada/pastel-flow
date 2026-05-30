@@ -30,8 +30,14 @@ const pastelFlowApi = {
     export() {
       return electron.ipcRenderer.invoke("sync:export");
     },
+    exportFile() {
+      return electron.ipcRenderer.invoke("sync:export-file");
+    },
     import(snapshot) {
       return electron.ipcRenderer.invoke("sync:import", snapshot);
+    },
+    importFile() {
+      return electron.ipcRenderer.invoke("sync:import-file");
     }
   },
   tasks: {
@@ -50,8 +56,14 @@ const pastelFlowApi = {
     run(id) {
       return electron.ipcRenderer.invoke("tasks:run", id);
     },
+    stop(id) {
+      return electron.ipcRenderer.invoke("tasks:stop", id);
+    },
     listEvents(taskId) {
       return electron.ipcRenderer.invoke("tasks:list-events", taskId);
+    },
+    pruneEvents() {
+      return electron.ipcRenderer.invoke("tasks:prune-events");
     },
     onChanged(listener) {
       const wrappedListener = (_event, task) => listener(task);

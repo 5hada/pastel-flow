@@ -9,9 +9,16 @@ import { createAppSettingsStore } from './settings/store/appSettingsStore'
 import { registerSyncIpc } from './sync/ipc/syncIpc'
 import { createMockSyncStore } from './sync/store/mockSyncStore'
 import { browserTabGroupAdapter } from './tasks/adapters/browserTabGroupAdapter'
+import { crawlerAdapter } from './tasks/adapters/crawlerAdapter'
+import {
+  discordBotAdapter,
+  notionSyncAdapter,
+  tradingBotAdapter,
+} from './tasks/adapters/dryRunAdapters'
 import { createTaskAdapterRegistry } from './tasks/adapters/taskAdapterRegistry'
 import { registerTaskIpc } from './tasks/ipc/taskIpc'
 import { createTaskRunner } from './tasks/runner/taskRunner'
+import { createTaskScheduler } from './tasks/scheduler/taskScheduler'
 import { createTaskRunEventStore } from './tasks/store/taskRunEventStore'
 import { createTaskStore } from './tasks/store/taskStore'
 import { canViewTaskOnDevice } from '../src/shared/tasks'
@@ -107,7 +114,13 @@ app.whenReady().then(async () => {
       return safeStorage.encryptString(value).toString('base64')
     },
   })
-  const adapterRegistry = createTaskAdapterRegistry([browserTabGroupAdapter])
+  const adapterRegistry = createTaskAdapterRegistry([
+    browserTabGroupAdapter,
+    crawlerAdapter,
+    discordBotAdapter,
+    notionSyncAdapter,
+    tradingBotAdapter,
+  ])
   const mockSyncStore = createMockSyncStore({
     dataDir,
     appSettingsStore,
@@ -155,5 +168,11 @@ app.whenReady().then(async () => {
     appSettingsStore,
     deviceStore,
   )
+  createTaskScheduler({
+    appSettingsStore,
+    deviceStore,
+    taskRunner,
+    taskStore,
+  }).start()
   createWindow()
 })

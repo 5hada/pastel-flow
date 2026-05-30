@@ -10,6 +10,9 @@ import type {
   DeviceExecutionPolicy,
   DeviceVisibilityPolicy,
   RestorePolicy,
+  DayOfWeek,
+  TaskSchedule,
+  TaskScheduleMode,
   TaskState,
 } from './types'
 
@@ -20,6 +23,12 @@ export const defaultDevicePolicy: DevicePolicy = {
 
 export const defaultTaskState: TaskState = {
   status: 'idle',
+}
+
+export const defaultTaskSchedule: TaskSchedule = {
+  enabled: false,
+  mode: 'interval',
+  intervalMinutes: 60,
 }
 
 export const defaultBrowserRunMode: BrowserRunMode = 'dedicated_profile'
@@ -93,6 +102,31 @@ export function normalizeDevicePolicy(
   }
 }
 
+export function normalizeTaskSchedule(
+  schedule: Partial<TaskSchedule> | null | undefined,
+): TaskSchedule | undefined {
+  if (!schedule) {
+    return undefined
+  }
+
+  return {
+    enabled: schedule.enabled === true,
+    mode: isTaskScheduleMode(schedule.mode) ? schedule.mode : 'interval',
+    intervalMinutes: normalizeScheduleInterval(schedule.intervalMinutes),
+    timeOfDay: normalizeTimeOfDay(schedule.timeOfDay),
+    daysOfWeek: normalizeDaysOfWeek(schedule.daysOfWeek),
+    nextRunAt:
+      typeof schedule.nextRunAt === 'string' && schedule.nextRunAt.trim()
+        ? schedule.nextRunAt
+        : undefined,
+    lastTriggeredAt:
+      typeof schedule.lastTriggeredAt === 'string' &&
+      schedule.lastTriggeredAt.trim()
+        ? schedule.lastTriggeredAt
+        : undefined,
+  }
+}
+
 export function getBrowserRunModeLabel(runMode?: BrowserRunMode): string {
   switch (runMode ?? defaultBrowserRunMode) {
     case 'dedicated_profile':
@@ -156,6 +190,41 @@ function isBrowserRunMode(value: unknown): value is BrowserRunMode {
     value === 'extension_controlled' ||
     value === 'default_browser_deeplink'
   )
+}
+
+function normalizeScheduleInterval(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return defaultTaskSchedule.intervalMinutes
+  }
+
+  return Math.min(Math.max(Math.round(value), 1), 10080)
+}
+
+function normalizeTimeOfDay(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+
+  const trimmedValue = value.trim()
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(trimmedValue)
+    ? trimmedValue
+    : undefined
+}
+
+function normalizeDaysOfWeek(value: unknown): DayOfWeek[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined
+  }
+
+  const days = value
+    .map((day) => (typeof day === 'number' ? Math.round(day) : -1))
+    .filter((day): day is DayOfWeek => day >= 0 && day <= 6)
+
+  return days.length > 0 ? [...new Set(days)] : undefined
+}
+
+function isTaskScheduleMode(value: unknown): value is TaskScheduleMode {
+  return value === 'interval' || value === 'daily' || value === 'weekly'
 }
 
 function isDeviceVisibilityPolicy(

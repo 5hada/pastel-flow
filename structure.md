@@ -72,11 +72,15 @@ electron/
       taskAdapter.ts              작업 adapter 공통 인터페이스
       browserExecutableFinder.ts  Chrome, Edge, Chromium 실행 파일 탐색
       browserTabGroupAdapter.ts   전용 프로필 디렉터리 준비와 브라우저 프로세스 실행
+      crawlerAdapter.ts           URL 목록을 fetch해 로컬 JSON 결과 파일로 저장
+      dryRunAdapters.ts           Discord/Notion/trading dry-run 실행 adapter
       taskAdapterRegistry.ts      작업 타입별 adapter 조회
     ipc/
       taskIpc.ts                  tasks:list/create/update/delete IPC 등록
     runner/
       taskRunner.ts               작업 조회, adapter 실행, 상태 저장
+    scheduler/
+      taskScheduler.ts            작업별 interval schedule을 확인해 due task 실행
     store/
       taskRunEventStore.ts        taskRunEvents.json 기반 실행 이벤트 저장소
       taskStore.ts                tasks.json 기반 로컬 저장소
@@ -115,13 +119,19 @@ App.tsx
   -> Electron userData/tasks.json / appSettings.json
 ```
 
-현재 UI는 브라우저 탭 그룹 생성, 수정, 삭제, 실행, 목록 표시와 앱 설정 편집을 지원한다. 이름, 브라우저 종류, 실행 방식, 초기 URL 목록을 renderer에서 편집하고 `tasks.json`에 저장한다. `dedicated_profile` 실행 방식에서는 전용 프로필 디렉터리를 만든 뒤 Chrome, Edge, Chromium 실행 파일을 찾아 `--user-data-dir` 인자로 브라우저 프로세스를 연다. 초기 URL이 있으면 브라우저 실행 인자로 같이 전달한다. `extension_controlled` 실행 방식은 같은 전용 프로필에 Pastel Flow companion extension을 로드하고, DevTools 포트로 확장 서비스워커를 호출해 열린 탭 URL과 탭 그룹 이름, 색, 접힘 상태, 그룹-탭 관계를 `config.tabGroupSnapshot`에 저장한다.
+현재 UI는 브라우저 탭 그룹 생성, 수정, 삭제, 실행, 목록 표시와 앱 설정 편집을 지원한다. 이름, 브라우저 종류, 실행 방식, 초기 URL 목록을 renderer에서 편집하고 `tasks.json`에 저장한다. `dedicated_profile` 실행 방식에서는 전용 프로필 디렉터리를 만든 뒤 Chrome, Edge, Chromium 실행 파일을 찾아 `--user-data-dir` 인자로 브라우저 프로세스를 연다. 초기 URL이 있으면 브라우저 실행 인자로 같이 전달한다. `extension_controlled` 실행 방식은 같은 전용 프로필에 Pastel Flow companion extension을 로드하고, DevTools 포트로 확장 서비스워커를 호출해 열린 탭 URL과 탭 그룹 이름, 색, 접힘 상태, 그룹-탭 관계를 `config.tabGroupSnapshot`에 저장한다. `default_browser_deeplink` 실행 방식은 전용 프로필을 만들지 않고 초기 URL을 OS 기본 브라우저로 여는 최소 실행만 담당한다.
+
+작업 목록과 실행 버튼은 모든 작업 타입을 표시한다. 생성/수정 UI는 아직 브라우저 탭 그룹 중심이며, 브라우저 외 작업은 sync/import 또는 저장소에 존재할 때 목록에서 선택하고 실행할 수 있다. `crawler` adapter는 `config.urls`를 fetch해 `crawler-results` 디렉터리에 JSON 결과를 저장한다. `discord_bot`, `notion_sync`, `trading_bot`은 외부 API 호출이나 실거래 없이 dry-run만 지원한다.
+
+작업에는 선택적 `schedule`이 있다. 현재 예약 실행은 interval minute, daily wall-clock, weekly wall-clock 방식을 지원한다. `taskScheduler`가 1분마다 작업 목록을 확인해 `nextRunAt`이 지난 작업을 `taskRunner.runTask`로 실행한다. 실행 권한 정책을 통과하지 못하거나 이미 실행 중인 작업은 예약 실행하지 않는다. daily/weekly 스케줄은 로컬 시간 기준 `HH:mm`과 요일 번호 `0=일요일`부터 `6=토요일`을 사용한다.
 
 브라우저 작업에는 `dynamicTemplateUpdates` 토글이 있다. 이 값이 켜져 있으면 adapter가 브라우저를 `--remote-debugging-port`와 함께 실행하고, 실행 중 DevTools target 목록을 주기적으로 읽어 열린 탭 URL 스냅샷을 유지한다. 브라우저 정상 종료 시 마지막 URL 목록을 작업 config의 `initialUrls`로 저장한다. 이 기능은 전용 프로필 MVP에서 가능한 URL 목록 반영이며, 실제 탭 그룹 이름, 색, 그룹 관계는 확장 프로그램 기반 실행 방식에서 다룬다.
 
 앱 설정은 `appSettings.json`에 저장한다. 설정에는 테마, 기본 브라우저, 새 작업 기본 이름, 브라우저별 실행 파일 수동 경로, 연동 기기별 허용 수준이 포함된다. 브라우저 실행 파일 경로가 설정되어 있으면 자동 탐색보다 우선 사용하고, 경로가 비어 있으면 OS별 기본 경로와 `PATH`를 탐색한다.
 
 설정에는 실행 이벤트 보존 개수도 포함된다. `taskRunEventStore`는 이벤트 추가 시 현재 설정값을 읽어 `taskRunEvents.json`의 저장 개수를 제한한다. renderer는 선택한 작업의 최근 실행 이벤트를 검색어와 상태별로 필터링한다.
+
+설정에는 sync export에 포함할 실행 이벤트 개수도 포함된다. mock sync export는 이 설정값만큼 최근 실행 이벤트를 `syncExport.json`에 포함한다. 도구 화면의 실행 이벤트 정리는 현재 보존 개수를 즉시 적용해 오래된 항목을 제거한다.
 
 현재 기기 ID는 `device.json`에 저장한다. `tasks:list`는 main process에서 현재 기기와 연동 기기 허용 수준, 작업 `DevicePolicy.visibility`를 확인한 뒤 허용된 작업만 renderer에 반환한다. 따라서 허용되지 않은 작업은 renderer 상태에 들어오지 않으며 목록에도 표시되지 않는다. `tasks:run`, `tasks:update`, `tasks:delete`는 `DevicePolicy.execution`을 확인한 뒤 허용되지 않으면 오류를 반환한다.
 
@@ -133,7 +143,11 @@ Secret 설정 화면은 Electron `safeStorage` 사용 가능 여부, 선택된 b
 
 서버 DB 동기화 초안은 `sync-schema.md`에 둔다. 이 문서는 서버에 동기화할 작업 설정, 기기 정책, 실행 이벤트와 로컬 전용으로 남길 secret 값, 브라우저 프로필, 기기별 실행 파일 경로의 경계를 정의한다.
 
+mock sync는 `syncExport.json` 기본 파일을 사용하며, 도구 화면에서 외부 JSON 파일로 내보내거나 외부 JSON 파일에서 가져올 수 있다. 가져오기 병합은 task ID 기준으로 최신 `updatedAt` 작업을 기본으로 하되, config/policy/schedule/state 일부를 필드 단위로 병합하고 로컬 전용 `state.localProfilePath`와 실행 중 상태는 보존한다.
+
 작업 adapter는 `TaskRunContext.updateState`를 통해 실행 이후의 비동기 상태 변화를 저장할 수 있다. 브라우저 탭 그룹 adapter는 브라우저 프로세스 종료 이벤트를 감지해 정상 종료 시 `idle`, 비정상 종료 시 `failed`와 오류 메시지를 저장한다. `taskRunner`는 작업 상태가 저장될 때 `onTaskUpdated` 콜백을 호출하고, `electron/main.ts`는 모든 BrowserWindow에 `tasks:changed` 이벤트를 보낸다. renderer는 `window.pastelFlow.tasks.onChanged`로 이벤트를 구독해 목록의 작업 상태를 실시간으로 병합한다.
+
+브라우저 탭 그룹 adapter는 실행 중인 브라우저 프로세스를 task ID 기준으로 추적한다. renderer가 `tasks:stop`을 호출하면 `taskRunner.stopTask`가 adapter `stop`을 호출하고, 성공 시 작업 상태를 `idle`로 저장하며 실행 이벤트를 남긴다.
 
 ## 5. 다음 구현 위치
 
@@ -150,6 +164,7 @@ Secret 설정 화면은 Electron `safeStorage` 사용 가능 여부, 선택된 b
 - 브라우저 실행 구현: `electron/tasks/adapters/browserTabGroupAdapter.ts`
 - 브라우저 실행 파일 탐색 변경: `electron/tasks/adapters/browserExecutableFinder.ts`
 - 작업 실행 버튼/상태 UI: `src/App.tsx`
+- 예약 실행 변경: `src/shared/tasks/types.ts`, `src/shared/tasks/defaults.ts`, `electron/tasks/scheduler/taskScheduler.ts`, `electron/main.ts`, `src/App.tsx`
 
 브라우저 실행 기능을 추가할 때는 adapter가 프로필 경로 생성과 외부 프로세스 실행을 담당하고, renderer는 실행 요청과 결과 표시만 담당한다.
 

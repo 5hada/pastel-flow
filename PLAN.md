@@ -89,6 +89,7 @@ type TaskTemplate<TConfig = unknown, TState = unknown> = {
   config: TConfig;
   state: TState;
   permissions: DevicePolicy;
+  schedule?: TaskSchedule;
   createdAt: string;
   updatedAt: string;
 };
@@ -230,12 +231,22 @@ type TaskRunResult<TState> = {
 - [x] 실행 이벤트에 검색/상태 필터와 보존 개수 설정을 추가한다.
 - [x] 확장 프로그램 기반 실행에서 실제 탭 그룹 이름, 색, 그룹 관계를 템플릿에 반영한다.
 - [x] 서버 DB sync 전 단계의 mock export/import adapter를 구현한다.
+- [x] 실행 이벤트 정리 기능과 sync export 이벤트 범위 설정을 추가한다.
+- [x] `default_browser_deeplink` 실행 방식에서 초기 URL을 기본 브라우저로 여는 최소 실행 경로를 구현한다.
+- [x] 실행 중인 브라우저 작업의 stop 요청 흐름을 adapter, runner, IPC, UI에 추가한다.
+- [x] 작업별 interval 기반 예약 실행 최소 모델과 main process scheduler를 구현한다.
+- [x] mock sync conflict resolution을 task config/policy 필드 단위로 세분화한다.
+- [x] sync snapshot 외부 JSON 파일 선택 import/export UI를 추가한다.
+- [x] 예약 실행을 interval, daily, weekly wall-clock 방식으로 확장한다.
+- [x] crawler adapter를 추가해 URL 수집 결과를 로컬 JSON 파일로 저장한다.
+- [x] Discord bot, Notion sync, trading bot dry-run adapter를 추가해 runner/scheduler 경로에 연결한다.
+- [x] 작업 목록과 실행 UI가 브라우저 외 작업 타입도 표시하고 실행할 수 있게 확장한다.
 
 다음 구현 우선순위:
 
-1. 실행 이벤트의 오래된 항목 정리와 export 범위를 정책화한다.
-2. `default_browser_deeplink` 실행 방식의 범위와 보안 정책을 결정한다.
-3. mock sync conflict resolution을 task config/policy 필드 단위로 세분화한다.
+1. 브라우저 외 작업 타입을 생성/수정할 수 있는 타입별 설정 UI를 추가한다.
+2. Discord/Notion의 실제 API 실행을 secret 참조 해석과 함께 구현한다.
+3. 서버 DB sync 실제 transport와 계정/기기 등록 흐름을 구현한다.
 
 ### Phase 2: 권한과 Secret 기반
 
@@ -283,7 +294,6 @@ type TaskRunResult<TState> = {
 초기에는 하지 않을 작업:
 
 - 서버 DB 동기화 전체 구현
-- 브라우저 확장 프로그램 개발
 - 기본 브라우저 프로필 직접 조작
 - 자동매매 실거래 실행
 - 외부 플러그인 설치 시스템

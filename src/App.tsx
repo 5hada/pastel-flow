@@ -27,8 +27,11 @@ import {
   type DevicePolicy,
   type DeviceVisibilityPolicy,
   type SecretRef,
+  type TaskScheduleMode,
+  type TaskSchedule,
   type TaskState,
   type TaskTemplate,
+  type TaskType,
 } from './shared/tasks'
 import type { LocalSecretMetadata } from './shared/secrets'
 import type { SecretStorageStatus } from './shared/secrets'
@@ -43,6 +46,11 @@ type BrowserTaskFormState = {
   runMode: BrowserRunMode
   initialUrls: string
   dynamicTemplateUpdates: boolean
+  scheduleEnabled: boolean
+  scheduleMode: TaskScheduleMode
+  scheduleIntervalMinutes: number
+  scheduleTimeOfDay: string
+  scheduleDaysOfWeek: string
   visibility: DeviceVisibilityPolicy
   execution: DeviceExecutionPolicy
   allowedDeviceIds: string
@@ -79,6 +87,11 @@ function createBrowserTaskForm(settings: AppSettings): BrowserTaskFormState {
     runMode: 'dedicated_profile',
     initialUrls: '',
     dynamicTemplateUpdates: false,
+    scheduleEnabled: false,
+    scheduleMode: 'interval',
+    scheduleIntervalMinutes: 60,
+    scheduleTimeOfDay: '09:00',
+    scheduleDaysOfWeek: '1\n2\n3\n4\n5',
     visibility: 'local_only',
     execution: 'local_only',
     allowedDeviceIds: '',
@@ -101,6 +114,11 @@ const defaultEditForm: BrowserTaskFormState = {
   runMode: 'dedicated_profile',
   initialUrls: '',
   dynamicTemplateUpdates: false,
+  scheduleEnabled: false,
+  scheduleMode: 'interval',
+  scheduleIntervalMinutes: 60,
+  scheduleTimeOfDay: '09:00',
+  scheduleDaysOfWeek: '1\n2\n3\n4\n5',
   visibility: 'local_only',
   execution: 'local_only',
   allowedDeviceIds: '',
@@ -132,6 +150,7 @@ function App() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(defaultSyncStatus)
   const [syncResult, setSyncResult] = useState<SyncImportResult | null>(null)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
+  const [pruneMessage, setPruneMessage] = useState<string | null>(null)
   const [appSettings, setAppSettings] = useState<AppSettings>(
     initialSettingsSnapshot.settings,
   )
@@ -158,6 +177,7 @@ function App() {
     null,
   )
   const [runningTaskId, setRunningTaskId] = useState<string | null>(null)
+  const [stoppingTaskId, setStoppingTaskId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [settingsSaveState, setSettingsSaveState] =
@@ -168,22 +188,14 @@ function App() {
   const [secretForm, setSecretForm] =
     useState<SecretFormState>(defaultSecretForm)
 
-  const browserTasks = useMemo(
-    () =>
-      tasks.filter(
-        (task): task is BrowserTabGroupTask => task.type === 'browser_tab_group',
-      ),
-    [tasks],
-  )
-
   const selectedTask = useMemo(
-    () => browserTasks.find((task) => task.id === selectedTaskId) ?? null,
-    [browserTasks, selectedTaskId],
+    () => tasks.find((task) => task.id === selectedTaskId) ?? null,
+    [tasks, selectedTaskId],
   )
 
-  const visibleBrowserTasks = useMemo(
-    () => filterBrowserTasks(browserTasks, selectedCategory),
-    [browserTasks, selectedCategory],
+  const visibleTasks = useMemo(
+    () => filterTasks(tasks, selectedCategory),
+    [tasks, selectedCategory],
   )
 
   useEffect(() => {
@@ -233,7 +245,7 @@ function App() {
       return
     }
 
-    if (browserTasks.length === 0) {
+    if (tasks.length === 0) {
       setSelectedTaskId(null)
       setConfirmDeleteTaskId(null)
       if (workspaceMode === 'edit') {
@@ -242,10 +254,10 @@ function App() {
       return
     }
 
-    if (!selectedTaskId || !browserTasks.some((task) => task.id === selectedTaskId)) {
-      setSelectedTaskId(browserTasks[0].id)
+    if (!selectedTaskId || !tasks.some((task) => task.id === selectedTaskId)) {
+      setSelectedTaskId(tasks[0].id)
     }
-  }, [browserTasks, isLoading, selectedTaskId, workspaceMode])
+  }, [tasks, isLoading, selectedTaskId, workspaceMode])
 
   async function loadTasks() {
     if (!window.pastelFlow) {
@@ -352,6 +364,7 @@ function App() {
       type: 'browser_tab_group',
       config,
       permissions: createDevicePolicyFromForm(createForm, currentDevice),
+      schedule: createTaskScheduleFromForm(createForm),
     }
 
     try {
@@ -381,8 +394,8 @@ function App() {
   }
 
   function openEditMode() {
-    if (selectedTask) {
-      startEditing(selectedTask)
+    if (selectedTask?.type === 'browser_tab_group') {
+      startEditing(selectedTask as BrowserTabGroupTask)
     }
     setWorkspaceMode('edit')
   }
@@ -448,6 +461,11 @@ function App() {
       runMode: config.runMode,
       initialUrls: config.initialUrls.join('\n'),
       dynamicTemplateUpdates: config.dynamicTemplateUpdates,
+      scheduleEnabled: task.schedule?.enabled ?? false,
+      scheduleMode: task.schedule?.mode ?? 'interval',
+      scheduleIntervalMinutes: task.schedule?.intervalMinutes ?? 60,
+      scheduleTimeOfDay: task.schedule?.timeOfDay ?? '09:00',
+      scheduleDaysOfWeek: task.schedule?.daysOfWeek?.join('\n') ?? '1\n2\n3\n4\n5',
       visibility: permissions.visibility,
       execution: permissions.execution,
       allowedDeviceIds: permissions.allowedDeviceIds?.join('\n') ?? '',
@@ -504,7 +522,14 @@ function App() {
       return
     }
 
-    const currentConfig = normalizeBrowserTabGroupConfig(selectedTask.config)
+    if (selectedTask.type !== 'browser_tab_group') {
+      setErrorMessage('브라우저 탭 그룹 작업만 이 화면에서 수정할 수 있습니다.')
+      return
+    }
+
+    const currentConfig = normalizeBrowserTabGroupConfig(
+      selectedTask.config as Partial<BrowserTabGroupConfig>,
+    )
     const config: BrowserTabGroupConfig = {
       ...currentConfig,
       browserKind: editForm.browserKind,
@@ -519,6 +544,7 @@ function App() {
         name: trimmedName,
         config,
         permissions: createDevicePolicyFromForm(editForm, currentDevice),
+        schedule: createTaskScheduleFromForm(editForm),
       })
       setTasks((currentTasks) =>
         currentTasks.map((task) =>
@@ -536,7 +562,7 @@ function App() {
       return
     }
 
-    const nextTask = browserTasks.find((task) => task.id !== taskId) ?? null
+    const nextTask = tasks.find((task) => task.id !== taskId) ?? null
 
     try {
       setErrorMessage(null)
@@ -548,8 +574,8 @@ function App() {
       setConfirmDeleteTaskId(null)
       if (!nextTask) {
         setWorkspaceMode('run')
-      } else {
-        startEditing(nextTask)
+      } else if (nextTask.type === 'browser_tab_group') {
+        startEditing(nextTask as BrowserTabGroupTask)
       }
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
@@ -580,6 +606,29 @@ function App() {
       setErrorMessage(getErrorMessage(error))
     } finally {
       setRunningTaskId(null)
+    }
+  }
+
+  async function handleStopTask(taskId: string) {
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      setStoppingTaskId(taskId)
+      setSelectedTaskId(taskId)
+      setErrorMessage(null)
+      const updatedTask = await window.pastelFlow.tasks.stop(taskId)
+      setTasks((currentTasks) =>
+        currentTasks.map((task) =>
+          task.id === updatedTask.id ? updatedTask : task,
+        ),
+      )
+      await loadTaskRunEvents(taskId)
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    } finally {
+      setStoppingTaskId(null)
     }
   }
 
@@ -632,6 +681,28 @@ function App() {
     }
   }
 
+  async function handleExportSyncSnapshotFile() {
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      setErrorMessage(null)
+      setSyncResult(null)
+      const snapshot = await window.pastelFlow.sync.exportFile()
+      if (!snapshot) {
+        return
+      }
+
+      setSyncMessage(
+        `${snapshot.tasks.length}개 작업을 외부 JSON 파일로 내보냈습니다.`,
+      )
+      await loadSyncStatus()
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    }
+  }
+
   async function handleImportSyncSnapshot() {
     if (!window.pastelFlow) {
       return
@@ -643,6 +714,43 @@ function App() {
       const result = await window.pastelFlow.sync.import()
       setSyncResult(result)
       await Promise.all([loadTasks(), loadAppSettings(), loadSyncStatus()])
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    }
+  }
+
+  async function handleImportSyncSnapshotFile() {
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      setErrorMessage(null)
+      setSyncMessage(null)
+      const result = await window.pastelFlow.sync.importFile()
+      if (!result) {
+        return
+      }
+
+      setSyncResult(result)
+      await Promise.all([loadTasks(), loadAppSettings(), loadSyncStatus()])
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    }
+  }
+
+  async function handlePruneTaskRunEvents() {
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      setErrorMessage(null)
+      const removedCount = await window.pastelFlow.tasks.pruneEvents()
+      setPruneMessage(`${removedCount}개 실행 이벤트를 정리했습니다.`)
+      if (selectedTaskId) {
+        await loadTaskRunEvents(selectedTaskId)
+      }
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     }
@@ -679,8 +787,8 @@ function App() {
 
       <div className={`app-workspace${isSidebarOpen ? '' : ' is-sidebar-collapsed'}`}>
         {isSidebarOpen ? (
-          <WorkspaceSidebar
-            browserTasks={browserTasks}
+            <WorkspaceSidebar
+            tasks={tasks}
             currentMode={workspaceMode}
             selectedCategory={selectedCategory}
             selectedSettingsCategory={selectedSettingsCategory}
@@ -688,10 +796,12 @@ function App() {
             onCategorySelect={openCategory}
             onClose={() => setIsSidebarOpen(false)}
             onSelectSettingsCategory={setSelectedSettingsCategory}
-            onSelectTask={(task) => {
-              setSelectedTaskId(task.id)
-              startEditing(task)
-            }}
+              onSelectTask={(task) => {
+                setSelectedTaskId(task.id)
+                if (task.type === 'browser_tab_group') {
+                  startEditing(task as BrowserTabGroupTask)
+                }
+              }}
           />
         ) : null}
 
@@ -710,19 +820,23 @@ function App() {
 
           {workspaceMode === 'run' ? (
             <TaskLaunchPanel
-              browserTasks={visibleBrowserTasks}
+              tasks={visibleTasks}
               categoryLabel={getNavigationCategoryLabel(selectedCategory)}
               displayMode={appSettings.taskListDisplayMode}
               isLoading={isLoading}
               runningTaskId={runningTaskId}
               selectedTaskId={selectedTaskId}
+              stoppingTaskId={stoppingTaskId}
               onCreate={openCreateMode}
               onDisplayModeChange={handleTaskListDisplayModeChange}
               onRun={handleRunTask}
+              onStop={handleStopTask}
               onSelect={(task) => {
                 setSelectedTaskId(task.id)
                 setConfirmDeleteTaskId(null)
-                startEditing(task)
+                if (task.type === 'browser_tab_group') {
+                  startEditing(task as BrowserTabGroupTask)
+                }
               }}
             />
           ) : null}
@@ -759,8 +873,12 @@ function App() {
               syncMessage={syncMessage}
               syncResult={syncResult}
               syncStatus={syncStatus}
+              pruneMessage={pruneMessage}
               onExportSyncSnapshot={handleExportSyncSnapshot}
+              onExportSyncSnapshotFile={handleExportSyncSnapshotFile}
               onImportSyncSnapshot={handleImportSyncSnapshot}
+              onImportSyncSnapshotFile={handleImportSyncSnapshotFile}
+              onPruneTaskRunEvents={handlePruneTaskRunEvents}
             />
           ) : null}
 
@@ -840,19 +958,19 @@ function TopModeBar({
 }
 
 type WorkspaceSidebarProps = {
-  browserTasks: BrowserTabGroupTask[]
+  tasks: TaskTemplate[]
   currentMode: WorkspaceMode
   selectedCategory: NavigationCategory
   selectedSettingsCategory: SettingsCategory
-  selectedTask: BrowserTabGroupTask | null
+  selectedTask: TaskTemplate | null
   onCategorySelect(category: NavigationCategory): void
   onClose(): void
   onSelectSettingsCategory(category: SettingsCategory): void
-  onSelectTask(task: BrowserTabGroupTask): void
+  onSelectTask(task: TaskTemplate): void
 }
 
 function WorkspaceSidebar({
-  browserTasks,
+  tasks,
   currentMode,
   selectedCategory,
   selectedSettingsCategory,
@@ -862,10 +980,10 @@ function WorkspaceSidebar({
   onSelectSettingsCategory,
   onSelectTask,
 }: WorkspaceSidebarProps) {
-  const restrictedCount = browserTasks.filter((task) =>
+  const restrictedCount = tasks.filter((task) =>
     isRestrictedDevicePolicy(task.permissions),
   ).length
-  const runningCount = browserTasks.filter(
+  const runningCount = tasks.filter(
     (task) => task.state.status === 'running',
   ).length
   const runCategories: {
@@ -874,9 +992,9 @@ function WorkspaceSidebar({
     label: string
     count: number
   }[] = [
-    { id: 'all', icon: '□', label: '전체', count: browserTasks.length },
+    { id: 'all', icon: '□', label: '전체', count: tasks.length },
     { id: 'running', icon: '●', label: '실행 중', count: runningCount },
-    { id: 'folders', icon: '▣', label: '폴더', count: browserTasks.length },
+    { id: 'folders', icon: '▣', label: '폴더', count: tasks.length },
     { id: 'favorites', icon: '☆', label: '즐겨찾기', count: 0 },
     { id: 'restricted', icon: '◇', label: '제한됨', count: restrictedCount },
   ]
@@ -931,7 +1049,7 @@ function WorkspaceSidebar({
         ) : null}
 
         {currentMode === 'edit'
-          ? browserTasks.map((task) => (
+          ? tasks.map((task) => (
               <button
                 className={`sidebar-item task-sidebar-item${
                   selectedTask?.id === task.id ? ' is-active' : ''
@@ -942,7 +1060,7 @@ function WorkspaceSidebar({
               >
                 <span aria-hidden="true">□</span>
                 <strong>{task.name}</strong>
-                <em>{getTaskStatusLabel(task.state.status)}</em>
+                <em>{getTaskTypeLabel(task.type)}</em>
               </button>
             ))
           : null}
@@ -980,16 +1098,24 @@ function WorkspaceSidebar({
 }
 
 type ToolsPanelProps = {
+  pruneMessage: string | null
   syncMessage: string | null
   syncResult: SyncImportResult | null
   syncStatus: SyncStatus
   onExportSyncSnapshot(): Promise<void>
+  onExportSyncSnapshotFile(): Promise<void>
   onImportSyncSnapshot(): Promise<void>
+  onImportSyncSnapshotFile(): Promise<void>
+  onPruneTaskRunEvents(): Promise<void>
 }
 
 function ToolsPanel({
   onExportSyncSnapshot,
+  onExportSyncSnapshotFile,
   onImportSyncSnapshot,
+  onImportSyncSnapshotFile,
+  onPruneTaskRunEvents,
+  pruneMessage,
   syncMessage,
   syncResult,
   syncStatus,
@@ -1026,9 +1152,23 @@ function ToolsPanel({
           <button
             className="ghost-button"
             type="button"
+            onClick={() => void onExportSyncSnapshotFile()}
+          >
+            파일로 내보내기
+          </button>
+          <button
+            className="ghost-button"
+            type="button"
             onClick={() => void onImportSyncSnapshot()}
           >
             가져오기
+          </button>
+          <button
+            className="ghost-button"
+            type="button"
+            onClick={() => void onImportSyncSnapshotFile()}
+          >
+            파일에서 가져오기
           </button>
         </div>
         {syncMessage ? <p className="panel-success">{syncMessage}</p> : null}
@@ -1038,6 +1178,24 @@ function ToolsPanel({
             {syncResult.tasksUpdated}개, 이벤트 {syncResult.taskRunEventsAdded}개
           </p>
         ) : null}
+      </section>
+      <section className="settings-subsection" aria-label="event cleanup">
+        <div className="section-heading compact-heading">
+          <div>
+            <p className="eyebrow">Events</p>
+            <h3>실행 이벤트 정리</h3>
+          </div>
+        </div>
+        <div className="form-actions">
+          <button
+            className="ghost-button"
+            type="button"
+            onClick={() => void onPruneTaskRunEvents()}
+          >
+            보존 개수 적용
+          </button>
+        </div>
+        {pruneMessage ? <p className="panel-success">{pruneMessage}</p> : null}
       </section>
     </section>
   )
@@ -1079,20 +1237,22 @@ type TaskEditPanelProps = {
 }
 
 type TaskLaunchPanelProps = {
-  browserTasks: BrowserTabGroupTask[]
+  tasks: TaskTemplate[]
   categoryLabel: string
   displayMode: TaskListDisplayMode
   isLoading: boolean
   runningTaskId: string | null
   selectedTaskId: string | null
+  stoppingTaskId: string | null
   onCreate(): void
   onDisplayModeChange(value: TaskListDisplayMode): void
   onRun(taskId: string): Promise<void>
-  onSelect(task: BrowserTabGroupTask): void
+  onStop(taskId: string): Promise<void>
+  onSelect(task: TaskTemplate): void
 }
 
 function TaskLaunchPanel({
-  browserTasks,
+  tasks,
   categoryLabel,
   displayMode,
   isLoading,
@@ -1100,8 +1260,10 @@ function TaskLaunchPanel({
   onDisplayModeChange,
   onRun,
   onSelect,
+  onStop,
   runningTaskId,
   selectedTaskId,
+  stoppingTaskId,
 }: TaskLaunchPanelProps) {
   return (
     <section className="task-section launch-section" aria-label="작업 실행">
@@ -1115,13 +1277,13 @@ function TaskLaunchPanel({
             value={displayMode}
             onChange={onDisplayModeChange}
           />
-          <span>{browserTasks.length}개</span>
+          <span>{tasks.length}개</span>
         </div>
       </div>
 
       {isLoading ? (
         <p className="empty-state">작업을 불러오는 중입니다.</p>
-      ) : browserTasks.length === 0 ? (
+      ) : tasks.length === 0 ? (
         <div className="empty-state empty-state-action">
           <p>아직 저장된 브라우저 탭 그룹 템플릿이 없습니다.</p>
           <button type="button" onClick={onCreate}>
@@ -1130,10 +1292,17 @@ function TaskLaunchPanel({
         </div>
       ) : (
         <div className={`task-list task-list-${displayMode}`}>
-          {browserTasks.map((task) => {
-            const config = normalizeBrowserTabGroupConfig(task.config)
+          {tasks.map((task) => {
+            const config =
+              task.type === 'browser_tab_group'
+                ? normalizeBrowserTabGroupConfig(
+                    task.config as Partial<BrowserTabGroupConfig>,
+                  )
+                : null
             const isRunning = runningTaskId === task.id
+            const isStopping = stoppingTaskId === task.id
             const isSelected = selectedTaskId === task.id
+            const canStop = task.state.status === 'running'
 
             return (
               <article
@@ -1148,13 +1317,16 @@ function TaskLaunchPanel({
                   >
                     <span className="task-row-title">{task.name}</span>
                     <span className="task-row-meta">
-                      {getBrowserKindLabel(config.browserKind)} · 마지막 실행{' '}
+                      {config
+                        ? getBrowserKindLabel(config.browserKind)
+                        : getTaskTypeLabel(task.type)} · 마지막 실행{' '}
                       {formatDate(task.state.lastRunAt)}
                     </span>
                   </button>
                 ) : (
                   <div className="task-card-title">
                     <strong>{task.name}</strong>
+                    <small>{getTaskTypeLabel(task.type)}</small>
                   </div>
                 )}
                 {isRestrictedDevicePolicy(task.permissions) ? (
@@ -1165,10 +1337,12 @@ function TaskLaunchPanel({
                 </span>
                 <button
                   type="button"
-                  disabled={isRunning}
-                  onClick={() => void onRun(task.id)}
+                  disabled={isRunning || isStopping}
+                  onClick={() =>
+                    void (canStop ? onStop(task.id) : onRun(task.id))
+                  }
                 >
-                  {isRunning ? '실행 중' : '실행'}
+                  {isStopping ? '중지 중' : canStop ? '중지' : isRunning ? '실행 중' : '실행'}
                 </button>
               </article>
             )
@@ -1251,6 +1425,7 @@ function CreateTaskPanel({
             >
               <option value="dedicated_profile">전용 프로필</option>
               <option value="extension_controlled">확장 프로그램 제어</option>
+              <option value="default_browser_deeplink">기본 브라우저 연결</option>
             </select>
           </label>
         </div>
@@ -1281,6 +1456,7 @@ function CreateTaskPanel({
           />
           실행 후 열린 탭 URL을 템플릿에 반영
         </label>
+        <ScheduleFields form={createForm} onChange={onChange} />
         <PolicyFields
           currentDevice={currentDevice}
           form={createForm}
@@ -1301,7 +1477,7 @@ type EditWorkspaceProps = {
   editForm: BrowserTaskFormState
   isLoading: boolean
   secrets: LocalSecretMetadata[]
-  selectedTask: BrowserTabGroupTask | null
+  selectedTask: TaskTemplate | null
   taskRunEvents: TaskRunEvent[]
   onChange(value: BrowserTaskFormState): void
   onConfirmDelete(taskId: string): Promise<void>
@@ -1340,37 +1516,54 @@ function EditWorkspace({
     )
   }
 
-  const config = normalizeBrowserTabGroupConfig(selectedTask.config)
+  const config =
+    selectedTask.type === 'browser_tab_group'
+      ? normalizeBrowserTabGroupConfig(
+          selectedTask.config as Partial<BrowserTabGroupConfig>,
+        )
+      : null
   const isConfirmingDelete = confirmDeleteTaskId === selectedTask.id
 
   return (
     <section aria-label="기존 작업 수정">
       <section className="mode-panel" aria-label="선택한 작업 수정">
-        <TaskEditPanel
-          currentDevice={currentDevice}
-          editForm={editForm}
-          onChange={onChange}
-          onSubmit={onSubmit}
-          secrets={secrets}
-        />
+        {config ? (
+          <TaskEditPanel
+            currentDevice={currentDevice}
+            editForm={editForm}
+            onChange={onChange}
+            onSubmit={onSubmit}
+            secrets={secrets}
+          />
+        ) : null}
 
         <dl className="detail-list">
-          <DetailItem label="브라우저" value={getBrowserKindLabel(config.browserKind)} />
-          <DetailItem label="실행 방식" value={getBrowserRunModeLabel(config.runMode)} />
-          <DetailItem
-            label="동적 업데이트"
-            value={config.dynamicTemplateUpdates ? '사용' : '사용 안 함'}
-          />
-          <DetailItem
-            label="탭 그룹 스냅샷"
-            value={getTabGroupSnapshotLabel(config)}
-          />
+          <DetailItem label="작업 타입" value={getTaskTypeLabel(selectedTask.type)} />
+          {config ? (
+            <>
+              <DetailItem label="브라우저" value={getBrowserKindLabel(config.browserKind)} />
+              <DetailItem label="실행 방식" value={getBrowserRunModeLabel(config.runMode)} />
+              <DetailItem
+                label="동적 업데이트"
+                value={config.dynamicTemplateUpdates ? '사용' : '사용 안 함'}
+              />
+              <DetailItem
+                label="탭 그룹 스냅샷"
+                value={getTabGroupSnapshotLabel(config)}
+              />
+              <DetailItem label="프로필 ID" value={config.profileId || '없음'} />
+            </>
+          ) : null}
+          <DetailItem label="예약" value={getTaskScheduleLabel(selectedTask.schedule)} />
           <DetailItem label="상태" value={getTaskStatusLabel(selectedTask.state.status)} />
           <DetailItem label="마지막 실행" value={formatDate(selectedTask.state.lastRunAt)} />
-          <DetailItem label="프로필 ID" value={config.profileId || '없음'} />
           <DetailItem
-            label="로컬 프로필 경로"
-            value={selectedTask.state.localProfilePath ?? '아직 없음'}
+            label="출력 경로"
+            value={
+              selectedTask.state.outputPath ??
+              selectedTask.state.localProfilePath ??
+              '아직 없음'
+            }
           />
           <DetailItem label="생성 시간" value={formatDate(selectedTask.createdAt)} />
           <DetailItem label="수정 시간" value={formatDate(selectedTask.updatedAt)} />
@@ -1565,6 +1758,22 @@ function AppSettingsPanel({
                   onChange({
                     ...form,
                     taskRunEventRetentionLimit: Number(event.target.value),
+                  })
+                }
+              />
+            </label>
+
+            <label>
+              Sync export 이벤트 개수
+              <input
+                max={2000}
+                min={0}
+                type="number"
+                value={form.taskRunEventExportLimit}
+                onChange={(event) =>
+                  onChange({
+                    ...form,
+                    taskRunEventExportLimit: Number(event.target.value),
                   })
                 }
               />
@@ -1860,6 +2069,7 @@ function TaskEditPanel({
           >
             <option value="dedicated_profile">전용 프로필</option>
             <option value="extension_controlled">확장 프로그램 제어</option>
+            <option value="default_browser_deeplink">기본 브라우저 연결</option>
           </select>
         </label>
         <label>
@@ -1888,6 +2098,7 @@ function TaskEditPanel({
           />
           실행 후 열린 탭 URL을 템플릿에 반영
         </label>
+        <ScheduleFields form={editForm} onChange={onChange} />
         <PolicyFields
           currentDevice={currentDevice}
           form={editForm}
@@ -1927,6 +2138,17 @@ function parseLines(value: string): string[] {
     .filter(Boolean)
 }
 
+function parseDaysOfWeek(value: string): TaskSchedule['daysOfWeek'] {
+  const days = value
+    .split(/[,\r\n]+/)
+    .map((item) => Number(item.trim()))
+    .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
+
+  return days.length > 0
+    ? ([...new Set(days)] as TaskSchedule['daysOfWeek'])
+    : undefined
+}
+
 function createDevicePolicyFromForm(
   form: BrowserTaskFormState,
   currentDevice: CurrentDevice,
@@ -1953,6 +2175,131 @@ function createDevicePolicyFromForm(
   })
 }
 
+function createTaskScheduleFromForm(
+  form: BrowserTaskFormState,
+): TaskSchedule | undefined {
+  if (!form.scheduleEnabled) {
+    return undefined
+  }
+
+  const intervalMinutes = Math.min(
+    Math.max(Math.round(form.scheduleIntervalMinutes), 1),
+    10080,
+  )
+  const scheduleMode = form.scheduleMode
+
+  return {
+    enabled: true,
+    mode: scheduleMode,
+    intervalMinutes,
+    timeOfDay:
+      scheduleMode === 'daily' || scheduleMode === 'weekly'
+        ? form.scheduleTimeOfDay
+        : undefined,
+    daysOfWeek:
+      scheduleMode === 'weekly'
+        ? parseDaysOfWeek(form.scheduleDaysOfWeek)
+        : undefined,
+    nextRunAt: getInitialScheduleRunAt({
+      enabled: true,
+      mode: scheduleMode,
+      intervalMinutes,
+      timeOfDay: form.scheduleTimeOfDay,
+      daysOfWeek: parseDaysOfWeek(form.scheduleDaysOfWeek),
+    }),
+  }
+}
+
+type ScheduleFieldsProps = {
+  form: BrowserTaskFormState
+  onChange(value: BrowserTaskFormState): void
+}
+
+function ScheduleFields({ form, onChange }: ScheduleFieldsProps) {
+  return (
+    <fieldset className="settings-fieldset">
+      <legend>예약 실행</legend>
+      <label className="inline-check">
+        <input
+          checked={form.scheduleEnabled}
+          type="checkbox"
+          onChange={(event) =>
+            onChange({
+              ...form,
+              scheduleEnabled: event.target.checked,
+            })
+          }
+        />
+        주기적으로 실행
+      </label>
+      <label>
+        예약 방식
+        <select
+          value={form.scheduleMode}
+          onChange={(event) =>
+            onChange({
+              ...form,
+              scheduleMode: event.target.value as TaskScheduleMode,
+            })
+          }
+        >
+          <option value="interval">간격</option>
+          <option value="daily">매일</option>
+          <option value="weekly">매주</option>
+        </select>
+      </label>
+      {form.scheduleMode === 'interval' ? (
+        <label>
+          실행 간격(분)
+          <input
+            max={10080}
+            min={1}
+            type="number"
+            value={form.scheduleIntervalMinutes}
+            onChange={(event) =>
+              onChange({
+                ...form,
+                scheduleIntervalMinutes: Number(event.target.value),
+              })
+            }
+          />
+        </label>
+      ) : null}
+      {form.scheduleMode === 'daily' || form.scheduleMode === 'weekly' ? (
+        <label>
+          실행 시각
+          <input
+            type="time"
+            value={form.scheduleTimeOfDay}
+            onChange={(event) =>
+              onChange({
+                ...form,
+                scheduleTimeOfDay: event.target.value,
+              })
+            }
+          />
+        </label>
+      ) : null}
+      {form.scheduleMode === 'weekly' ? (
+        <label>
+          실행 요일
+          <textarea
+            value={form.scheduleDaysOfWeek}
+            onChange={(event) =>
+              onChange({
+                ...form,
+                scheduleDaysOfWeek: event.target.value,
+              })
+            }
+            placeholder="0=일, 1=월 ... 6=토"
+            rows={3}
+          />
+        </label>
+      ) : null}
+    </fieldset>
+  )
+}
+
 function isSettingsDirty(form: AppSettings, settings: AppSettings): boolean {
   return (
     form.themeMode !== settings.themeMode ||
@@ -1961,6 +2308,7 @@ function isSettingsDirty(form: AppSettings, settings: AppSettings): boolean {
     form.initialUrlInputMode !== settings.initialUrlInputMode ||
     form.taskListDisplayMode !== settings.taskListDisplayMode ||
     form.taskRunEventRetentionLimit !== settings.taskRunEventRetentionLimit ||
+    form.taskRunEventExportLimit !== settings.taskRunEventExportLimit ||
     normalizeSettingsPath(form.browserExecutablePaths.chrome) !==
       normalizeSettingsPath(settings.browserExecutablePaths.chrome) ||
     normalizeSettingsPath(form.browserExecutablePaths.edge) !==
@@ -2225,10 +2573,10 @@ function normalizeLinkedDeviceList(devices: LinkedDevice[]): LinkedDevice[] {
   }))
 }
 
-function filterBrowserTasks(
-  tasks: BrowserTabGroupTask[],
+function filterTasks(
+  tasks: TaskTemplate[],
   category: NavigationCategory,
-): BrowserTabGroupTask[] {
+): TaskTemplate[] {
   switch (category) {
     case 'running':
       return tasks.filter((task) => task.state.status === 'running')
@@ -2239,6 +2587,21 @@ function filterBrowserTasks(
     case 'folders':
     case 'all':
       return tasks
+  }
+}
+
+function getTaskTypeLabel(taskType: TaskType): string {
+  switch (taskType) {
+    case 'browser_tab_group':
+      return '브라우저 탭 그룹'
+    case 'discord_bot':
+      return 'Discord bot'
+    case 'crawler':
+      return 'Crawler'
+    case 'notion_sync':
+      return 'Notion sync'
+    case 'trading_bot':
+      return 'Trading bot'
   }
 }
 
@@ -2313,6 +2676,77 @@ function getTabGroupSnapshotLabel(config: BrowserTabGroupConfig): string {
   return `${config.tabGroupSnapshot.groups.length}개 그룹, ${
     config.tabGroupSnapshot.tabs.length
   }개 탭 · ${formatDate(config.tabGroupSnapshot.capturedAt)}`
+}
+
+function getTaskScheduleLabel(schedule?: TaskSchedule): string {
+  if (!schedule?.enabled) {
+    return '사용 안 함'
+  }
+
+  switch (schedule.mode) {
+    case 'daily':
+      return `매일 ${schedule.timeOfDay ?? '09:00'} · 다음 실행 ${formatDate(
+        schedule.nextRunAt,
+      )}`
+    case 'weekly':
+      return `매주 ${formatDaysOfWeek(
+        schedule.daysOfWeek,
+      )} ${schedule.timeOfDay ?? '09:00'} · 다음 실행 ${formatDate(
+        schedule.nextRunAt,
+      )}`
+    case 'interval':
+      return `${schedule.intervalMinutes}분마다 · 다음 실행 ${formatDate(
+        schedule.nextRunAt,
+      )}`
+  }
+}
+
+function getInitialScheduleRunAt(schedule: TaskSchedule): string {
+  const now = new Date()
+
+  switch (schedule.mode) {
+    case 'daily':
+      return getNextWallClockRunAt(now, schedule.timeOfDay, [
+        0, 1, 2, 3, 4, 5, 6,
+      ])
+    case 'weekly':
+      return getNextWallClockRunAt(now, schedule.timeOfDay, schedule.daysOfWeek)
+    case 'interval':
+      return new Date(
+        now.getTime() + schedule.intervalMinutes * 60_000,
+      ).toISOString()
+  }
+}
+
+function getNextWallClockRunAt(
+  date: Date,
+  timeOfDay = '09:00',
+  daysOfWeek: number[] | undefined,
+): string {
+  const allowedDays =
+    daysOfWeek && daysOfWeek.length > 0
+      ? new Set(daysOfWeek)
+      : new Set([date.getDay()])
+  const [hour, minute] = timeOfDay.split(':').map(Number)
+
+  for (let dayOffset = 0; dayOffset <= 7; dayOffset += 1) {
+    const candidate = new Date(date)
+    candidate.setDate(date.getDate() + dayOffset)
+    candidate.setHours(hour, minute, 0, 0)
+
+    if (candidate <= date || !allowedDays.has(candidate.getDay())) {
+      continue
+    }
+
+    return candidate.toISOString()
+  }
+
+  return new Date(date.getTime() + 24 * 60 * 60_000).toISOString()
+}
+
+function formatDaysOfWeek(daysOfWeek: TaskSchedule['daysOfWeek']): string {
+  const labels = ['일', '월', '화', '수', '목', '금', '토']
+  return daysOfWeek?.map((day) => labels[day]).join(', ') || '요일 미지정'
 }
 
 function formatDate(value?: string): string {

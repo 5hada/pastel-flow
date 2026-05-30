@@ -84,6 +84,22 @@ export type TaskState = {
   lastRunAt?: string
   lastError?: string
   localProfilePath?: string
+  outputPath?: string
+  lastMessage?: string
+}
+
+export type TaskScheduleMode = 'interval' | 'daily' | 'weekly'
+
+export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6
+
+export type TaskSchedule = {
+  enabled: boolean
+  mode: TaskScheduleMode
+  intervalMinutes: number
+  timeOfDay?: string
+  daysOfWeek?: DayOfWeek[]
+  nextRunAt?: string
+  lastTriggeredAt?: string
 }
 
 export type BrowserTabGroupConfig = {
@@ -96,6 +112,27 @@ export type BrowserTabGroupConfig = {
   tabGroupSnapshot?: BrowserTabGroupStateSnapshot
 }
 
+export type CrawlerConfig = {
+  urls: string[]
+  maxBytes: number
+}
+
+export type DiscordBotConfig = {
+  dryRun: boolean
+  commandPrefix?: string
+}
+
+export type NotionSyncConfig = {
+  dryRun: boolean
+  databaseId?: string
+}
+
+export type TradingBotConfig = {
+  dryRun: boolean
+  exchange?: string
+  symbol?: string
+}
+
 export type TaskTemplate<TConfig = unknown, TState = TaskState> = {
   id: string
   name: string
@@ -103,6 +140,7 @@ export type TaskTemplate<TConfig = unknown, TState = TaskState> = {
   config: TConfig
   state: TState
   permissions: DevicePolicy
+  schedule?: TaskSchedule
   createdAt: string
   updatedAt: string
 }

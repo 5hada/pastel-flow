@@ -58,6 +58,7 @@ export function registerTaskIpc(
     const events = await taskRunEventStore.listEvents(taskId)
     return events.filter((event) => visibleTaskIds.has(event.taskId))
   })
+  ipcMain.handle('tasks:prune-events', () => taskRunEventStore.pruneEvents())
   ipcMain.handle('tasks:create', async (_event, input) => {
     const currentDevice = await deviceStore.getCurrentDevice()
 
@@ -122,5 +123,24 @@ export function registerTaskIpc(
     }
 
     return taskRunner.runTask(id)
+  })
+  ipcMain.handle('tasks:stop', async (_event, id) => {
+    const [task, currentDevice, appSettingsSnapshot] = await Promise.all([
+      taskStore.getTask(id),
+      deviceStore.getCurrentDevice(),
+      appSettingsStore.getSnapshot(),
+    ])
+
+    if (
+      !canExecuteTaskOnDevice(
+        task,
+        currentDevice,
+        appSettingsSnapshot.settings.linkedDevices,
+      )
+    ) {
+      throw new Error('이 기기에서는 해당 작업을 중지할 수 없습니다.')
+    }
+
+    return taskRunner.stopTask(id)
   })
 }

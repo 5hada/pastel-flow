@@ -1,4 +1,4 @@
-import { app, BrowserWindow, safeStorage, ipcMain } from "electron";
+import { BrowserWindow, dialog, app, safeStorage, ipcMain } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { randomUUID, randomBytes } from "node:crypto";
@@ -243,7 +243,8 @@ const defaultAppSettings = {
   taskListDisplayMode: "grid",
   browserExecutablePaths: {},
   linkedDevices: [],
-  taskRunEventRetentionLimit: 300
+  taskRunEventRetentionLimit: 300,
+  taskRunEventExportLimit: 50
 };
 function normalizeAppSettings(settings) {
   return {
@@ -258,6 +259,9 @@ function normalizeAppSettings(settings) {
     linkedDevices: normalizeLinkedDevices(settings == null ? void 0 : settings.linkedDevices),
     taskRunEventRetentionLimit: normalizeRetentionLimit(
       settings == null ? void 0 : settings.taskRunEventRetentionLimit
+    ),
+    taskRunEventExportLimit: normalizeEventExportLimit(
+      settings == null ? void 0 : settings.taskRunEventExportLimit
     )
   };
 }
@@ -266,6 +270,12 @@ function normalizeRetentionLimit(value) {
     return defaultAppSettings.taskRunEventRetentionLimit;
   }
   return Math.min(Math.max(Math.round(value), 50), 2e3);
+}
+function normalizeEventExportLimit(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return defaultAppSettings.taskRunEventExportLimit;
+  }
+  return Math.min(Math.max(Math.round(value), 0), 2e3);
 }
 function normalizeBrowserExecutablePaths(browserExecutablePaths) {
   if (!browserExecutablePaths || typeof browserExecutablePaths !== "object") {
@@ -347,10 +357,34 @@ function isNodeError$3(error) {
 function registerSyncIpc(ipcMain2, mockSyncStore) {
   ipcMain2.handle("sync:status", () => mockSyncStore.getStatus());
   ipcMain2.handle("sync:export", () => mockSyncStore.exportSnapshot());
+  ipcMain2.handle("sync:export-file", async (event) => {
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
+    const options = {
+      defaultPath: "pastel-flow-sync.json",
+      filters: [{ name: "JSON", extensions: ["json"] }]
+    };
+    const result = browserWindow ? await dialog.showSaveDialog(browserWindow, options) : await dialog.showSaveDialog(options);
+    if (result.canceled || !result.filePath) {
+      return void 0;
+    }
+    return mockSyncStore.exportSnapshotToPath(result.filePath);
+  });
   ipcMain2.handle(
     "sync:import",
     (_event, snapshot) => mockSyncStore.importSnapshot(snapshot)
   );
+  ipcMain2.handle("sync:import-file", async (event) => {
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
+    const options = {
+      filters: [{ name: "JSON", extensions: ["json"] }],
+      properties: ["openFile"]
+    };
+    const result = browserWindow ? await dialog.showOpenDialog(browserWindow, options) : await dialog.showOpenDialog(options);
+    if (result.canceled || !result.filePaths[0]) {
+      return void 0;
+    }
+    return mockSyncStore.importSnapshotFromPath(result.filePaths[0]);
+  });
 }
 function normalizeSyncExportSnapshot(value) {
   if (!value || typeof value !== "object") {
@@ -385,7 +419,11 @@ function createMockSyncStore({
         deviceStore.getCurrentDevice(),
         appSettingsStore.getSnapshot(),
         taskStore.listTasks(),
-        taskRunEventStore.listEvents()
+        appSettingsStore.getSnapshot().then(
+          (snapshot2) => taskRunEventStore.listEvents(void 0, {
+            limit: snapshot2.settings.taskRunEventExportLimit
+          })
+        )
       ]);
       const snapshot = {
         schemaVersion: 1,
@@ -397,6 +435,12 @@ function createMockSyncStore({
       };
       await mkdir(dataDir, { recursive: true });
       await writeFile(exportPath, `${JSON.stringify(snapshot, null, 2)}
+`, "utf8");
+      return snapshot;
+    },
+    async exportSnapshotToPath(filePath) {
+      const snapshot = await this.exportSnapshot();
+      await writeFile(filePath, `${JSON.stringify(snapshot, null, 2)}
 `, "utf8");
       return snapshot;
     },
@@ -427,6 +471,9 @@ function createMockSyncStore({
         taskRunEventsAdded,
         linkedDevicesMerged: linkedDevices.length - settingsSnapshot.settings.linkedDevices.length
       };
+    },
+    async importSnapshotFromPath(filePath) {
+      return this.importSnapshot(await readSnapshot(filePath));
     }
   };
 }
@@ -466,14 +513,14 @@ function mergeTasks(currentTasks, incomingTasks) {
       continue;
     }
     if (incomingTask.updatedAt > currentTask.updatedAt) {
-      taskMap.set(incomingTask.id, {
-        ...incomingTask,
-        state: {
-          ...incomingTask.state,
-          localProfilePath: currentTask.state.localProfilePath
-        }
-      });
+      taskMap.set(incomingTask.id, mergeTaskFields(currentTask, incomingTask));
       updated += 1;
+    } else {
+      const mergedTask = mergeTaskFields(incomingTask, currentTask);
+      if (JSON.stringify(mergedTask) !== JSON.stringify(currentTask)) {
+        taskMap.set(incomingTask.id, mergedTask);
+        updated += 1;
+      }
     }
   }
   return {
@@ -482,6 +529,36 @@ function mergeTasks(currentTasks, incomingTasks) {
     ),
     created,
     updated
+  };
+}
+function mergeTaskFields(olderTask, newerTask) {
+  return {
+    ...newerTask,
+    config: {
+      ...olderTask.config,
+      ...newerTask.config
+    },
+    permissions: {
+      ...newerTask.permissions,
+      allowedDeviceIds: dedupe$2([
+        ...olderTask.permissions.allowedDeviceIds ?? [],
+        ...newerTask.permissions.allowedDeviceIds ?? []
+      ]),
+      secretRefs: [
+        ...new Map(
+          [
+            ...olderTask.permissions.secretRefs ?? [],
+            ...newerTask.permissions.secretRefs ?? []
+          ].map((secretRef) => [secretRef.id, secretRef])
+        ).values()
+      ]
+    },
+    schedule: newerTask.schedule ?? olderTask.schedule,
+    state: {
+      ...newerTask.state,
+      localProfilePath: olderTask.state.localProfilePath,
+      status: olderTask.state.status === "running" ? olderTask.state.status : newerTask.state.status
+    }
   };
 }
 function mergeLinkedDevices(currentDevices, incomingDevices) {
@@ -496,12 +573,18 @@ function mergeLinkedDevices(currentDevices, incomingDevices) {
 function isNodeError$2(error) {
   return error instanceof Error && "code" in error;
 }
+function dedupe$2(values) {
+  return [...new Set(values)];
+}
 const defaultDevicePolicy = {
   visibility: "local_only",
   execution: "local_only"
 };
 const defaultTaskState = {
   status: "idle"
+};
+const defaultTaskSchedule = {
+  intervalMinutes: 60
 };
 const defaultBrowserRunMode = "dedicated_profile";
 const defaultDynamicTemplateUpdates = false;
@@ -530,6 +613,20 @@ function normalizeDevicePolicy(policy) {
     ) : void 0
   };
 }
+function normalizeTaskSchedule(schedule) {
+  if (!schedule) {
+    return void 0;
+  }
+  return {
+    enabled: schedule.enabled === true,
+    mode: isTaskScheduleMode(schedule.mode) ? schedule.mode : "interval",
+    intervalMinutes: normalizeScheduleInterval(schedule.intervalMinutes),
+    timeOfDay: normalizeTimeOfDay(schedule.timeOfDay),
+    daysOfWeek: normalizeDaysOfWeek(schedule.daysOfWeek),
+    nextRunAt: typeof schedule.nextRunAt === "string" && schedule.nextRunAt.trim() ? schedule.nextRunAt : void 0,
+    lastTriggeredAt: typeof schedule.lastTriggeredAt === "string" && schedule.lastTriggeredAt.trim() ? schedule.lastTriggeredAt : void 0
+  };
+}
 function isBrowserKind(value) {
   return value === "chrome" || value === "edge" || value === "chromium";
 }
@@ -538,6 +635,29 @@ function isRestorePolicy(value) {
 }
 function isBrowserRunMode(value) {
   return value === "dedicated_profile" || value === "extension_controlled" || value === "default_browser_deeplink";
+}
+function normalizeScheduleInterval(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return defaultTaskSchedule.intervalMinutes;
+  }
+  return Math.min(Math.max(Math.round(value), 1), 10080);
+}
+function normalizeTimeOfDay(value) {
+  if (typeof value !== "string") {
+    return void 0;
+  }
+  const trimmedValue = value.trim();
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(trimmedValue) ? trimmedValue : void 0;
+}
+function normalizeDaysOfWeek(value) {
+  if (!Array.isArray(value)) {
+    return void 0;
+  }
+  const days = value.map((day) => typeof day === "number" ? Math.round(day) : -1).filter((day) => day >= 0 && day <= 6);
+  return days.length > 0 ? [...new Set(days)] : void 0;
+}
+function isTaskScheduleMode(value) {
+  return value === "interval" || value === "daily" || value === "weekly";
 }
 function isDeviceVisibilityPolicy(value) {
   return value === "all_devices" || value === "trusted_devices" || value === "specific_devices" || value === "local_only";
@@ -809,6 +929,7 @@ async function pathExists(value) {
     return false;
   }
 }
+const runningBrowserProcesses = /* @__PURE__ */ new Map();
 const browserTabGroupAdapter = {
   type: "browser_tab_group",
   validateConfig(config) {
@@ -820,9 +941,16 @@ const browserTabGroupAdapter = {
   async run({ appSettings, dataDir, task, updateConfig, updateState }) {
     const config = normalizeBrowserTabGroupConfig(task.config);
     if (config.runMode === "default_browser_deeplink") {
-      throw new Error(
-        `${config.runMode} 실행 방식은 아직 지원하지 않습니다.`
-      );
+      await openDefaultBrowserUrls(config.initialUrls);
+      return {
+        state: {
+          ...task.state,
+          status: "idle",
+          lastRunAt: (/* @__PURE__ */ new Date()).toISOString(),
+          lastError: void 0
+        },
+        message: "기본 브라우저로 초기 URL을 열었습니다."
+      };
     }
     const localProfilePath = path.join(
       dataDir,
@@ -848,12 +976,14 @@ const browserTabGroupAdapter = {
       ] : [],
       ...config.initialUrls
     ]);
+    runningBrowserProcesses.set(task.id, browserProcess);
     const browserStateSnapshotter = remoteDebuggingPort ? startBrowserStateSnapshotter(
       remoteDebuggingPort,
       shouldLoadExtensionBridge
     ) : null;
     browserProcess.once("exit", (code, signal) => {
       void (async () => {
+        runningBrowserProcesses.delete(task.id);
         const snapshot = browserStateSnapshotter == null ? void 0 : browserStateSnapshotter.stop();
         const openUrls = (snapshot == null ? void 0 : snapshot.urls) ?? [];
         const nextState = getBrowserExitState(
@@ -883,6 +1013,14 @@ const browserTabGroupAdapter = {
         config.runMode
       )}로 실행했습니다.`
     };
+  },
+  async stop(taskId) {
+    const browserProcess = runningBrowserProcesses.get(taskId);
+    if (!browserProcess || browserProcess.killed) {
+      throw new Error("실행 중인 브라우저 프로세스를 찾지 못했습니다.");
+    }
+    browserProcess.kill();
+    runningBrowserProcesses.delete(taskId);
   }
 };
 const extensionManifest = {
@@ -916,6 +1054,27 @@ async function launchBrowser(executablePath, args) {
   });
   browserProcess.unref();
   return browserProcess;
+}
+async function openDefaultBrowserUrls(urls) {
+  const targetUrls = urls.filter(isTemplateUrl);
+  if (targetUrls.length === 0) {
+    throw new Error("기본 브라우저 연결 실행에는 하나 이상의 URL이 필요합니다.");
+  }
+  await Promise.all(targetUrls.map(openDefaultBrowserUrl));
+}
+async function openDefaultBrowserUrl(url) {
+  const command = process.platform === "win32" ? "cmd" : process.platform === "darwin" ? "open" : "xdg-open";
+  const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
+  const browserProcess = spawn(command, args, {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true
+  });
+  await new Promise((resolve, reject) => {
+    browserProcess.once("error", reject);
+    browserProcess.once("spawn", resolve);
+  });
+  browserProcess.unref();
 }
 function getBrowserExitState(displayName, code, signal) {
   if (signal) {
@@ -1195,6 +1354,140 @@ function isTemplateUrl(value) {
 function dedupe(values) {
   return [...new Set(values)];
 }
+const crawlerAdapter = {
+  type: "crawler",
+  validateConfig(config) {
+    const normalizedConfig = normalizeCrawlerConfig(config);
+    if (normalizedConfig.urls.length === 0) {
+      throw new Error("Crawler tasks require at least one URL.");
+    }
+  },
+  async run({ dataDir, task }) {
+    const config = normalizeCrawlerConfig(task.config);
+    const outputDirectory = path.join(dataDir, "crawler-results");
+    const outputPath = path.join(
+      outputDirectory,
+      `${task.id}-${(/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-")}.json`
+    );
+    const results = await Promise.all(
+      config.urls.map((url) => fetchCrawlerUrl(url, config.maxBytes))
+    );
+    await mkdir(outputDirectory, { recursive: true });
+    await writeFile(
+      outputPath,
+      `${JSON.stringify(
+        {
+          taskId: task.id,
+          capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          results
+        },
+        null,
+        2
+      )}
+`,
+      "utf8"
+    );
+    return {
+      state: {
+        ...task.state,
+        status: results.some((result) => result.status === "failed") ? "failed" : "idle",
+        lastRunAt: (/* @__PURE__ */ new Date()).toISOString(),
+        lastError: results.some((result) => result.status === "failed") ? "일부 URL 수집에 실패했습니다." : void 0,
+        lastMessage: `${results.length}개 URL을 수집했습니다.`,
+        outputPath
+      },
+      message: `${results.length}개 URL을 수집했습니다.`
+    };
+  }
+};
+function normalizeCrawlerConfig(config) {
+  return {
+    urls: Array.isArray(config.urls) ? config.urls.map((url) => typeof url === "string" ? url.trim() : "").filter(Boolean) : [],
+    maxBytes: typeof config.maxBytes === "number" && Number.isFinite(config.maxBytes) ? Math.min(Math.max(Math.round(config.maxBytes), 1024), 5e5) : 5e4
+  };
+}
+async function fetchCrawlerUrl(url, maxBytes) {
+  try {
+    const response = await fetch(url);
+    const text = (await response.text()).slice(0, maxBytes);
+    return {
+      url,
+      status: response.ok ? "captured" : "failed",
+      statusCode: response.status,
+      title: getTitle(text),
+      bodyPreview: stripHtml(text).slice(0, 1e3),
+      error: response.ok ? void 0 : response.statusText
+    };
+  } catch (error) {
+    return {
+      url,
+      status: "failed",
+      error: error instanceof Error ? error.message : "Unknown crawler error"
+    };
+  }
+}
+function getTitle(html) {
+  var _a;
+  const match = html.match(/<title[^>]*>([^<]*)<\/title>/i);
+  return ((_a = match == null ? void 0 : match[1]) == null ? void 0 : _a.trim()) || void 0;
+}
+function stripHtml(html) {
+  return html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+const discordBotAdapter = {
+  type: "discord_bot",
+  validateConfig(config) {
+    if (config.dryRun !== true) {
+      throw new Error("Discord bot adapter는 현재 dry-run 실행만 지원합니다.");
+    }
+  },
+  async run({ task }) {
+    return createDryRunResult(
+      task.state,
+      `Discord bot dry-run을 완료했습니다. prefix=${task.config.commandPrefix ?? "없음"}`
+    );
+  }
+};
+const notionSyncAdapter = {
+  type: "notion_sync",
+  validateConfig(config) {
+    if (config.dryRun !== true) {
+      throw new Error("Notion sync adapter는 현재 dry-run 실행만 지원합니다.");
+    }
+  },
+  async run({ task }) {
+    return createDryRunResult(
+      task.state,
+      `Notion sync dry-run을 완료했습니다. database=${task.config.databaseId ?? "없음"}`
+    );
+  }
+};
+const tradingBotAdapter = {
+  type: "trading_bot",
+  validateConfig(config) {
+    if (config.dryRun !== true) {
+      throw new Error("Trading bot adapter는 dry-run=false 실행을 거부합니다.");
+    }
+  },
+  async run({ task }) {
+    return createDryRunResult(
+      task.state,
+      `Trading bot dry-run을 완료했습니다. ${task.config.exchange ?? "exchange 없음"} ${task.config.symbol ?? "symbol 없음"}`
+    );
+  }
+};
+function createDryRunResult(state, message) {
+  return {
+    state: {
+      ...state,
+      status: "idle",
+      lastRunAt: (/* @__PURE__ */ new Date()).toISOString(),
+      lastError: void 0,
+      lastMessage: message
+    },
+    message
+  };
+}
 function createTaskAdapterRegistry(adapters) {
   const adaptersByType = /* @__PURE__ */ new Map();
   for (const adapter of adapters) {
@@ -1246,6 +1539,7 @@ function registerTaskIpc(ipcMain2, taskStore, taskRunner, taskRunEventStore, app
     const events = await taskRunEventStore.listEvents(taskId);
     return events.filter((event) => visibleTaskIds.has(event.taskId));
   });
+  ipcMain2.handle("tasks:prune-events", () => taskRunEventStore.pruneEvents());
   ipcMain2.handle("tasks:create", async (_event, input) => {
     const currentDevice = await deviceStore.getCurrentDevice();
     return taskStore.createTask({
@@ -1297,6 +1591,21 @@ function registerTaskIpc(ipcMain2, taskStore, taskRunner, taskRunEventStore, app
       throw new Error("이 기기에서는 해당 작업을 실행할 수 없습니다.");
     }
     return taskRunner.runTask(id);
+  });
+  ipcMain2.handle("tasks:stop", async (_event, id) => {
+    const [task, currentDevice, appSettingsSnapshot] = await Promise.all([
+      taskStore.getTask(id),
+      deviceStore.getCurrentDevice(),
+      appSettingsStore.getSnapshot()
+    ]);
+    if (!canExecuteTaskOnDevice(
+      task,
+      currentDevice,
+      appSettingsSnapshot.settings.linkedDevices
+    )) {
+      throw new Error("이 기기에서는 해당 작업을 중지할 수 없습니다.");
+    }
+    return taskRunner.stopTask(id);
   });
 }
 function createTaskRunner({
@@ -1396,6 +1705,48 @@ function createTaskRunner({
         onTaskUpdated == null ? void 0 : onTaskUpdated(updatedTask);
         return updatedTask;
       }
+    },
+    async stopTask(id) {
+      const task = await taskStore.getTask(id);
+      const adapter = adapterRegistry.getAdapter(task.type);
+      if (!adapter.stop) {
+        throw new Error("이 작업 타입은 중지를 지원하지 않습니다.");
+      }
+      try {
+        await adapter.stop(task.id);
+        const updatedTask = await taskStore.updateTask(task.id, {
+          state: {
+            ...task.state,
+            status: "idle",
+            lastError: void 0
+          }
+        });
+        await taskRunEventStore.appendEvent({
+          taskId: task.id,
+          deviceId,
+          status: "idle",
+          message: "작업 중지를 요청했습니다."
+        });
+        onTaskUpdated == null ? void 0 : onTaskUpdated(updatedTask);
+        return updatedTask;
+      } catch (error) {
+        const message = getErrorMessage(error);
+        const updatedTask = await taskStore.updateTask(task.id, {
+          state: {
+            ...task.state,
+            status: "failed",
+            lastError: message
+          }
+        });
+        await taskRunEventStore.appendEvent({
+          taskId: task.id,
+          deviceId,
+          status: "failed",
+          message
+        });
+        onTaskUpdated == null ? void 0 : onTaskUpdated(updatedTask);
+        return updatedTask;
+      }
     }
   };
 }
@@ -1404,6 +1755,97 @@ function getErrorMessage(error) {
     return error.message;
   }
   return "알 수 없는 실행 오류가 발생했습니다.";
+}
+function createTaskScheduler({
+  appSettingsStore,
+  deviceStore,
+  taskRunner,
+  taskStore
+}) {
+  let interval = null;
+  let isTicking = false;
+  async function tick() {
+    if (isTicking) {
+      return;
+    }
+    isTicking = true;
+    try {
+      const [tasks, currentDevice, appSettingsSnapshot] = await Promise.all([
+        taskStore.listTasks(),
+        deviceStore.getCurrentDevice(),
+        appSettingsStore.getSnapshot()
+      ]);
+      const now = /* @__PURE__ */ new Date();
+      for (const task of tasks) {
+        const schedule = normalizeTaskSchedule(task.schedule);
+        if (!(schedule == null ? void 0 : schedule.enabled) || task.state.status === "running" || !canExecuteTaskOnDevice(
+          task,
+          currentDevice,
+          appSettingsSnapshot.settings.linkedDevices
+        )) {
+          continue;
+        }
+        const nextRunAt = schedule.nextRunAt ? new Date(schedule.nextRunAt) : new Date(task.updatedAt);
+        if (Number.isNaN(nextRunAt.getTime()) || nextRunAt > now) {
+          continue;
+        }
+        await taskStore.updateTask(task.id, {
+          schedule: {
+            ...schedule,
+            lastTriggeredAt: now.toISOString(),
+            nextRunAt: getNextRunAt(now, schedule)
+          }
+        });
+        void taskRunner.runTask(task.id);
+      }
+    } finally {
+      isTicking = false;
+    }
+  }
+  return {
+    start() {
+      if (interval) {
+        return;
+      }
+      interval = setInterval(() => {
+        void tick();
+      }, 6e4);
+      void tick();
+    },
+    stop() {
+      if (!interval) {
+        return;
+      }
+      clearInterval(interval);
+      interval = null;
+    }
+  };
+}
+function getNextRunAt(date, schedule) {
+  switch (schedule.mode) {
+    case "daily":
+      return getNextWallClockRunAt(date, schedule.timeOfDay, [0, 1, 2, 3, 4, 5, 6]);
+    case "weekly":
+      return getNextWallClockRunAt(date, schedule.timeOfDay, schedule.daysOfWeek);
+    case "interval":
+      return new Date(
+        date.getTime() + schedule.intervalMinutes * 6e4
+      ).toISOString();
+  }
+}
+function getNextWallClockRunAt(date, timeOfDay = "09:00", daysOfWeek) {
+  const allowedDays = daysOfWeek && daysOfWeek.length > 0 ? new Set(daysOfWeek) : /* @__PURE__ */ new Set([date.getDay()]);
+  const [hour, minute] = timeOfDay.split(":").map(Number);
+  for (let dayOffset = 0; dayOffset <= 7; dayOffset += 1) {
+    const candidate = new Date(date);
+    candidate.setDate(date.getDate() + dayOffset);
+    candidate.setHours(hour, minute, 0, 0);
+    if (candidate <= date || !allowedDays.has(candidate.getDay())) {
+      continue;
+    }
+    return candidate.toISOString();
+  }
+  return new Date(date.getTime() + 24 * 60 * 6e4).toISOString();
 }
 function createTaskRunEventStore({
   dataDir,
@@ -1434,9 +1876,9 @@ function createTaskRunEventStore({
     );
   }
   return {
-    async listEvents(taskId) {
+    async listEvents(taskId, options) {
       const eventFile = await readEventFile();
-      return eventFile.events.filter((event) => !taskId || event.taskId === taskId).sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, 50);
+      return eventFile.events.filter((event) => !taskId || event.taskId === taskId).sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, (options == null ? void 0 : options.limit) ?? 50);
     },
     async appendEvent(input) {
       const event = {
@@ -1466,6 +1908,18 @@ function createTaskRunEventStore({
         events: [...eventFile.events, ...incomingEvents].sort((left, right) => left.createdAt.localeCompare(right.createdAt)).slice(-retentionLimit)
       });
       return incomingEvents.length;
+    },
+    async pruneEvents() {
+      const eventFile = await readEventFile();
+      const retentionLimit = await getRetentionLimit();
+      const prunedEvents = eventFile.events.sort((left, right) => left.createdAt.localeCompare(right.createdAt)).slice(-retentionLimit);
+      if (prunedEvents.length === eventFile.events.length) {
+        return 0;
+      }
+      await writeEventFile({
+        events: prunedEvents
+      });
+      return eventFile.events.length - prunedEvents.length;
     }
   };
 }
@@ -1521,6 +1975,7 @@ function createTaskStore({ dataDir }) {
         permissions: normalizeDevicePolicy(
           input.permissions ?? defaultDevicePolicy
         ),
+        schedule: normalizeTaskSchedule(input.schedule),
         createdAt: now,
         updatedAt: now
       };
@@ -1543,6 +1998,7 @@ function createTaskStore({ dataDir }) {
         ...input,
         name: ((_a = input.name) == null ? void 0 : _a.trim()) ?? currentTask.name,
         permissions: input.permissions ? normalizeDevicePolicy(input.permissions) : currentTask.permissions,
+        schedule: input.schedule === void 0 ? currentTask.schedule : normalizeTaskSchedule(input.schedule),
         updatedAt: (/* @__PURE__ */ new Date()).toISOString()
       };
       const tasks = [...taskFile.tasks];
@@ -1555,7 +2011,8 @@ function createTaskStore({ dataDir }) {
         tasks: tasks.map((task) => ({
           ...task,
           name: task.name.trim(),
-          permissions: normalizeDevicePolicy(task.permissions)
+          permissions: normalizeDevicePolicy(task.permissions),
+          schedule: normalizeTaskSchedule(task.schedule)
         }))
       });
     },
@@ -1631,7 +2088,13 @@ app.whenReady().then(async () => {
       return safeStorage.encryptString(value).toString("base64");
     }
   });
-  const adapterRegistry = createTaskAdapterRegistry([browserTabGroupAdapter]);
+  const adapterRegistry = createTaskAdapterRegistry([
+    browserTabGroupAdapter,
+    crawlerAdapter,
+    discordBotAdapter,
+    notionSyncAdapter,
+    tradingBotAdapter
+  ]);
   const mockSyncStore = createMockSyncStore({
     dataDir,
     appSettingsStore,
@@ -1674,6 +2137,12 @@ app.whenReady().then(async () => {
     appSettingsStore,
     deviceStore
   );
+  createTaskScheduler({
+    appSettingsStore,
+    deviceStore,
+    taskRunner,
+    taskStore
+  }).start();
   createWindow();
 });
 export {

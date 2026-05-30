@@ -18,6 +18,7 @@ export type AppSettings = {
   browserExecutablePaths: BrowserExecutablePaths
   linkedDevices: LinkedDevice[]
   taskRunEventRetentionLimit: number
+  taskRunEventExportLimit: number
 }
 
 export type AppSettingsSnapshot = {
@@ -35,6 +36,7 @@ export const defaultAppSettings: AppSettings = {
   browserExecutablePaths: {},
   linkedDevices: [],
   taskRunEventRetentionLimit: 300,
+  taskRunEventExportLimit: 50,
 }
 
 export function normalizeAppSettings(
@@ -66,6 +68,9 @@ export function normalizeAppSettings(
     taskRunEventRetentionLimit: normalizeRetentionLimit(
       settings?.taskRunEventRetentionLimit,
     ),
+    taskRunEventExportLimit: normalizeEventExportLimit(
+      settings?.taskRunEventExportLimit,
+    ),
   }
 }
 
@@ -75,6 +80,14 @@ function normalizeRetentionLimit(value: unknown): number {
   }
 
   return Math.min(Math.max(Math.round(value), 50), 2000)
+}
+
+function normalizeEventExportLimit(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return defaultAppSettings.taskRunEventExportLimit
+  }
+
+  return Math.min(Math.max(Math.round(value), 0), 2000)
 }
 
 function normalizeBrowserExecutablePaths(

@@ -7,9 +7,14 @@ import type {
 } from '../../../src/shared/taskRunEvents'
 
 export type TaskRunEventStore = {
-  listEvents(taskId?: string): Promise<TaskRunEvent[]>
+  listEvents(taskId?: string, options?: ListTaskRunEventsOptions): Promise<TaskRunEvent[]>
   appendEvent(input: CreateTaskRunEventInput): Promise<TaskRunEvent>
   importEvents(events: TaskRunEvent[]): Promise<number>
+  pruneEvents(): Promise<number>
+}
+
+export type ListTaskRunEventsOptions = {
+  limit?: number
 }
 
 export type TaskRunEventStoreOptions = {
@@ -54,12 +59,12 @@ export function createTaskRunEventStore({
   }
 
   return {
-    async listEvents(taskId) {
+    async listEvents(taskId, options) {
       const eventFile = await readEventFile()
       return eventFile.events
         .filter((event) => !taskId || event.taskId === taskId)
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-        .slice(0, 50)
+        .slice(0, options?.limit ?? 50)
     },
 
     async appendEvent(input) {
@@ -97,6 +102,24 @@ export function createTaskRunEventStore({
       })
 
       return incomingEvents.length
+    },
+
+    async pruneEvents() {
+      const eventFile = await readEventFile()
+      const retentionLimit = await getRetentionLimit()
+      const prunedEvents = eventFile.events
+        .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+        .slice(-retentionLimit)
+
+      if (prunedEvents.length === eventFile.events.length) {
+        return 0
+      }
+
+      await writeEventFile({
+        events: prunedEvents,
+      })
+
+      return eventFile.events.length - prunedEvents.length
     },
   }
 }

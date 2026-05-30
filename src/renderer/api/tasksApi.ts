@@ -16,6 +16,7 @@ import type {
 import type {
   BrowserTabGroupConfig,
   DevicePolicy,
+  TaskSchedule,
   TaskState,
   TaskTemplate,
   TaskType,
@@ -26,6 +27,7 @@ export type CreateTaskInput<TConfig = unknown> = {
   type: TaskType
   config: TConfig
   permissions?: DevicePolicy
+  schedule?: TaskSchedule
   state?: TaskState
 }
 
@@ -33,6 +35,7 @@ export type UpdateTaskInput<TConfig = unknown> = Partial<{
   name: string
   config: TConfig
   permissions: DevicePolicy
+  schedule: TaskSchedule
   state: TaskState
 }>
 
@@ -50,7 +53,9 @@ export type TasksApi = {
   ): Promise<TaskTemplate<TConfig>>
   delete(id: string): Promise<void>
   run(id: string): Promise<TaskTemplate>
+  stop(id: string): Promise<TaskTemplate>
   listEvents(taskId?: string): Promise<TaskRunEvent[]>
+  pruneEvents(): Promise<number>
   onChanged(listener: (task: TaskTemplate) => void): () => void
 }
 
@@ -69,7 +74,9 @@ export type SecretsApi = {
 export type SyncApi = {
   status(): Promise<SyncStatus>
   export(): Promise<SyncExportSnapshot>
+  exportFile(): Promise<SyncExportSnapshot | undefined>
   import(snapshot?: SyncExportSnapshot): Promise<SyncImportResult>
+  importFile(): Promise<SyncImportResult | undefined>
 }
 
 export type PastelFlowApi = {

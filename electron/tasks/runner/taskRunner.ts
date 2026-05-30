@@ -6,6 +6,7 @@ import type { TaskStore } from '../store/taskStore'
 
 export type TaskRunner = {
   runTask(id: string): Promise<TaskTemplate>
+  stopTask(id: string): Promise<TaskTemplate>
 }
 
 export type TaskRunnerOptions = {
@@ -115,6 +116,52 @@ export function createTaskRunner({
           message,
         })
         resolveRunStateSaved()
+        onTaskUpdated?.(updatedTask)
+
+        return updatedTask
+      }
+    },
+    async stopTask(id) {
+      const task = await taskStore.getTask(id)
+      const adapter = adapterRegistry.getAdapter(task.type)
+
+      if (!adapter.stop) {
+        throw new Error('이 작업 타입은 중지를 지원하지 않습니다.')
+      }
+
+      try {
+        await adapter.stop(task.id)
+        const updatedTask = await taskStore.updateTask(task.id, {
+          state: {
+            ...task.state,
+            status: 'idle',
+            lastError: undefined,
+          },
+        })
+        await taskRunEventStore.appendEvent({
+          taskId: task.id,
+          deviceId,
+          status: 'idle',
+          message: '작업 중지를 요청했습니다.',
+        })
+        onTaskUpdated?.(updatedTask)
+
+        return updatedTask
+      } catch (error) {
+        const message = getErrorMessage(error)
+        const updatedTask = await taskStore.updateTask(task.id, {
+          state: {
+            ...task.state,
+            status: 'failed',
+            lastError: message,
+          },
+        })
+        await taskRunEventStore.appendEvent({
+          taskId: task.id,
+          deviceId,
+          status: 'failed',
+          message,
+        })
         onTaskUpdated?.(updatedTask)
 
         return updatedTask

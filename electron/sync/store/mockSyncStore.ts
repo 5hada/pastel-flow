@@ -16,7 +16,9 @@ import type { TaskTemplate } from '../../../src/shared/tasks'
 export type MockSyncStore = {
   getStatus(): Promise<SyncStatus>
   exportSnapshot(): Promise<SyncExportSnapshot>
+  exportSnapshotToPath(filePath: string): Promise<SyncExportSnapshot>
   importSnapshot(snapshot?: SyncExportSnapshot): Promise<SyncImportResult>
+  importSnapshotFromPath(filePath: string): Promise<SyncImportResult>
 }
 
 export type MockSyncStoreOptions = {
@@ -50,7 +52,13 @@ export function createMockSyncStore({
           deviceStore.getCurrentDevice(),
           appSettingsStore.getSnapshot(),
           taskStore.listTasks(),
-          taskRunEventStore.listEvents(),
+          appSettingsStore
+            .getSnapshot()
+            .then((snapshot) =>
+              taskRunEventStore.listEvents(undefined, {
+                limit: snapshot.settings.taskRunEventExportLimit,
+              }),
+            ),
         ])
       const snapshot: SyncExportSnapshot = {
         schemaVersion: 1,
@@ -63,6 +71,13 @@ export function createMockSyncStore({
 
       await mkdir(dataDir, { recursive: true })
       await writeFile(exportPath, `${JSON.stringify(snapshot, null, 2)}\n`, 'utf8')
+
+      return snapshot
+    },
+
+    async exportSnapshotToPath(filePath) {
+      const snapshot = await this.exportSnapshot()
+      await writeFile(filePath, `${JSON.stringify(snapshot, null, 2)}\n`, 'utf8')
 
       return snapshot
     },
@@ -97,6 +112,10 @@ export function createMockSyncStore({
         linkedDevicesMerged:
           linkedDevices.length - settingsSnapshot.settings.linkedDevices.length,
       }
+    },
+
+    async importSnapshotFromPath(filePath) {
+      return this.importSnapshot(await readSnapshot(filePath))
     },
   }
 }
@@ -151,14 +170,14 @@ function mergeTasks(
     }
 
     if (incomingTask.updatedAt > currentTask.updatedAt) {
-      taskMap.set(incomingTask.id, {
-        ...incomingTask,
-        state: {
-          ...incomingTask.state,
-          localProfilePath: currentTask.state.localProfilePath,
-        },
-      })
+      taskMap.set(incomingTask.id, mergeTaskFields(currentTask, incomingTask))
       updated += 1
+    } else {
+      const mergedTask = mergeTaskFields(incomingTask, currentTask)
+      if (JSON.stringify(mergedTask) !== JSON.stringify(currentTask)) {
+        taskMap.set(incomingTask.id, mergedTask)
+        updated += 1
+      }
     }
   }
 
@@ -168,6 +187,43 @@ function mergeTasks(
     ),
     created,
     updated,
+  }
+}
+
+function mergeTaskFields(
+  olderTask: TaskTemplate,
+  newerTask: TaskTemplate,
+): TaskTemplate {
+  return {
+    ...newerTask,
+    config: {
+      ...(olderTask.config as Record<string, unknown>),
+      ...(newerTask.config as Record<string, unknown>),
+    },
+    permissions: {
+      ...newerTask.permissions,
+      allowedDeviceIds: dedupe([
+        ...(olderTask.permissions.allowedDeviceIds ?? []),
+        ...(newerTask.permissions.allowedDeviceIds ?? []),
+      ]),
+      secretRefs: [
+        ...new Map(
+          [
+            ...(olderTask.permissions.secretRefs ?? []),
+            ...(newerTask.permissions.secretRefs ?? []),
+          ].map((secretRef) => [secretRef.id, secretRef]),
+        ).values(),
+      ],
+    },
+    schedule: newerTask.schedule ?? olderTask.schedule,
+    state: {
+      ...newerTask.state,
+      localProfilePath: olderTask.state.localProfilePath,
+      status:
+        olderTask.state.status === 'running'
+          ? olderTask.state.status
+          : newerTask.state.status,
+    },
   }
 }
 
@@ -188,4 +244,8 @@ function mergeLinkedDevices(
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && 'code' in error
+}
+
+function dedupe(values: string[]): string[] {
+  return [...new Set(values)]
 }

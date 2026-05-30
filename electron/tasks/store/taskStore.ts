@@ -5,7 +5,9 @@ import {
   defaultDevicePolicy,
   defaultTaskState,
   normalizeDevicePolicy,
+  normalizeTaskSchedule,
   type DevicePolicy,
+  type TaskSchedule,
   type TaskState,
   type TaskTemplate,
 } from '../../../src/shared/tasks'
@@ -15,11 +17,15 @@ export type CreateTaskInput<TConfig = unknown> = {
   type: TaskTemplate<TConfig>['type']
   config: TConfig
   permissions?: DevicePolicy
+  schedule?: TaskSchedule
   state?: TaskState
 }
 
 export type UpdateTaskInput<TConfig = unknown> = Partial<
-  Pick<TaskTemplate<TConfig, TaskState>, 'name' | 'config' | 'state' | 'permissions'>
+  Pick<
+    TaskTemplate<TConfig, TaskState>,
+    'name' | 'config' | 'state' | 'permissions' | 'schedule'
+  >
 >
 
 export type TaskStore = {
@@ -96,6 +102,7 @@ export function createTaskStore({ dataDir }: TaskStoreOptions): TaskStore {
         permissions: normalizeDevicePolicy(
           input.permissions ?? defaultDevicePolicy,
         ),
+        schedule: normalizeTaskSchedule(input.schedule),
         createdAt: now,
         updatedAt: now,
       }
@@ -124,6 +131,10 @@ export function createTaskStore({ dataDir }: TaskStoreOptions): TaskStore {
         permissions: input.permissions
           ? normalizeDevicePolicy(input.permissions)
           : currentTask.permissions,
+        schedule:
+          input.schedule === undefined
+            ? currentTask.schedule
+            : normalizeTaskSchedule(input.schedule),
         updatedAt: new Date().toISOString(),
       }
 
@@ -140,6 +151,7 @@ export function createTaskStore({ dataDir }: TaskStoreOptions): TaskStore {
           ...task,
           name: task.name.trim(),
           permissions: normalizeDevicePolicy(task.permissions),
+          schedule: normalizeTaskSchedule(task.schedule),
         })),
       })
     },

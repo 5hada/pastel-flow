@@ -200,7 +200,6 @@ function App() {
               onConfirmDelete={handleDeleteTask}
               onConfirmDeleteWorkflow={handleDeleteWorkflow}
               onDeleteRequest={setConfirmDeleteTaskId}
-              onSelectWorkflow={setSelectedWorkflowId}
               onSubmit={handleUpdateTask}
               onCreateWorkflow={handleCreateWorkflow}
               onUpdateWorkflow={handleUpdateWorkflow}

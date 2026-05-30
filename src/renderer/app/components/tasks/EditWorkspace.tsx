@@ -44,7 +44,6 @@ export type EditWorkspaceProps = {
   onConfirmDelete(taskId: string): Promise<void>
   onConfirmDeleteWorkflow(workflowId: string): Promise<void>
   onDeleteRequest(taskId: string | null): void
-  onSelectWorkflow(workflowId: string | null): void
   onSubmit(event: FormEvent<HTMLFormElement>): void
   onUpdateWorkflow(
     workflowId: string,
@@ -63,7 +62,6 @@ export function EditWorkspace({
   onConfirmDeleteWorkflow,
   onCreateWorkflow,
   onDeleteRequest,
-  onSelectWorkflow,
   onSubmit,
   onUpdateWorkflow,
   secrets,
@@ -92,13 +90,30 @@ export function EditWorkspace({
   const isConfirmingDelete = confirmDeleteTaskId === selectedTask?.id
   const isConfirmingWorkflowDelete = confirmDeleteTaskId === selectedWorkflow?.id
 
+  if (!selectedWorkflow) {
+    return (
+      <section className="mode-panel workflow-empty-panel" aria-label="Workflow 선택">
+        <div className="empty-state empty-state-action">
+          <div>
+            <p className="eyebrow">Workflows</p>
+            <h2>Workflow를 선택하세요</h2>
+          </div>
+          <p>좌측 패널에서 Workflow를 선택하거나 새 Workflow를 만드세요.</p>
+          <button type="button" onClick={() => void onCreateWorkflow()}>
+            새 Workflow
+          </button>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section aria-label="기존 작업 수정">
       <section className="mode-panel workflow-builder" aria-label="Workflow 작성">
         <div className="panel-heading">
           <div>
             <p className="eyebrow">Workflows</p>
-            <h2>{selectedWorkflow?.name ?? '새 Workflow'}</h2>
+            <h2>{selectedWorkflow.name}</h2>
           </div>
           <button
             aria-label="새 Workflow"
@@ -112,7 +127,7 @@ export function EditWorkspace({
             <div className="section-heading compact-heading">
               <div>
                 <p className="eyebrow">Action order</p>
-                <h3>{selectedWorkflow?.name ?? '새 Workflow'}</h3>
+                <h3>{selectedWorkflow.name}</h3>
               </div>
             </div>
             <WorkflowActionList
@@ -169,39 +184,37 @@ export function EditWorkspace({
                 })
               }}
             />
-            {selectedWorkflow ? (
-              <section className="danger-zone" aria-label="Workflow 삭제">
-                {isConfirmingWorkflowDelete ? (
-                  <>
-                    <p>이 Workflow를 삭제할까요? 연결된 Action은 유지됩니다.</p>
-                    <div className="form-actions">
-                      <button
-                        className="danger-button"
-                        type="button"
-                        onClick={() => void onConfirmDeleteWorkflow(selectedWorkflow.id)}
-                      >
-                        삭제 확정
-                      </button>
-                      <button
-                        className="ghost-button"
-                        type="button"
-                        onClick={() => onDeleteRequest(null)}
-                      >
-                        취소
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <button
-                    className="danger-button"
-                    type="button"
-                    onClick={() => onDeleteRequest(selectedWorkflow.id)}
-                  >
-                    Workflow 삭제
-                  </button>
-                )}
-              </section>
-            ) : null}
+            <section className="danger-zone" aria-label="Workflow 삭제">
+              {isConfirmingWorkflowDelete ? (
+                <>
+                  <p>이 Workflow를 삭제할까요? 연결된 Action은 유지됩니다.</p>
+                  <div className="form-actions">
+                    <button
+                      className="danger-button"
+                      type="button"
+                      onClick={() => void onConfirmDeleteWorkflow(selectedWorkflow.id)}
+                    >
+                      삭제 확정
+                    </button>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      onClick={() => onDeleteRequest(null)}
+                    >
+                      취소
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <button
+                  className="danger-button"
+                  type="button"
+                  onClick={() => onDeleteRequest(selectedWorkflow.id)}
+                >
+                  Workflow 삭제
+                </button>
+              )}
+            </section>
         </div>
       </section>
       {selectedTask ? (
@@ -306,12 +319,7 @@ export function EditWorkspace({
       </section>
       ) : (
         <section className="mode-panel">
-          <div className="empty-state empty-state-action">
-            <p>좌측 패널에서 Workflow를 선택하거나 새 Workflow를 만드세요.</p>
-            <button type="button" onClick={() => onSelectWorkflow(null)}>
-              +
-            </button>
-          </div>
+          <p className="empty-state">이 Workflow에 연결된 legacy 작업이 없습니다.</p>
         </section>
       )}
     </section>

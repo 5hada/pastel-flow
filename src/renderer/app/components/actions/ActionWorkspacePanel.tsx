@@ -110,7 +110,6 @@ export function WorkflowActionList({
     return (
       <div className="empty-state-action">
         <p className="empty-state">선택된 Workflow가 없습니다.</p>
-        <button type="button">+</button>
       </div>
     )
   }

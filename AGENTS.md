@@ -17,7 +17,7 @@ Never modify.
 
 - 각 파일은 하나의 명확한 책임만을 가지는 단일 책임 원칙을 철저히 준수
 - 신규 구현 시 별도 모듈 분리를 우선적으로 검토
-- `dist`, `dist-electron`, `node_modules`경로는 무시
+- `dist-electron` 폴더의 변경 사항은 항상 무시함
 - 읽기 작업은 승인된 PowerShell 경로로 진행
 
 ## UI Rules

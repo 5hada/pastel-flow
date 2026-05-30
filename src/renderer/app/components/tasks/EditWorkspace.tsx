@@ -124,12 +124,6 @@ export function EditWorkspace({
           </button>
         </div>
         <div className="editor-detail">
-            <div className="section-heading compact-heading">
-              <div>
-                <p className="eyebrow">Action order</p>
-                <h3>{selectedWorkflow.name}</h3>
-              </div>
-            </div>
             <WorkflowActionList
               actions={actions}
               workflow={selectedWorkflow}

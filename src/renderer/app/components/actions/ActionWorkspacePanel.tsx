@@ -48,15 +48,13 @@ export function ActionWorkspacePanel({
       </div>
       <div className="editor-detail">
           {selectedAction ? (
-            <>
-              <div className="section-heading compact-heading">
-                <div>
-                  <p className="eyebrow">{getActionTypeLabel(selectedAction.type)}</p>
-                  <h3>{selectedAction.name}</h3>
-                </div>
-              </div>
+            <div>
               <dl className="detail-list">
                 <DetailItem label="Action ID" value={selectedAction.id} />
+                <DetailItem
+                  label="Action 타입"
+                  value={getActionTypeLabel(selectedAction.type)}
+                />
                 <DetailItem
                   label="수정 시간"
                   value={formatDate(selectedAction.updatedAt)}
@@ -72,7 +70,7 @@ export function ActionWorkspacePanel({
                   }`}
                 />
               </dl>
-            </>
+            </div>
           ) : (
             <CreateTaskPanel
               createForm={createForm}

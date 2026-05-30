@@ -30,15 +30,17 @@ export function CreateTaskPanel({
       className={isEmbedded ? 'create-task-panel' : 'mode-panel create-task-panel'}
       aria-label="새 브라우저 작업 생성"
     >
-      <div className="panel-heading">
-        <div>
-          <p className="eyebrow">New action</p>
-          <h2>새 Action</h2>
+      {!isEmbedded ? (
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">New action</p>
+            <h2>새 Action</h2>
+          </div>
+          <button className="ghost-button" type="button" onClick={onCancel}>
+            닫기
+          </button>
         </div>
-        <button className="ghost-button" type="button" onClick={onCancel}>
-          닫기
-        </button>
-      </div>
+      ) : null}
       <form className="task-form" onSubmit={onSubmit}>
         <div className="form-grid">
           <label>

@@ -37,7 +37,7 @@ export function ToolsPanel({
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Tool modules</p>
-          <h2>도구 모듈</h2>
+          <h2>{selectedTool?.manifest.name ?? '도구 모듈'}</h2>
         </div>
         <button type="button" onClick={() => void onRegisterToolModule()}>
           폴더 등록
@@ -53,11 +53,7 @@ export function ToolsPanel({
           </div>
         ) : selectedTool ? (
           <div className="tool-module-detail">
-                <div className="section-heading compact-heading">
-                  <div>
-                    <p className="eyebrow">{selectedTool.manifest.id}</p>
-                    <h3>{selectedTool.manifest.name}</h3>
-                  </div>
+                <div className="detail-actions">
                   <button
                     className="ghost-button"
                     type="button"

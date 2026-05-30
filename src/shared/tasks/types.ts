@@ -5,6 +5,14 @@ export type TaskType =
   | 'notion_sync'
   | 'trading_bot'
 
+export type ActionType =
+  | 'browser_action'
+  | 'crawler_action'
+  | 'discord_dry_run_action'
+  | 'notion_dry_run_action'
+  | 'trading_dry_run_action'
+  | 'tool_action'
+
 export type TaskStatus = 'idle' | 'running' | 'failed'
 
 export type BrowserKind = 'chrome' | 'edge' | 'chromium'
@@ -102,6 +110,51 @@ export type TaskSchedule = {
   daysOfWeek?: DayOfWeek[]
   nextRunAt?: string
   lastTriggeredAt?: string
+}
+
+export type ActionIOField = {
+  id: string
+  name: string
+  type: 'string' | 'number' | 'boolean' | 'json' | 'secret_ref'
+  required?: boolean
+  description?: string
+}
+
+export type ActionDefinition<TConfig = unknown> = {
+  id: string
+  name: string
+  type: ActionType
+  config: TConfig
+  secretRefs?: SecretRef[]
+  inputSchema?: ActionIOField[]
+  outputSchema?: ActionIOField[]
+  legacyTaskId?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type WorkflowActionRef = {
+  id: string
+  actionId: string
+  order: number
+  inputMapping?: Record<string, string>
+  enabled: boolean
+}
+
+export type WorkflowState = TaskState
+
+export type WorkflowSchedule = TaskSchedule
+
+export type WorkflowDefinition = {
+  id: string
+  name: string
+  actionRefs: WorkflowActionRef[]
+  permissions: DevicePolicy
+  schedule?: WorkflowSchedule
+  state: WorkflowState
+  legacyTaskId?: string
+  createdAt: string
+  updatedAt: string
 }
 
 export type BrowserTabGroupConfig = {

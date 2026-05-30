@@ -41,9 +41,9 @@ my-tool/
 
 파일 설명:
 
-| 파일            | 필수 | 설명         |
-| ------------- | -- | ---------- |
-| manifest.json | O  | 도구 메타데이터   |
+| 파일          | 필수 | 설명         |
+| ------------- | -- | ----------     |
+| manifest.json | O  | 도구 메타데이터 |
 | logic.js      | O  | 실행 로직      |
 | view.html     | X  | 사용자 정의 UI  |
 | style.css     | X  | 사용자 정의 스타일 |
@@ -74,7 +74,26 @@ manifest.json은 도구의 메타데이터를 정의한다.
     {
       "key": "count",
       "type": "number",
-      "default": 10
+      "default": 10,
+      "ui": {
+        "control": "number",
+        "min": 1,
+        "max": 100,
+        "step": 1
+      }
+    },
+    {
+      "key": "theme",
+      "type": "string",
+      "default": "mint",
+      "ui": {
+        "control": "radio",
+        "label": "Theme",
+        "options": [
+          { "label": "Mint", "value": "mint", "color": "#1f6f68" },
+          { "label": "Rose", "value": "rose", "color": "#b94a48" }
+        ]
+      }
     }
   ],
 
@@ -186,6 +205,67 @@ Semantic Versioning 사용 권장.
 | number[] | 숫자 배열   |
 | json     | JSON 객체 |
 | file     | 파일      |
+
+---
+
+# 입력 UI 메타데이터
+
+각 input은 선택적으로 `ui` 객체를 가질 수 있다. `ui`는 Pastel Flow가 자동 실행 폼을 더 구체적으로 만들기 위한 힌트이며, 자동화 입력/출력 계약을 바꾸지 않는다.
+
+예시:
+
+```json
+{
+  "key": "accentColor",
+  "type": "string",
+  "default": "#1f6f68",
+  "ui": {
+    "control": "color",
+    "label": "Accent color",
+    "helpText": "결과물에 적용할 강조 색상입니다."
+  }
+}
+```
+
+지원 control:
+
+| control  | 권장 타입 | 설명 |
+| -------- | --------- | ---- |
+| text     | string    | 한 줄 텍스트 입력 |
+| textarea | string    | 여러 줄 텍스트 입력 |
+| number   | number    | 숫자 입력. `min`, `max`, `step` 사용 가능 |
+| toggle   | boolean   | 켜기/끄기 토글 |
+| checkbox | boolean   | 체크박스 |
+| select   | string, number, boolean | 단일 선택 목록 |
+| radio    | string, number, boolean | 단일 선택 버튼 그룹 |
+| color    | string    | 색상 선택 |
+| json     | json      | JSON 편집 |
+| list     | string[], number[] | 항목 추가/삭제형 목록 입력 |
+| file     | file      | 파일 경로 입력 |
+
+`ui` 필드:
+
+| 필드 | 설명 |
+| ---- | ---- |
+| control | 사용할 입력 컨트롤 |
+| label | 화면에 표시할 입력 이름. 없으면 `key`를 사용 |
+| placeholder | 입력 예시 |
+| helpText | 보조 설명 |
+| options | `select`, `radio`에서 사용할 선택지 |
+| min, max, step | 숫자 입력 제약 |
+| rows | textarea 높이 |
+
+`options` 항목:
+
+```json
+{
+  "label": "Blue",
+  "value": "blue",
+  "color": "#3b82f6"
+}
+```
+
+`color`는 선택 UI에서 swatch를 표시하기 위한 선택 속성이다.
 
 ---
 

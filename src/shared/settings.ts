@@ -13,8 +13,11 @@ export type AppSettings = {
   themeMode: ThemeMode
   defaultBrowserKind: BrowserKind
   defaultTaskName: string
+  defaultActionName: string
+  defaultWorkflowName: string
   initialUrlInputMode: InitialUrlInputMode
   taskListDisplayMode: TaskListDisplayMode
+  workflowGridColumnCount: number
   browserExecutablePaths: BrowserExecutablePaths
   linkedDevices: LinkedDevice[]
   taskRunEventRetentionLimit: number
@@ -31,8 +34,11 @@ export const defaultAppSettings: AppSettings = {
   themeMode: 'light',
   defaultBrowserKind: 'chrome',
   defaultTaskName: '새 브라우저 작업',
+  defaultActionName: '새 Action',
+  defaultWorkflowName: '새 Workflow',
   initialUrlInputMode: 'line',
   taskListDisplayMode: 'grid',
+  workflowGridColumnCount: 5,
   browserExecutablePaths: {},
   linkedDevices: [],
   taskRunEventRetentionLimit: 300,
@@ -54,6 +60,16 @@ export function normalizeAppSettings(
       settings.defaultTaskName.trim()
         ? settings.defaultTaskName.trim()
         : defaultAppSettings.defaultTaskName,
+    defaultActionName:
+      typeof settings?.defaultActionName === 'string' &&
+      settings.defaultActionName.trim()
+        ? settings.defaultActionName.trim()
+        : defaultAppSettings.defaultActionName,
+    defaultWorkflowName:
+      typeof settings?.defaultWorkflowName === 'string' &&
+      settings.defaultWorkflowName.trim()
+        ? settings.defaultWorkflowName.trim()
+        : defaultAppSettings.defaultWorkflowName,
     initialUrlInputMode:
       settings?.initialUrlInputMode === 'line'
         ? settings.initialUrlInputMode
@@ -61,6 +77,9 @@ export function normalizeAppSettings(
     taskListDisplayMode: isTaskListDisplayMode(settings?.taskListDisplayMode)
       ? settings.taskListDisplayMode
       : defaultAppSettings.taskListDisplayMode,
+    workflowGridColumnCount: normalizeWorkflowGridColumnCount(
+      settings?.workflowGridColumnCount,
+    ),
     browserExecutablePaths: normalizeBrowserExecutablePaths(
       settings?.browserExecutablePaths,
     ),
@@ -72,6 +91,14 @@ export function normalizeAppSettings(
       settings?.taskRunEventExportLimit,
     ),
   }
+}
+
+function normalizeWorkflowGridColumnCount(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return defaultAppSettings.workflowGridColumnCount
+  }
+
+  return Math.min(Math.max(Math.round(value), 2), 8)
 }
 
 function normalizeRetentionLimit(value: unknown): number {

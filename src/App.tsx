@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, type CSSProperties, useEffect, useMemo, useState } from 'react'
 import {
   getDeviceAccessLevelLabel,
   type CurrentDevice,
@@ -36,11 +36,18 @@ import {
   type TaskTemplate,
   type TaskType,
   type TradingBotConfig,
+  type ActionDefinition,
+  type WorkflowDefinition,
 } from './shared/tasks'
 import type { LocalSecretMetadata } from './shared/secrets'
 import type { SecretStorageStatus } from './shared/secrets'
 import type { SyncImportResult, SyncStatus } from './shared/sync'
 import type { TaskRunEvent, TaskRunEventStatus } from './shared/taskRunEvents'
+import type {
+  RegisteredToolModule,
+  ToolModuleField,
+  ToolModuleRunResult,
+} from './shared/tools'
 import type { CreateTaskInput } from './renderer/api/tasksApi'
 import './App.css'
 
@@ -80,14 +87,23 @@ const defaultCreateForm = createBrowserTaskForm(defaultAppSettings)
 
 type SettingsSaveState = 'saved' | 'failed' | null
 
-type WorkspaceMode = 'run' | 'create' | 'edit' | 'tools' | 'settings'
+type WorkspaceMode = 'run' | 'actions' | 'workflows' | 'tools' | 'settings'
 type NavigationCategory =
   | 'all'
   | 'running'
-  | 'folders'
-  | 'favorites'
+  | 'scheduled'
+  | 'failed'
   | 'restricted'
-type SettingsCategory = 'general' | 'devices' | 'secrets'
+  | 'secret_required'
+type SettingsCategory =
+  | 'general'
+  | 'browser'
+  | 'devices'
+  | 'secrets'
+  | 'sync'
+  | 'events'
+  | 'data'
+  | 'shortcuts'
 
 const defaultSettingsForm: AppSettings = {
   ...defaultAppSettings,
@@ -95,7 +111,7 @@ const defaultSettingsForm: AppSettings = {
 
 function createBrowserTaskForm(settings: AppSettings): BrowserTaskFormState {
   return {
-    name: settings.defaultTaskName,
+    name: settings.defaultActionName,
     taskType: 'browser_tab_group',
     browserKind: settings.defaultBrowserKind,
     runMode: 'dedicated_profile',
@@ -186,6 +202,8 @@ const taskTypeOptions: TaskType[] = [
 
 function App() {
   const [tasks, setTasks] = useState<TaskTemplate[]>([])
+  const [actions, setActions] = useState<ActionDefinition[]>([])
+  const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([])
   const [taskRunEvents, setTaskRunEvents] = useState<TaskRunEvent[]>([])
   const [secrets, setSecrets] = useState<LocalSecretMetadata[]>([])
   const [secretStorageStatus, setSecretStorageStatus] =
@@ -193,6 +211,14 @@ function App() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(defaultSyncStatus)
   const [syncResult, setSyncResult] = useState<SyncImportResult | null>(null)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
+  const [toolModules, setToolModules] = useState<RegisteredToolModule[]>([])
+  const [selectedToolId, setSelectedToolId] = useState<string | null>(null)
+  const [toolInputValues, setToolInputValues] = useState<
+    Record<string, unknown>
+  >({})
+  const [toolRunResult, setToolRunResult] =
+    useState<ToolModuleRunResult | null>(null)
+  const [toolMessage, setToolMessage] = useState<string | null>(null)
   const [pruneMessage, setPruneMessage] = useState<string | null>(null)
   const [appSettings, setAppSettings] = useState<AppSettings>(
     initialSettingsSnapshot.settings,
@@ -210,6 +236,10 @@ function App() {
   const [editForm, setEditForm] =
     useState<BrowserTaskFormState>(defaultEditForm)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
+  const [selectedActionId, setSelectedActionId] = useState<string | null>(null)
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(
+    null,
+  )
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('run')
   const [selectedCategory, setSelectedCategory] =
     useState<NavigationCategory>('all')
@@ -246,7 +276,9 @@ function App() {
     void loadSecrets()
     void loadSecretStorageStatus()
     void loadSyncStatus()
+    void loadToolModules()
     void loadTasks()
+    void loadActionWorkflowData()
   }, [])
 
   useEffect(() => {
@@ -291,7 +323,7 @@ function App() {
     if (tasks.length === 0) {
       setSelectedTaskId(null)
       setConfirmDeleteTaskId(null)
-      if (workspaceMode === 'edit') {
+      if (workspaceMode === 'workflows') {
         setWorkspaceMode('run')
       }
       return
@@ -338,6 +370,30 @@ function App() {
     }
   }
 
+  async function loadActionWorkflowData() {
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      const [loadedActions, loadedWorkflows] = await Promise.all([
+        window.pastelFlow.actions.list(),
+        window.pastelFlow.workflows.list(),
+      ])
+      setActions(loadedActions)
+      setWorkflows(loadedWorkflows)
+      setSelectedActionId(
+        (currentActionId) => currentActionId ?? loadedActions[0]?.id ?? null,
+      )
+      setSelectedWorkflowId(
+        (currentWorkflowId) =>
+          currentWorkflowId ?? loadedWorkflows[0]?.id ?? null,
+      )
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    }
+  }
+
   async function loadSecrets() {
     if (!window.pastelFlow) {
       return
@@ -369,6 +425,20 @@ function App() {
 
     try {
       setSyncStatus(await window.pastelFlow.sync.status())
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    }
+  }
+
+  async function loadToolModules() {
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      const tools = await window.pastelFlow.tools.list()
+      setToolModules(tools)
+      setSelectedToolId((currentToolId) => currentToolId ?? tools[0]?.id ?? null)
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     }
@@ -422,17 +492,19 @@ function App() {
     setConfirmDeleteTaskId(null)
   }
 
-  function openCreateMode() {
+  function openActionMode() {
     setCreateForm(createBrowserTaskForm(appSettings))
-    setWorkspaceMode('create')
+    setWorkspaceMode('actions')
     setConfirmDeleteTaskId(null)
+    void loadActionWorkflowData()
   }
 
-  function openEditMode() {
+  function openWorkflowMode() {
     if (selectedTask) {
       startEditing(selectedTask)
     }
-    setWorkspaceMode('edit')
+    setWorkspaceMode('workflows')
+    void loadActionWorkflowData()
   }
 
   function openSettingsMode() {
@@ -447,6 +519,7 @@ function App() {
   function openToolsMode() {
     setWorkspaceMode('tools')
     setConfirmDeleteTaskId(null)
+    void loadToolModules()
   }
 
   function closeSettingsMode() {
@@ -546,6 +619,36 @@ function App() {
     setSettingsForm((currentForm) => ({
       ...currentForm,
       taskListDisplayMode,
+    }))
+
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      setErrorMessage(null)
+      const snapshot = await window.pastelFlow.settings.update(nextSettings)
+      setAppSettings(snapshot.settings)
+      setSettingsForm(snapshot.settings)
+      setUserDataPath(snapshot.userDataPath)
+      setCurrentDevice(snapshot.currentDevice)
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    }
+  }
+
+  async function handleWorkflowGridColumnCountChange(
+    workflowGridColumnCount: number,
+  ) {
+    const nextSettings = {
+      ...appSettings,
+      workflowGridColumnCount,
+    }
+
+    setAppSettings(nextSettings)
+    setSettingsForm((currentForm) => ({
+      ...currentForm,
+      workflowGridColumnCount,
     }))
 
     if (!window.pastelFlow) {
@@ -800,6 +903,63 @@ function App() {
     }
   }
 
+  async function handleRegisterToolModule() {
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      setErrorMessage(null)
+      setToolMessage(null)
+      const registeredTool = await window.pastelFlow.tools.registerFolder()
+      if (!registeredTool) {
+        return
+      }
+
+      await loadToolModules()
+      setSelectedToolId(registeredTool.id)
+      setToolRunResult(null)
+      setToolInputValues(createToolInputDefaults(registeredTool))
+      setToolMessage(`${registeredTool.manifest.name} 도구를 등록했습니다.`)
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    }
+  }
+
+  async function handleRunToolModule() {
+    if (!window.pastelFlow || !selectedToolId) {
+      return
+    }
+
+    try {
+      setErrorMessage(null)
+      setToolMessage(null)
+      const result = await window.pastelFlow.tools.run(
+        selectedToolId,
+        toolInputValues,
+      )
+      setToolRunResult(result)
+      setToolMessage('도구 실행을 완료했습니다.')
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    }
+  }
+
+  async function handleCreateToolAction() {
+    if (!window.pastelFlow || !selectedToolId) {
+      return
+    }
+
+    try {
+      setErrorMessage(null)
+      setToolMessage(null)
+      const action = await window.pastelFlow.tools.createAction(selectedToolId)
+      setToolMessage(`${action.name} Action을 생성했습니다.`)
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    }
+  }
+
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -809,11 +969,11 @@ function App() {
         </div>
         <TopModeBar
           currentMode={workspaceMode}
-          onCreate={openCreateMode}
-          onEdit={openEditMode}
+          onActions={openActionMode}
           onRun={openRunMode}
           onSettings={openSettingsMode}
           onTools={openToolsMode}
+          onWorkflows={openWorkflowMode}
         />
         <button
           aria-label="작업 목록 새로고침"
@@ -833,13 +993,21 @@ function App() {
         {isSidebarOpen ? (
             <WorkspaceSidebar
             tasks={tasks}
+            toolModules={toolModules}
             currentMode={workspaceMode}
             selectedCategory={selectedCategory}
             selectedSettingsCategory={selectedSettingsCategory}
             selectedTask={selectedTask}
+            selectedToolId={selectedToolId}
             onCategorySelect={openCategory}
             onClose={() => setIsSidebarOpen(false)}
             onSelectSettingsCategory={setSelectedSettingsCategory}
+            onSelectTool={(tool) => {
+              setSelectedToolId(tool.id)
+              setToolRunResult(null)
+              setToolMessage(null)
+              setToolInputValues(createToolInputDefaults(tool))
+            }}
               onSelectTask={(task) => {
                 setSelectedTaskId(task.id)
                 startEditing(task)
@@ -869,8 +1037,10 @@ function App() {
               runningTaskId={runningTaskId}
               selectedTaskId={selectedTaskId}
               stoppingTaskId={stoppingTaskId}
-              onCreate={openCreateMode}
+              gridColumnCount={appSettings.workflowGridColumnCount}
+              onCreate={openWorkflowMode}
               onDisplayModeChange={handleTaskListDisplayModeChange}
+              onGridColumnCountChange={handleWorkflowGridColumnCountChange}
               onRun={handleRunTask}
               onStop={handleStopTask}
               onSelect={(task) => {
@@ -881,56 +1051,74 @@ function App() {
             />
           ) : null}
 
-          {workspaceMode === 'create' ? (
-            <CreateTaskPanel
+          {workspaceMode === 'actions' ? (
+            <ActionWorkspacePanel
+              actions={actions}
               createForm={createForm}
               currentDevice={currentDevice}
+              selectedActionId={selectedActionId}
               secrets={secrets}
-              onCancel={openRunMode}
               onChange={setCreateForm}
+              onSelectAction={setSelectedActionId}
               onSubmit={handleCreateTask}
             />
           ) : null}
 
-          {workspaceMode === 'edit' ? (
+          {workspaceMode === 'workflows' ? (
             <EditWorkspace
+              actions={actions}
               confirmDeleteTaskId={confirmDeleteTaskId}
               currentDevice={currentDevice}
               editForm={editForm}
               isLoading={isLoading}
               secrets={secrets}
+              selectedWorkflowId={selectedWorkflowId}
               onChange={setEditForm}
               onConfirmDelete={handleDeleteTask}
               onDeleteRequest={setConfirmDeleteTaskId}
+              onSelectWorkflow={setSelectedWorkflowId}
               onSubmit={handleUpdateTask}
               selectedTask={selectedTask}
               taskRunEvents={taskRunEvents}
+              workflows={workflows}
             />
           ) : null}
 
           {workspaceMode === 'tools' ? (
             <ToolsPanel
-              syncMessage={syncMessage}
-              syncResult={syncResult}
-              syncStatus={syncStatus}
-              pruneMessage={pruneMessage}
-              onExportSyncSnapshot={handleExportSyncSnapshot}
-              onExportSyncSnapshotFile={handleExportSyncSnapshotFile}
-              onImportSyncSnapshot={handleImportSyncSnapshot}
-              onImportSyncSnapshotFile={handleImportSyncSnapshotFile}
-              onPruneTaskRunEvents={handlePruneTaskRunEvents}
+              selectedToolId={selectedToolId}
+              toolInputValues={toolInputValues}
+              toolMessage={toolMessage}
+              toolModules={toolModules}
+              toolRunResult={toolRunResult}
+              onCreateToolAction={handleCreateToolAction}
+              onRegisterToolModule={handleRegisterToolModule}
+              onRunToolModule={handleRunToolModule}
+              onSelectTool={(tool) => {
+                setSelectedToolId(tool.id)
+                setToolRunResult(null)
+                setToolMessage(null)
+                setToolInputValues(createToolInputDefaults(tool))
+              }}
+              onToolInputChange={(key, value) =>
+                setToolInputValues((currentValues) => ({
+                  ...currentValues,
+                  [key]: value,
+                }))
+              }
             />
           ) : null}
 
           {workspaceMode === 'settings' ? (
             <section className="mode-panel" aria-label="앱 설정">
-              <AppSettingsPanel
-                form={settingsForm}
-                onChange={setSettingsForm}
-                onClose={closeSettingsMode}
-                onSubmit={handleSaveSettings}
-                saveState={settingsSaveState}
-                settingsErrorMessage={settingsErrorMessage}
+            <AppSettingsPanel
+              form={settingsForm}
+              pruneMessage={pruneMessage}
+              onChange={setSettingsForm}
+              onClose={closeSettingsMode}
+              onSubmit={handleSaveSettings}
+              saveState={settingsSaveState}
+              settingsErrorMessage={settingsErrorMessage}
             secretForm={secretForm}
             secretStorageStatus={secretStorageStatus}
             secrets={secrets}
@@ -940,6 +1128,14 @@ function App() {
                 onDeleteSecret={handleDeleteSecret}
                 onSecretFormChange={setSecretForm}
                 selectedCategory={selectedSettingsCategory}
+                syncMessage={syncMessage}
+                syncResult={syncResult}
+                syncStatus={syncStatus}
+                onExportSyncSnapshot={handleExportSyncSnapshot}
+                onExportSyncSnapshotFile={handleExportSyncSnapshotFile}
+                onImportSyncSnapshot={handleImportSyncSnapshot}
+                onImportSyncSnapshotFile={handleImportSyncSnapshotFile}
+                onPruneTaskRunEvents={handlePruneTaskRunEvents}
               />
             </section>
           ) : null}
@@ -951,20 +1147,20 @@ function App() {
 
 type TopModeBarProps = {
   currentMode: WorkspaceMode
-  onCreate(): void
-  onEdit(): void
+  onActions(): void
   onRun(): void
   onSettings(): void
   onTools(): void
+  onWorkflows(): void
 }
 
 function TopModeBar({
   currentMode,
-  onCreate,
-  onEdit,
+  onActions,
   onRun,
   onSettings,
   onTools,
+  onWorkflows,
 }: TopModeBarProps) {
   const modes: {
     id: WorkspaceMode
@@ -973,8 +1169,8 @@ function TopModeBar({
     onClick(): void
   }[] = [
     { id: 'run', icon: '▶', label: '실행', onClick: onRun },
-    { id: 'create', icon: '+', label: '새 작업', onClick: onCreate },
-    { id: 'edit', icon: '✎', label: '수정', onClick: onEdit },
+    { id: 'actions', icon: '+', label: 'Action', onClick: onActions },
+    { id: 'workflows', icon: '✎', label: 'Workflow', onClick: onWorkflows },
     { id: 'tools', icon: '◇', label: '도구', onClick: onTools },
     { id: 'settings', icon: '⚙', label: '설정', onClick: onSettings },
   ]
@@ -999,32 +1195,43 @@ function TopModeBar({
 
 type WorkspaceSidebarProps = {
   tasks: TaskTemplate[]
+  toolModules: RegisteredToolModule[]
   currentMode: WorkspaceMode
   selectedCategory: NavigationCategory
   selectedSettingsCategory: SettingsCategory
   selectedTask: TaskTemplate | null
+  selectedToolId: string | null
   onCategorySelect(category: NavigationCategory): void
   onClose(): void
   onSelectSettingsCategory(category: SettingsCategory): void
   onSelectTask(task: TaskTemplate): void
+  onSelectTool(tool: RegisteredToolModule): void
 }
 
 function WorkspaceSidebar({
   tasks,
+  toolModules,
   currentMode,
   selectedCategory,
   selectedSettingsCategory,
   selectedTask,
+  selectedToolId,
   onCategorySelect,
   onClose,
   onSelectSettingsCategory,
   onSelectTask,
+  onSelectTool,
 }: WorkspaceSidebarProps) {
   const restrictedCount = tasks.filter((task) =>
     isRestrictedDevicePolicy(task.permissions),
   ).length
   const runningCount = tasks.filter(
     (task) => task.state.status === 'running',
+  ).length
+  const scheduledCount = tasks.filter((task) => task.schedule?.enabled).length
+  const failedCount = tasks.filter((task) => task.state.status === 'failed').length
+  const secretCount = tasks.filter(
+    (task) => (task.permissions.secretRefs?.length ?? 0) > 0,
   ).length
   const runCategories: {
     id: NavigationCategory
@@ -1034,9 +1241,10 @@ function WorkspaceSidebar({
   }[] = [
     { id: 'all', icon: '□', label: '전체', count: tasks.length },
     { id: 'running', icon: '●', label: '실행 중', count: runningCount },
-    { id: 'folders', icon: '▣', label: '폴더', count: tasks.length },
-    { id: 'favorites', icon: '☆', label: '즐겨찾기', count: 0 },
+    { id: 'scheduled', icon: '◷', label: '예약됨', count: scheduledCount },
+    { id: 'failed', icon: '!', label: '실패', count: failedCount },
     { id: 'restricted', icon: '◇', label: '제한됨', count: restrictedCount },
+    { id: 'secret_required', icon: '◆', label: 'Secret 필요', count: secretCount },
   ]
   const settingsCategories: {
     id: SettingsCategory
@@ -1044,8 +1252,13 @@ function WorkspaceSidebar({
     label: string
   }[] = [
     { id: 'general', icon: '◌', label: '일반' },
+    { id: 'browser', icon: '▤', label: '브라우저' },
+    { id: 'shortcuts', icon: '⌘', label: '단축키' },
     { id: 'devices', icon: '▣', label: '기기' },
     { id: 'secrets', icon: '◆', label: 'Secret' },
+    { id: 'sync', icon: '⇄', label: '동기화' },
+    { id: 'events', icon: '≡', label: '실행 이벤트' },
+    { id: 'data', icon: '▥', label: '데이터 관리' },
   ]
 
   return (
@@ -1081,14 +1294,14 @@ function WorkspaceSidebar({
             ))
           : null}
 
-        {currentMode === 'create' ? (
+        {currentMode === 'actions' ? (
           <div className="sidebar-empty">
-            <strong>브라우저 작업</strong>
-            <span>전용 프로필 템플릿을 만듭니다.</span>
+            <strong>Action</strong>
+            <span>{tasks.length}개 legacy Action</span>
           </div>
         ) : null}
 
-        {currentMode === 'edit'
+        {currentMode === 'workflows'
           ? tasks.map((task) => (
               <button
                 className={`sidebar-item task-sidebar-item${
@@ -1106,10 +1319,27 @@ function WorkspaceSidebar({
           : null}
 
         {currentMode === 'tools' ? (
-          <div className="sidebar-empty">
-            <strong>도구 페이지</strong>
-            <span>포함 범위는 추후 확정합니다.</span>
-          </div>
+          toolModules.length === 0 ? (
+            <div className="sidebar-empty">
+              <strong>Tool Module</strong>
+              <span>등록된 도구가 없습니다.</span>
+            </div>
+          ) : (
+            toolModules.map((tool) => (
+              <button
+                className={`sidebar-item task-sidebar-item${
+                  selectedToolId === tool.id ? ' is-active' : ''
+                }`}
+                key={tool.id}
+                type="button"
+                onClick={() => onSelectTool(tool)}
+              >
+                <span aria-hidden="true">◇</span>
+                <strong>{tool.manifest.name}</strong>
+                <em>v{tool.manifest.version}</em>
+              </button>
+            ))
+          )
         ) : null}
 
         {currentMode === 'settings'
@@ -1138,114 +1368,349 @@ function WorkspaceSidebar({
 }
 
 type ToolsPanelProps = {
-  pruneMessage: string | null
-  syncMessage: string | null
-  syncResult: SyncImportResult | null
-  syncStatus: SyncStatus
-  onExportSyncSnapshot(): Promise<void>
-  onExportSyncSnapshotFile(): Promise<void>
-  onImportSyncSnapshot(): Promise<void>
-  onImportSyncSnapshotFile(): Promise<void>
-  onPruneTaskRunEvents(): Promise<void>
+  selectedToolId: string | null
+  toolInputValues: Record<string, unknown>
+  toolMessage: string | null
+  toolModules: RegisteredToolModule[]
+  toolRunResult: ToolModuleRunResult | null
+  onCreateToolAction(): Promise<void>
+  onRegisterToolModule(): Promise<void>
+  onRunToolModule(): Promise<void>
+  onSelectTool(tool: RegisteredToolModule): void
+  onToolInputChange(key: string, value: unknown): void
 }
 
 function ToolsPanel({
-  onExportSyncSnapshot,
-  onExportSyncSnapshotFile,
-  onImportSyncSnapshot,
-  onImportSyncSnapshotFile,
-  onPruneTaskRunEvents,
-  pruneMessage,
-  syncMessage,
-  syncResult,
-  syncStatus,
+  onCreateToolAction,
+  onRegisterToolModule,
+  onRunToolModule,
+  onSelectTool,
+  onToolInputChange,
+  selectedToolId,
+  toolInputValues,
+  toolMessage,
+  toolModules,
+  toolRunResult,
 }: ToolsPanelProps) {
+  const selectedTool =
+    toolModules.find((tool) => tool.id === selectedToolId) ?? null
+
   return (
     <section className="mode-panel tool-panel" aria-label="도구">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">Tools</p>
-          <h2>도구</h2>
+          <p className="eyebrow">Tool modules</p>
+          <h2>도구 모듈</h2>
         </div>
+        <button type="button" onClick={() => void onRegisterToolModule()}>
+          폴더 등록
+        </button>
       </div>
-      <section className="settings-subsection" aria-label="mock sync">
-        <div className="section-heading compact-heading">
-          <div>
-            <p className="eyebrow">Mock sync</p>
-            <h3>로컬 동기화 스냅샷</h3>
+      <section className="settings-subsection" aria-label="tool modules">
+        {toolModules.length === 0 ? (
+          <div className="empty-state-action">
+            <p className="empty-state">등록된 도구 모듈이 없습니다.</p>
+            <button type="button" onClick={() => void onRegisterToolModule()}>
+              도구 폴더 선택
+            </button>
           </div>
-        </div>
-        <dl className="detail-list">
-          <DetailItem label="Sync mode" value={getSyncModeLabel(syncStatus.mode)} />
-          <DetailItem
-            label="Server DB"
-            value={syncStatus.serverDbSyncEnabled ? '사용' : '미사용'}
-          />
-          <DetailItem
-            label="내보내기 파일"
-            value={syncStatus.exportPath || '아직 없음'}
-          />
-          <DetailItem
-            label="마지막 내보내기"
-            value={formatDate(syncStatus.lastExportedAt)}
-          />
-        </dl>
-        {syncStatus.message ? (
-          <p className="muted-text">{syncStatus.message}</p>
-        ) : null}
-        <div className="form-actions">
-          <button type="button" onClick={() => void onExportSyncSnapshot()}>
-            내보내기
-          </button>
-          <button
-            className="ghost-button"
-            type="button"
-            onClick={() => void onExportSyncSnapshotFile()}
-          >
-            파일로 내보내기
-          </button>
-          <button
-            className="ghost-button"
-            type="button"
-            onClick={() => void onImportSyncSnapshot()}
-          >
-            가져오기
-          </button>
-          <button
-            className="ghost-button"
-            type="button"
-            onClick={() => void onImportSyncSnapshotFile()}
-          >
-            파일에서 가져오기
-          </button>
-        </div>
-        {syncMessage ? <p className="panel-success">{syncMessage}</p> : null}
-        {syncResult ? (
-          <p className="panel-success">
-            가져오기 완료: 생성 {syncResult.tasksCreated}개, 업데이트{' '}
-            {syncResult.tasksUpdated}개, 이벤트 {syncResult.taskRunEventsAdded}개
-          </p>
-        ) : null}
-      </section>
-      <section className="settings-subsection" aria-label="event cleanup">
-        <div className="section-heading compact-heading">
-          <div>
-            <p className="eyebrow">Events</p>
-            <h3>실행 이벤트 정리</h3>
+        ) : (
+          <div className="tool-module-layout">
+            <div className="tool-module-list" aria-label="등록된 도구">
+              {toolModules.map((tool) => (
+                <button
+                  className={`tool-module-item${
+                    selectedTool?.id === tool.id ? ' is-selected' : ''
+                  }`}
+                  key={tool.id}
+                  type="button"
+                  onClick={() => onSelectTool(tool)}
+                >
+                  <strong>{tool.manifest.name}</strong>
+                  <span>
+                    {tool.manifest.id} · v{tool.manifest.version}
+                  </span>
+                </button>
+              ))}
+            </div>
+            {selectedTool ? (
+              <div className="tool-module-detail">
+                <div className="section-heading compact-heading">
+                  <div>
+                    <p className="eyebrow">{selectedTool.manifest.id}</p>
+                    <h3>{selectedTool.manifest.name}</h3>
+                  </div>
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={() => void onCreateToolAction()}
+                  >
+                    Action 생성
+                  </button>
+                </div>
+                {selectedTool.manifest.description ? (
+                  <p className="muted-text">
+                    {selectedTool.manifest.description}
+                  </p>
+                ) : null}
+                <dl className="detail-list">
+                  <DetailItem
+                    label="입력"
+                    value={`${selectedTool.manifest.inputs.length}개`}
+                  />
+                  <DetailItem
+                    label="출력"
+                    value={`${selectedTool.manifest.outputs.length}개`}
+                  />
+                  <DetailItem
+                    label="권한"
+                    value={
+                      selectedTool.manifest.permissions.length > 0
+                        ? selectedTool.manifest.permissions.join(', ')
+                        : '없음'
+                    }
+                  />
+                  <DetailItem
+                    label="등록 위치"
+                    value={selectedTool.sourcePath}
+                  />
+                </dl>
+                <div className="tool-runner">
+                  {selectedTool.manifest.inputs.length > 0 ? (
+                    selectedTool.manifest.inputs.map((field) => (
+                      <ToolInputField
+                        field={field}
+                        key={field.key}
+                        value={toolInputValues[field.key]}
+                        onChange={(value) => onToolInputChange(field.key, value)}
+                      />
+                    ))
+                  ) : (
+                    <p className="empty-state">입력 없이 실행할 수 있습니다.</p>
+                  )}
+                  <div className="form-actions">
+                    <button type="button" onClick={() => void onRunToolModule()}>
+                      실행
+                    </button>
+                  </div>
+                </div>
+                {toolMessage ? (
+                  <p className="panel-success">{toolMessage}</p>
+                ) : null}
+                {toolRunResult ? (
+                  <pre className="tool-output">
+                    {JSON.stringify(toolRunResult.output, null, 2)}
+                  </pre>
+                ) : null}
+              </div>
+            ) : null}
           </div>
-        </div>
-        <div className="form-actions">
-          <button
-            className="ghost-button"
-            type="button"
-            onClick={() => void onPruneTaskRunEvents()}
-          >
-            보존 개수 적용
-          </button>
-        </div>
-        {pruneMessage ? <p className="panel-success">{pruneMessage}</p> : null}
+        )}
       </section>
     </section>
+  )
+}
+
+type ToolInputFieldProps = {
+  field: ToolModuleField
+  value: unknown
+  onChange(value: unknown): void
+}
+
+function ToolInputField({ field, onChange, value }: ToolInputFieldProps) {
+  const control = field.ui?.control
+  const label = field.ui?.label ?? field.key
+
+  if (control === 'toggle' || control === 'checkbox' || field.type === 'boolean') {
+    return (
+      <label className="tool-field toggle-field">
+        <span>
+          {label}
+          {field.required ? ' *' : ''}
+        </span>
+        <span className="toggle-switch">
+        <input
+          checked={value === true || value === 'true'}
+          type="checkbox"
+          onChange={(event) => onChange(event.target.checked)}
+        />
+          <span />
+        </span>
+      </label>
+    )
+  }
+
+  if (control === 'select' && field.ui?.options?.length) {
+    return (
+      <label>
+        {label}
+        {field.required ? ' *' : ''}
+        <select
+          value={String(value ?? '')}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          {field.ui.options.map((option) => (
+            <option key={String(option.value)} value={String(option.value)}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+    )
+  }
+
+  if (control === 'radio' && field.ui?.options?.length) {
+    return (
+      <fieldset className="settings-fieldset">
+        <legend>
+          {label}
+          {field.required ? ' *' : ''}
+        </legend>
+        <div className="option-swatch-list">
+          {field.ui.options.map((option) => (
+            <label className="option-swatch" key={String(option.value)}>
+              <input
+                checked={String(value ?? '') === String(option.value)}
+                name={`tool-${field.key}`}
+                type="radio"
+                value={String(option.value)}
+                onChange={() => onChange(option.value)}
+              />
+              <span style={{ backgroundColor: option.color }}>{option.label}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+    )
+  }
+
+  if (control === 'color') {
+    return (
+      <label>
+        {label}
+        {field.required ? ' *' : ''}
+        <span className="color-input-row">
+          <input
+            className="color-input"
+            type="color"
+            value={String(value || '#1f6f68')}
+            onChange={(event) => onChange(event.target.value)}
+          />
+          <input
+            value={String(value ?? '')}
+            onChange={(event) => onChange(event.target.value)}
+          />
+        </span>
+      </label>
+    )
+  }
+
+  if (control === 'list' || field.type === 'string[]' || field.type === 'number[]') {
+    return (
+      <ToolListInputField field={field} value={value} onChange={onChange} />
+    )
+  }
+
+  if (
+    control === 'json' ||
+    control === 'textarea' ||
+    field.type === 'json' ||
+    field.ui?.rows
+  ) {
+    return (
+      <label>
+        {label}
+        {field.required ? ' *' : ''}
+        <textarea
+          placeholder={field.ui?.placeholder}
+          rows={field.ui?.rows}
+          value={String(value ?? '')}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        {field.ui?.helpText ? (
+          <small className="field-help">{field.ui.helpText}</small>
+        ) : null}
+      </label>
+    )
+  }
+
+  return (
+    <label>
+      {label}
+      {field.required ? ' *' : ''}
+      <input
+        max={field.ui?.max}
+        min={field.ui?.min}
+        placeholder={field.ui?.placeholder}
+        step={field.ui?.step}
+        type={field.type === 'number' || control === 'number' ? 'number' : 'text'}
+        value={String(value ?? '')}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {field.ui?.helpText ? (
+        <small className="field-help">{field.ui.helpText}</small>
+      ) : null}
+    </label>
+  )
+}
+
+function ToolListInputField({ field, onChange, value }: ToolInputFieldProps) {
+  const values = Array.isArray(value)
+    ? value.map(String)
+    : String(value ?? '')
+        .split('\n')
+        .filter(Boolean)
+  const label = field.ui?.label ?? field.key
+
+  function updateValue(nextValues: string[]) {
+    onChange(nextValues.join('\n'))
+  }
+
+  return (
+    <fieldset className="settings-fieldset">
+      <legend>
+        {label}
+        {field.required ? ' *' : ''}
+      </legend>
+      <div className="tool-list-editor">
+        {values.length === 0 ? (
+          <p className="empty-state">항목이 없습니다.</p>
+        ) : (
+          values.map((item, index) => (
+            <div className="tool-list-row" key={`${field.key}-${index}`}>
+              <input
+                value={item}
+                onChange={(event) =>
+                  updateValue(
+                    values.map((currentItem, currentIndex) =>
+                      currentIndex === index ? event.target.value : currentItem,
+                    ),
+                  )
+                }
+              />
+              <button
+                className="icon-button"
+                type="button"
+                onClick={() =>
+                  updateValue(
+                    values.filter((_item, currentIndex) => currentIndex !== index),
+                  )
+                }
+              >
+                ×
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+      <button
+        className="ghost-button"
+        type="button"
+        onClick={() => updateValue([...values, ''])}
+      >
+        항목 추가
+      </button>
+    </fieldset>
   )
 }
 
@@ -1284,16 +1749,175 @@ type TaskEditPanelProps = {
   onSubmit(event: FormEvent<HTMLFormElement>): void
 }
 
+type ActionWorkspacePanelProps = {
+  actions: ActionDefinition[]
+  createForm: BrowserTaskFormState
+  currentDevice: CurrentDevice
+  selectedActionId: string | null
+  secrets: LocalSecretMetadata[]
+  onChange(value: BrowserTaskFormState): void
+  onSelectAction(actionId: string | null): void
+  onSubmit(event: FormEvent<HTMLFormElement>): void
+}
+
+function ActionWorkspacePanel({
+  actions,
+  createForm,
+  currentDevice,
+  onChange,
+  onSelectAction,
+  onSubmit,
+  secrets,
+  selectedActionId,
+}: ActionWorkspacePanelProps) {
+  const selectedAction =
+    actions.find((action) => action.id === selectedActionId) ?? null
+
+  return (
+    <section className="mode-panel action-workspace" aria-label="Action 편집">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">Actions</p>
+          <h2>Action 관리</h2>
+        </div>
+        <button
+          aria-label="새 Action"
+          type="button"
+          onClick={() => onSelectAction(null)}
+        >
+          +
+        </button>
+      </div>
+      <div className="editor-layout">
+        <div className="editor-list">
+          {actions.length === 0 ? (
+            <p className="empty-state">저장된 Action이 없습니다.</p>
+          ) : (
+            actions.map((action) => (
+              <button
+                className={`editor-list-item${
+                  selectedAction?.id === action.id ? ' is-selected' : ''
+                }`}
+                key={action.id}
+                type="button"
+                onClick={() => onSelectAction(action.id)}
+              >
+                <strong>{action.name}</strong>
+                <span>{getActionTypeLabel(action.type)}</span>
+              </button>
+            ))
+          )}
+        </div>
+        <div className="editor-detail">
+          {selectedAction ? (
+            <>
+              <div className="section-heading compact-heading">
+                <div>
+                  <p className="eyebrow">{getActionTypeLabel(selectedAction.type)}</p>
+                  <h3>{selectedAction.name}</h3>
+                </div>
+              </div>
+              <dl className="detail-list">
+                <DetailItem label="Action ID" value={selectedAction.id} />
+                <DetailItem
+                  label="수정 시간"
+                  value={formatDate(selectedAction.updatedAt)}
+                />
+                <DetailItem
+                  label="Secret"
+                  value={`${selectedAction.secretRefs?.length ?? 0}개`}
+                />
+                <DetailItem
+                  label="입력 / 출력"
+                  value={`${selectedAction.inputSchema?.length ?? 0} / ${
+                    selectedAction.outputSchema?.length ?? 0
+                  }`}
+                />
+              </dl>
+            </>
+          ) : (
+            <CreateTaskPanel
+              createForm={createForm}
+              currentDevice={currentDevice}
+              secrets={secrets}
+              onCancel={() => onSelectAction(actions[0]?.id ?? null)}
+              onChange={onChange}
+              onSubmit={onSubmit}
+            />
+          )}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+type WorkflowActionListProps = {
+  actions: ActionDefinition[]
+  workflow: WorkflowDefinition | null
+}
+
+function WorkflowActionList({ actions, workflow }: WorkflowActionListProps) {
+  if (!workflow) {
+    return (
+      <div className="empty-state-action">
+        <p className="empty-state">선택된 Workflow가 없습니다.</p>
+        <button type="button">+</button>
+      </div>
+    )
+  }
+
+  const actionMap = new Map(actions.map((action) => [action.id, action]))
+  const sortedActionRefs = [...workflow.actionRefs].sort(
+    (left, right) => left.order - right.order,
+  )
+
+  return (
+    <div className="workflow-action-list">
+      {sortedActionRefs.length === 0 ? (
+        <p className="empty-state">이 Workflow에는 아직 Action이 없습니다.</p>
+      ) : (
+        sortedActionRefs.map((actionRef, index) => {
+          const action = actionMap.get(actionRef.actionId)
+
+          return (
+            <div className="workflow-action-row" key={actionRef.id}>
+              <span>{index + 1}</span>
+              <div>
+                <strong>{action?.name ?? actionRef.actionId}</strong>
+                <small>
+                  {action ? getActionTypeLabel(action.type) : '연결 끊김'}
+                </small>
+              </div>
+              <label className="toggle-switch">
+                <input checked={actionRef.enabled} readOnly type="checkbox" />
+                <span />
+              </label>
+              <button className="icon-button" disabled type="button">
+                ↑
+              </button>
+              <button className="icon-button" disabled type="button">
+                ↓
+              </button>
+            </div>
+          )
+        })
+      )}
+    </div>
+  )
+}
+
 type TaskLaunchPanelProps = {
   tasks: TaskTemplate[]
   categoryLabel: string
   displayMode: TaskListDisplayMode
+  gridColumnCount: number
   isLoading: boolean
   runningTaskId: string | null
   selectedTaskId: string | null
   stoppingTaskId: string | null
   onCreate(): void
   onDisplayModeChange(value: TaskListDisplayMode): void
+  onGridColumnCountChange(value: number): void
   onRun(taskId: string): Promise<void>
   onStop(taskId: string): Promise<void>
   onSelect(task: TaskTemplate): void
@@ -1303,9 +1927,11 @@ function TaskLaunchPanel({
   tasks,
   categoryLabel,
   displayMode,
+  gridColumnCount,
   isLoading,
   onCreate,
   onDisplayModeChange,
+  onGridColumnCountChange,
   onRun,
   onSelect,
   onStop,
@@ -1314,17 +1940,33 @@ function TaskLaunchPanel({
   stoppingTaskId,
 }: TaskLaunchPanelProps) {
   return (
-    <section className="task-section launch-section" aria-label="작업 실행">
+    <section className="task-section launch-section" aria-label="Workflow 실행">
       <div className="section-heading">
         <div>
           <p className="eyebrow">{categoryLabel}</p>
-          <h2>실행할 작업</h2>
+          <h2>실행할 Workflow</h2>
         </div>
         <div className="section-actions">
           <TaskListDisplayToggle
             value={displayMode}
             onChange={onDisplayModeChange}
           />
+          {displayMode === 'grid' ? (
+            <select
+              aria-label="그리드 열 수"
+              className="compact-select"
+              value={gridColumnCount}
+              onChange={(event) =>
+                onGridColumnCountChange(Number(event.target.value))
+              }
+            >
+              {[2, 3, 4, 5, 6, 7, 8].map((count) => (
+                <option key={count} value={count}>
+                  {count}열
+                </option>
+              ))}
+            </select>
+          ) : null}
           <span>{tasks.length}개</span>
         </div>
       </div>
@@ -1333,13 +1975,22 @@ function TaskLaunchPanel({
         <p className="empty-state">작업을 불러오는 중입니다.</p>
       ) : tasks.length === 0 ? (
         <div className="empty-state empty-state-action">
-          <p>아직 저장된 브라우저 탭 그룹 템플릿이 없습니다.</p>
+          <p>아직 저장된 Workflow가 없습니다.</p>
           <button type="button" onClick={onCreate}>
-            새 작업 만들기
+            Workflow 만들기
           </button>
         </div>
       ) : (
-        <div className={`task-list task-list-${displayMode}`}>
+        <div
+          className={`task-list task-list-${displayMode}`}
+          style={
+            displayMode === 'grid'
+              ? ({
+                  '--workflow-grid-columns': gridColumnCount,
+                } as CSSProperties)
+              : undefined
+          }
+        >
           {tasks.map((task) => {
             const config =
               task.type === 'browser_tab_group'
@@ -1372,26 +2023,41 @@ function TaskLaunchPanel({
                     </span>
                   </button>
                 ) : (
-                  <div className="task-card-title">
-                    <strong>{task.name}</strong>
-                    <small>{getTaskTypeLabel(task.type)}</small>
-                  </div>
+                  <button
+                    className={`workflow-grid-button status-${task.state.status}`}
+                    disabled={isRunning || isStopping || canStop}
+                    type="button"
+                    onClick={() => void onRun(task.id)}
+                  >
+                    {task.name}
+                  </button>
                 )}
-                {isRestrictedDevicePolicy(task.permissions) ? (
+                {displayMode === 'list' &&
+                isRestrictedDevicePolicy(task.permissions) ? (
                   <span className="sensitive-pill">제한됨</span>
                 ) : null}
-                <span className={`status-pill status-${task.state.status}`}>
+                {displayMode === 'list' ? (
+                  <span className={`status-pill status-${task.state.status}`}>
                   {getTaskStatusLabel(task.state.status)}
-                </span>
-                <button
-                  type="button"
-                  disabled={isRunning || isStopping}
-                  onClick={() =>
-                    void (canStop ? onStop(task.id) : onRun(task.id))
-                  }
-                >
-                  {isStopping ? '중지 중' : canStop ? '중지' : isRunning ? '실행 중' : '실행'}
-                </button>
+                  </span>
+                ) : null}
+                {displayMode === 'list' ? (
+                  <button
+                    type="button"
+                    disabled={isRunning || isStopping}
+                    onClick={() =>
+                      void (canStop ? onStop(task.id) : onRun(task.id))
+                    }
+                  >
+                    {isStopping
+                      ? '중지 중'
+                      : canStop
+                        ? '중지'
+                        : isRunning
+                          ? '실행 중'
+                          : '실행'}
+                  </button>
+                ) : null}
               </article>
             )
           })}
@@ -1423,7 +2089,7 @@ function CreateTaskPanel({
       <div className="panel-heading">
         <div>
           <p className="eyebrow">New template</p>
-          <h2>새 브라우저 작업</h2>
+          <h2>새 단일 Action Workflow</h2>
         </div>
         <button className="ghost-button" type="button" onClick={onCancel}>
           닫기
@@ -1480,20 +2146,25 @@ function CreateTaskPanel({
 }
 
 type EditWorkspaceProps = {
+  actions: ActionDefinition[]
   confirmDeleteTaskId: string | null
   currentDevice: CurrentDevice
   editForm: BrowserTaskFormState
   isLoading: boolean
   secrets: LocalSecretMetadata[]
+  selectedWorkflowId: string | null
   selectedTask: TaskTemplate | null
   taskRunEvents: TaskRunEvent[]
+  workflows: WorkflowDefinition[]
   onChange(value: BrowserTaskFormState): void
   onConfirmDelete(taskId: string): Promise<void>
   onDeleteRequest(taskId: string | null): void
+  onSelectWorkflow(workflowId: string | null): void
   onSubmit(event: FormEvent<HTMLFormElement>): void
 }
 
 function EditWorkspace({
+  actions,
   confirmDeleteTaskId,
   currentDevice,
   editForm,
@@ -1501,11 +2172,17 @@ function EditWorkspace({
   onChange,
   onConfirmDelete,
   onDeleteRequest,
+  onSelectWorkflow,
   onSubmit,
   secrets,
+  selectedWorkflowId,
   selectedTask,
   taskRunEvents,
+  workflows,
 }: EditWorkspaceProps) {
+  const selectedWorkflow =
+    workflows.find((workflow) => workflow.id === selectedWorkflowId) ?? null
+
   if (isLoading) {
     return (
       <section className="mode-panel">
@@ -1534,6 +2211,50 @@ function EditWorkspace({
 
   return (
     <section aria-label="기존 작업 수정">
+      <section className="mode-panel workflow-builder" aria-label="Workflow 작성">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Workflows</p>
+            <h2>Workflow 작성</h2>
+          </div>
+          <button
+            aria-label="새 Workflow"
+            type="button"
+            onClick={() => onSelectWorkflow(null)}
+          >
+            +
+          </button>
+        </div>
+        <div className="editor-layout">
+          <div className="editor-list">
+            {workflows.map((workflow) => (
+              <button
+                className={`editor-list-item${
+                  selectedWorkflow?.id === workflow.id ? ' is-selected' : ''
+                }`}
+                key={workflow.id}
+                type="button"
+                onClick={() => onSelectWorkflow(workflow.id)}
+              >
+                <strong>{workflow.name}</strong>
+                <span>{workflow.actionRefs.length} Actions</span>
+              </button>
+            ))}
+          </div>
+          <div className="editor-detail">
+            <div className="section-heading compact-heading">
+              <div>
+                <p className="eyebrow">Action order</p>
+                <h3>{selectedWorkflow?.name ?? '새 Workflow'}</h3>
+              </div>
+            </div>
+            <WorkflowActionList
+              actions={actions}
+              workflow={selectedWorkflow}
+            />
+          </div>
+        </div>
+      </section>
       <section className="mode-panel" aria-label="선택한 작업 수정">
         <TaskEditPanel
           currentDevice={currentDevice}
@@ -1640,17 +2361,26 @@ function EditWorkspace({
 type AppSettingsPanelProps = {
   form: AppSettings
   currentDevice: CurrentDevice
+  pruneMessage: string | null
   secretForm: SecretFormState
   secretStorageStatus: SecretStorageStatus
   selectedCategory: SettingsCategory
   secrets: LocalSecretMetadata[]
   saveState: SettingsSaveState
   settingsErrorMessage: string | null
+  syncMessage: string | null
+  syncResult: SyncImportResult | null
+  syncStatus: SyncStatus
   userDataPath: string
   onChange(value: AppSettings): void
   onClose(): void
   onCreateSecret(): void
   onDeleteSecret(secretId: string): void
+  onExportSyncSnapshot(): Promise<void>
+  onExportSyncSnapshotFile(): Promise<void>
+  onImportSyncSnapshot(): Promise<void>
+  onImportSyncSnapshotFile(): Promise<void>
+  onPruneTaskRunEvents(): Promise<void>
   onSecretFormChange(value: SecretFormState): void
   onSubmit(event: FormEvent<HTMLFormElement>): void
 }
@@ -1658,6 +2388,7 @@ type AppSettingsPanelProps = {
 function AppSettingsPanel({
   currentDevice,
   form,
+  pruneMessage,
   secretForm,
   secretStorageStatus,
   selectedCategory,
@@ -1665,11 +2396,19 @@ function AppSettingsPanel({
   onClose,
   onCreateSecret,
   onDeleteSecret,
+  onExportSyncSnapshot,
+  onExportSyncSnapshotFile,
+  onImportSyncSnapshot,
+  onImportSyncSnapshotFile,
+  onPruneTaskRunEvents,
   onSecretFormChange,
   onSubmit,
   saveState,
   settingsErrorMessage,
   secrets,
+  syncMessage,
+  syncResult,
+  syncStatus,
   userDataPath,
 }: AppSettingsPanelProps) {
   return (
@@ -1734,13 +2473,26 @@ function AppSettingsPanel({
             </label>
 
             <label>
-              새 작업 기본 이름
+              새 Action 기본 이름
               <input
-                value={form.defaultTaskName}
+                value={form.defaultActionName}
                 onChange={(event) =>
                   onChange({
                     ...form,
-                    defaultTaskName: event.target.value,
+                    defaultActionName: event.target.value,
+                  })
+                }
+              />
+            </label>
+
+            <label>
+              새 Workflow 기본 이름
+              <input
+                value={form.defaultWorkflowName}
+                onChange={(event) =>
+                  onChange({
+                    ...form,
+                    defaultWorkflowName: event.target.value,
                   })
                 }
               />
@@ -1763,42 +2515,58 @@ function AppSettingsPanel({
             </label>
 
             <label>
-              실행 이벤트 보존 개수
+              실행 그리드 열 수
               <input
-                max={2000}
-                min={50}
+                max={8}
+                min={2}
                 type="number"
-                value={form.taskRunEventRetentionLimit}
+                value={form.workflowGridColumnCount}
                 onChange={(event) =>
                   onChange({
                     ...form,
-                    taskRunEventRetentionLimit: Number(event.target.value),
+                    workflowGridColumnCount: Number(event.target.value),
                   })
                 }
               />
             </label>
+          </>
+        ) : null}
 
-            <label>
-              Sync export 이벤트 개수
-              <input
-                max={2000}
-                min={0}
-                type="number"
-                value={form.taskRunEventExportLimit}
-                onChange={(event) =>
-                  onChange({
-                    ...form,
-                    taskRunEventExportLimit: Number(event.target.value),
-                  })
-                }
-              />
-            </label>
+        {selectedCategory === 'shortcuts' ? (
+          <section className="settings-subsection" aria-label="단축키">
+            <div className="section-heading compact-heading">
+              <div>
+                <p className="eyebrow">Shortcuts</p>
+                <h3>단축키 사용자 정의</h3>
+              </div>
+            </div>
+            <div className="shortcut-list">
+              {[
+                ['실행 페이지 새로고침', 'Ctrl+R'],
+                ['Action 화면 열기', 'Ctrl+1'],
+                ['Workflow 화면 열기', 'Ctrl+2'],
+                ['도구 페이지 열기', 'Ctrl+3'],
+              ].map(([label, shortcut]) => (
+                <label key={label}>
+                  {label}
+                  <input value={shortcut} readOnly />
+                </label>
+              ))}
+            </div>
+            <p className="muted-text">
+              단축키 충돌 감지와 저장은 다음 단계에서 활성화합니다.
+            </p>
+          </section>
+        ) : null}
 
-            <label>
-              초기 URL 입력 방식
-              <input value="줄 단위 입력" readOnly />
-            </label>
-
+        {selectedCategory === 'browser' ? (
+          <section className="settings-subsection" aria-label="브라우저 설정">
+            <div className="section-heading compact-heading">
+              <div>
+                <p className="eyebrow">Browser</p>
+                <h3>브라우저 실행 정책</h3>
+              </div>
+            </div>
             <label>
               Chrome 실행 파일 경로
               <input
@@ -1849,12 +2617,14 @@ function AppSettingsPanel({
                 placeholder="비워두면 자동으로 찾습니다."
               />
             </label>
-
-            <label>
-              데이터 위치
-              <input value={userDataPath || '아직 불러오지 못했습니다.'} readOnly />
-            </label>
-          </>
+            <dl className="detail-list">
+              <DetailItem label="기본 실행 방식" value="전용 프로필" />
+              <DetailItem
+                label="기본 프로필 조작"
+                value="자동 탐색/강제 조작 안 함"
+              />
+            </dl>
+          </section>
         ) : null}
 
         {selectedCategory === 'devices' ? (
@@ -2009,6 +2779,146 @@ function AppSettingsPanel({
               ))}
             </div>
           )}
+          </section>
+        ) : null}
+
+        {selectedCategory === 'sync' ? (
+          <section className="settings-subsection" aria-label="동기화">
+            <div className="section-heading compact-heading">
+              <div>
+                <p className="eyebrow">Mock sync</p>
+                <h3>로컬 동기화 스냅샷</h3>
+              </div>
+            </div>
+            <dl className="detail-list">
+              <DetailItem
+                label="Sync mode"
+                value={getSyncModeLabel(syncStatus.mode)}
+              />
+              <DetailItem
+                label="Server DB"
+                value={syncStatus.serverDbSyncEnabled ? '사용' : '미사용'}
+              />
+              <DetailItem
+                label="내보내기 파일"
+                value={syncStatus.exportPath || '아직 없음'}
+              />
+              <DetailItem
+                label="마지막 내보내기"
+                value={formatDate(syncStatus.lastExportedAt)}
+              />
+            </dl>
+            {syncStatus.message ? (
+              <p className="muted-text">{syncStatus.message}</p>
+            ) : null}
+            <div className="form-actions">
+              <button type="button" onClick={() => void onExportSyncSnapshot()}>
+                내보내기
+              </button>
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={() => void onExportSyncSnapshotFile()}
+              >
+                파일로 내보내기
+              </button>
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={() => void onImportSyncSnapshot()}
+              >
+                가져오기
+              </button>
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={() => void onImportSyncSnapshotFile()}
+              >
+                파일에서 가져오기
+              </button>
+            </div>
+            {syncMessage ? <p className="panel-success">{syncMessage}</p> : null}
+            {syncResult ? (
+              <p className="panel-success">
+                가져오기 완료: 생성 {syncResult.tasksCreated}개, 업데이트{' '}
+                {syncResult.tasksUpdated}개, 이벤트{' '}
+                {syncResult.taskRunEventsAdded}개
+              </p>
+            ) : null}
+          </section>
+        ) : null}
+
+        {selectedCategory === 'events' ? (
+          <section className="settings-subsection" aria-label="실행 이벤트">
+            <div className="section-heading compact-heading">
+              <div>
+                <p className="eyebrow">Run events</p>
+                <h3>실행 이벤트 보존</h3>
+              </div>
+            </div>
+            <label>
+              실행 이벤트 보존 개수
+              <input
+                max={2000}
+                min={50}
+                type="number"
+                value={form.taskRunEventRetentionLimit}
+                onChange={(event) =>
+                  onChange({
+                    ...form,
+                    taskRunEventRetentionLimit: Number(event.target.value),
+                  })
+                }
+              />
+            </label>
+            <label>
+              Sync export 이벤트 개수
+              <input
+                max={2000}
+                min={0}
+                type="number"
+                value={form.taskRunEventExportLimit}
+                onChange={(event) =>
+                  onChange({
+                    ...form,
+                    taskRunEventExportLimit: Number(event.target.value),
+                  })
+                }
+              />
+            </label>
+            <div className="form-actions">
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={() => void onPruneTaskRunEvents()}
+              >
+                보존 개수 적용
+              </button>
+            </div>
+            {pruneMessage ? (
+              <p className="panel-success">{pruneMessage}</p>
+            ) : null}
+          </section>
+        ) : null}
+
+        {selectedCategory === 'data' ? (
+          <section className="settings-subsection" aria-label="데이터 관리">
+            <div className="section-heading compact-heading">
+              <div>
+                <p className="eyebrow">Data</p>
+                <h3>로컬 데이터 위치</h3>
+              </div>
+            </div>
+            <label>
+              userData 위치
+              <input value={userDataPath || '아직 불러오지 못했습니다.'} readOnly />
+            </label>
+            <dl className="detail-list">
+              <DetailItem label="작업 저장" value="tasks.json" />
+              <DetailItem label="도구 등록" value="toolModules.json" />
+              <DetailItem label="도구 복사" value="tool-modules/" />
+              <DetailItem label="Secret 저장" value="secrets.json" />
+            </dl>
           </section>
         ) : null}
 
@@ -2552,8 +3462,11 @@ function isSettingsDirty(form: AppSettings, settings: AppSettings): boolean {
     form.themeMode !== settings.themeMode ||
     form.defaultBrowserKind !== settings.defaultBrowserKind ||
     form.defaultTaskName.trim() !== settings.defaultTaskName ||
+    form.defaultActionName.trim() !== settings.defaultActionName ||
+    form.defaultWorkflowName.trim() !== settings.defaultWorkflowName ||
     form.initialUrlInputMode !== settings.initialUrlInputMode ||
     form.taskListDisplayMode !== settings.taskListDisplayMode ||
+    form.workflowGridColumnCount !== settings.workflowGridColumnCount ||
     form.taskRunEventRetentionLimit !== settings.taskRunEventRetentionLimit ||
     form.taskRunEventExportLimit !== settings.taskRunEventExportLimit ||
     normalizeSettingsPath(form.browserExecutablePaths.chrome) !==
@@ -2827,11 +3740,14 @@ function filterTasks(
   switch (category) {
     case 'running':
       return tasks.filter((task) => task.state.status === 'running')
+    case 'scheduled':
+      return tasks.filter((task) => task.schedule?.enabled)
+    case 'failed':
+      return tasks.filter((task) => task.state.status === 'failed')
     case 'restricted':
       return tasks.filter((task) => isRestrictedDevicePolicy(task.permissions))
-    case 'favorites':
-      return []
-    case 'folders':
+    case 'secret_required':
+      return tasks.filter((task) => (task.permissions.secretRefs?.length ?? 0) > 0)
     case 'all':
       return tasks
   }
@@ -2849,6 +3765,23 @@ function getTaskTypeLabel(taskType: TaskType): string {
       return 'Notion sync'
     case 'trading_bot':
       return 'Trading bot'
+  }
+}
+
+function getActionTypeLabel(actionType: ActionDefinition['type']): string {
+  switch (actionType) {
+    case 'browser_action':
+      return 'Browser Action'
+    case 'crawler_action':
+      return 'Crawler Action'
+    case 'discord_dry_run_action':
+      return 'Discord dry-run'
+    case 'notion_dry_run_action':
+      return 'Notion dry-run'
+    case 'trading_dry_run_action':
+      return 'Trading dry-run'
+    case 'tool_action':
+      return 'Tool Action'
   }
 }
 
@@ -2890,18 +3823,62 @@ function getSyncModeLabel(mode: SyncStatus['mode']): string {
   }
 }
 
+function createToolInputDefaults(
+  tool: RegisteredToolModule,
+): Record<string, unknown> {
+  return tool.manifest.inputs.reduce<Record<string, unknown>>(
+    (defaults, field) => ({
+      ...defaults,
+      [field.key]: getToolFieldDefaultValue(field),
+    }),
+    {},
+  )
+}
+
+function getToolFieldDefaultValue(field: ToolModuleField): unknown {
+  if (field.default !== undefined) {
+    return field.type === 'json'
+      ? JSON.stringify(field.default, null, 2)
+      : field.default
+  }
+
+  if (
+    (field.ui?.control === 'select' || field.ui?.control === 'radio') &&
+    field.ui.options?.[0]
+  ) {
+    return field.ui.options[0].value
+  }
+
+  switch (field.type) {
+    case 'boolean':
+      return false
+    case 'json':
+      return '{}'
+    case 'number':
+      return ''
+    case 'number[]':
+    case 'string[]':
+      return ''
+    case 'file':
+    case 'string':
+      return ''
+  }
+}
+
 function getNavigationCategoryLabel(category: NavigationCategory): string {
   switch (category) {
     case 'all':
       return 'All templates'
     case 'running':
       return 'Running'
-    case 'folders':
-      return 'Folders'
-    case 'favorites':
-      return 'Favorites'
+    case 'scheduled':
+      return 'Scheduled'
+    case 'failed':
+      return 'Failed'
     case 'restricted':
       return 'Restricted'
+    case 'secret_required':
+      return 'Secret required'
   }
 }
 
@@ -2920,10 +3897,10 @@ function getWorkspaceModeLabel(workspaceMode: WorkspaceMode): string {
   switch (workspaceMode) {
     case 'run':
       return '실행'
-    case 'create':
-      return '새 작업'
-    case 'edit':
-      return '수정'
+    case 'actions':
+      return 'Action'
+    case 'workflows':
+      return 'Workflow'
     case 'tools':
       return '도구'
     case 'settings':

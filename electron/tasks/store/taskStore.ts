@@ -2,14 +2,20 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
+  createActionFromLegacyTask,
+  createWorkflowFromLegacyTask,
   defaultDevicePolicy,
   defaultTaskState,
+  getLegacyActionId,
+  getLegacyWorkflowId,
   normalizeDevicePolicy,
   normalizeTaskSchedule,
+  type ActionDefinition,
   type DevicePolicy,
   type TaskSchedule,
   type TaskState,
   type TaskTemplate,
+  type WorkflowDefinition,
 } from '../../../src/shared/tasks'
 
 export type CreateTaskInput<TConfig = unknown> = {
@@ -31,18 +37,39 @@ export type UpdateTaskInput<TConfig = unknown> = Partial<
 export type TaskStore = {
   getTask(id: string): Promise<TaskTemplate>
   listTasks(): Promise<TaskTemplate[]>
+  listActions(): Promise<ActionDefinition[]>
+  listWorkflows(): Promise<WorkflowDefinition[]>
+  createAction(input: CreateActionInput): Promise<ActionDefinition>
   createTask(input: CreateTaskInput): Promise<TaskTemplate>
   updateTask(id: string, input: UpdateTaskInput): Promise<TaskTemplate>
   replaceTasks(tasks: TaskTemplate[]): Promise<void>
+  replaceTaskData(input: ReplaceTaskDataInput): Promise<void>
   deleteTask(id: string): Promise<void>
+}
+
+export type CreateActionInput<TConfig = unknown> = {
+  name: string
+  type: ActionDefinition<TConfig>['type']
+  config: TConfig
+  secretRefs?: ActionDefinition<TConfig>['secretRefs']
+  inputSchema?: ActionDefinition<TConfig>['inputSchema']
+  outputSchema?: ActionDefinition<TConfig>['outputSchema']
 }
 
 export type TaskStoreOptions = {
   dataDir: string
 }
 
+export type ReplaceTaskDataInput = {
+  tasks: TaskTemplate[]
+  actions?: ActionDefinition[]
+  workflows?: WorkflowDefinition[]
+}
+
 type TaskFile = {
   tasks: TaskTemplate[]
+  actions: ActionDefinition[]
+  workflows: WorkflowDefinition[]
 }
 
 export function createTaskStore({ dataDir }: TaskStoreOptions): TaskStore {
@@ -55,10 +82,12 @@ export function createTaskStore({ dataDir }: TaskStoreOptions): TaskStore {
 
       return {
         tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
+        actions: Array.isArray(parsed.actions) ? parsed.actions : [],
+        workflows: Array.isArray(parsed.workflows) ? parsed.workflows : [],
       }
     } catch (error) {
       if (isNodeError(error) && error.code === 'ENOENT') {
-        return { tasks: [] }
+        return { tasks: [], actions: [], workflows: [] }
       }
 
       throw error
@@ -91,6 +120,39 @@ export function createTaskStore({ dataDir }: TaskStoreOptions): TaskStore {
       return taskFile.tasks
     },
 
+    async listActions() {
+      const taskFile = await readTaskFile()
+      return ensureLegacyWorkflowData(taskFile).actions
+    },
+
+    async listWorkflows() {
+      const taskFile = await readTaskFile()
+      return ensureLegacyWorkflowData(taskFile).workflows
+    },
+
+    async createAction(input) {
+      const now = new Date().toISOString()
+      const action: ActionDefinition = {
+        id: randomUUID(),
+        name: input.name.trim(),
+        type: input.type,
+        config: input.config,
+        secretRefs: input.secretRefs,
+        inputSchema: input.inputSchema,
+        outputSchema: input.outputSchema,
+        createdAt: now,
+        updatedAt: now,
+      }
+      const taskFile = ensureLegacyWorkflowData(await readTaskFile())
+
+      await writeTaskFile({
+        ...taskFile,
+        actions: [...taskFile.actions, action],
+      })
+
+      return action
+    },
+
     async createTask(input) {
       const now = new Date().toISOString()
       const task: TaskTemplate = {
@@ -108,9 +170,15 @@ export function createTaskStore({ dataDir }: TaskStoreOptions): TaskStore {
       }
 
       const taskFile = await readTaskFile()
-      await writeTaskFile({
-        tasks: [...taskFile.tasks, task],
-      })
+      await writeTaskFile(
+        upsertLegacyTaskModel(
+          {
+            ...taskFile,
+            tasks: [...taskFile.tasks, task],
+          },
+          task,
+        ),
+      )
 
       return task
     },
@@ -140,28 +208,107 @@ export function createTaskStore({ dataDir }: TaskStoreOptions): TaskStore {
 
       const tasks = [...taskFile.tasks]
       tasks[taskIndex] = updatedTask
-      await writeTaskFile({ tasks })
+      await writeTaskFile(upsertLegacyTaskModel({ ...taskFile, tasks }, updatedTask))
 
       return updatedTask
     },
 
     async replaceTasks(tasks) {
-      await writeTaskFile({
-        tasks: tasks.map((task) => ({
+      const normalizedTasks = tasks.map((task) => ({
           ...task,
           name: task.name.trim(),
           permissions: normalizeDevicePolicy(task.permissions),
           schedule: normalizeTaskSchedule(task.schedule),
-        })),
-      })
+        }))
+
+      await writeTaskFile(
+        ensureLegacyWorkflowData({
+          tasks: normalizedTasks,
+          actions: [],
+          workflows: [],
+        }),
+      )
+    },
+
+    async replaceTaskData(input) {
+      const normalizedTasks = input.tasks.map((task) => ({
+        ...task,
+        name: task.name.trim(),
+        permissions: normalizeDevicePolicy(task.permissions),
+        schedule: normalizeTaskSchedule(task.schedule),
+      }))
+
+      await writeTaskFile(
+        ensureLegacyWorkflowData({
+          tasks: normalizedTasks,
+          actions: input.actions ?? [],
+          workflows: input.workflows ?? [],
+        }),
+      )
     },
 
     async deleteTask(id) {
       const taskFile = await readTaskFile()
       await writeTaskFile({
         tasks: taskFile.tasks.filter((task) => task.id !== id),
+        actions: taskFile.actions.filter(
+          (action) => action.legacyTaskId !== id && action.id !== getLegacyActionId(id),
+        ),
+        workflows: taskFile.workflows.filter(
+          (workflow) =>
+            workflow.legacyTaskId !== id && workflow.id !== getLegacyWorkflowId(id),
+        ),
       })
     },
+  }
+}
+
+function ensureLegacyWorkflowData(taskFile: TaskFile): TaskFile {
+  const legacyActionIds = new Set(
+    taskFile.tasks.map((task) => getLegacyActionId(task.id)),
+  )
+  const legacyWorkflowIds = new Set(
+    taskFile.tasks.map((task) => getLegacyWorkflowId(task.id)),
+  )
+  const nonLegacyActions = taskFile.actions.filter(
+    (action) => !legacyActionIds.has(action.id) && !action.legacyTaskId,
+  )
+  const nonLegacyWorkflows = taskFile.workflows.filter(
+    (workflow) => !legacyWorkflowIds.has(workflow.id) && !workflow.legacyTaskId,
+  )
+
+  return {
+    tasks: taskFile.tasks,
+    actions: [
+      ...nonLegacyActions,
+      ...taskFile.tasks.map((task) => createActionFromLegacyTask(task)),
+    ],
+    workflows: [
+      ...nonLegacyWorkflows,
+      ...taskFile.tasks.map((task) => createWorkflowFromLegacyTask(task)),
+    ],
+  }
+}
+
+function upsertLegacyTaskModel(taskFile: TaskFile, task: TaskTemplate): TaskFile {
+  const taskWithNormalizedModel = ensureLegacyWorkflowData(taskFile)
+  const action = createActionFromLegacyTask(task)
+  const workflow = createWorkflowFromLegacyTask(task)
+
+  return {
+    tasks: taskWithNormalizedModel.tasks,
+    actions: [
+      ...taskWithNormalizedModel.actions.filter(
+        (currentAction) => currentAction.id !== action.id,
+      ),
+      action,
+    ],
+    workflows: [
+      ...taskWithNormalizedModel.workflows.filter(
+        (currentWorkflow) => currentWorkflow.id !== workflow.id,
+      ),
+      workflow,
+    ],
   }
 }
 

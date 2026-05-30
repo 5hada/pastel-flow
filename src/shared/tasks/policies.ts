@@ -1,27 +1,24 @@
 import type { CurrentDevice, DeviceAccessLevel, LinkedDevice } from '../devices'
-import type { DevicePolicy, TaskTemplate } from './types'
+import type { DevicePolicy, TaskTemplate, WorkflowDefinition } from './types'
 
 export function canViewTaskOnDevice(
   task: TaskTemplate,
   currentDevice: CurrentDevice,
   linkedDevices: LinkedDevice[],
 ): boolean {
-  const accessLevel = getCurrentDeviceAccessLevel(currentDevice, linkedDevices)
+  return canViewPolicyOnDevice(task.permissions, currentDevice, linkedDevices)
+}
 
-  if (accessLevel === 'blocked') {
-    return false
-  }
-
-  switch (task.permissions.visibility) {
-    case 'all_devices':
-      return true
-    case 'trusted_devices':
-      return accessLevel === 'trusted'
-    case 'specific_devices':
-      return isDeviceAllowed(task.permissions, currentDevice.id)
-    case 'local_only':
-      return isLocalDeviceAllowed(task.permissions, currentDevice.id)
-  }
+export function canViewWorkflowOnDevice(
+  workflow: WorkflowDefinition,
+  currentDevice: CurrentDevice,
+  linkedDevices: LinkedDevice[],
+): boolean {
+  return canViewPolicyOnDevice(
+    workflow.permissions,
+    currentDevice,
+    linkedDevices,
+  )
 }
 
 export function canExecuteTaskOnDevice(
@@ -29,22 +26,19 @@ export function canExecuteTaskOnDevice(
   currentDevice: CurrentDevice,
   linkedDevices: LinkedDevice[],
 ): boolean {
-  const accessLevel = getCurrentDeviceAccessLevel(currentDevice, linkedDevices)
+  return canExecutePolicyOnDevice(task.permissions, currentDevice, linkedDevices)
+}
 
-  if (accessLevel !== 'executable' && accessLevel !== 'trusted') {
-    return false
-  }
-
-  switch (task.permissions.execution) {
-    case 'anywhere':
-      return true
-    case 'trusted_only':
-      return accessLevel === 'trusted'
-    case 'specific_devices':
-      return isDeviceAllowed(task.permissions, currentDevice.id)
-    case 'local_only':
-      return isLocalDeviceAllowed(task.permissions, currentDevice.id)
-  }
+export function canExecuteWorkflowOnDevice(
+  workflow: WorkflowDefinition,
+  currentDevice: CurrentDevice,
+  linkedDevices: LinkedDevice[],
+): boolean {
+  return canExecutePolicyOnDevice(
+    workflow.permissions,
+    currentDevice,
+    linkedDevices,
+  )
 }
 
 export function createLocalOnlyDevicePolicy(
@@ -54,6 +48,52 @@ export function createLocalOnlyDevicePolicy(
     visibility: 'local_only',
     execution: 'local_only',
     allowedDeviceIds: [currentDevice.id],
+  }
+}
+
+function canViewPolicyOnDevice(
+  permissions: DevicePolicy,
+  currentDevice: CurrentDevice,
+  linkedDevices: LinkedDevice[],
+): boolean {
+  const accessLevel = getCurrentDeviceAccessLevel(currentDevice, linkedDevices)
+
+  if (accessLevel === 'blocked') {
+    return false
+  }
+
+  switch (permissions.visibility) {
+    case 'all_devices':
+      return true
+    case 'trusted_devices':
+      return accessLevel === 'trusted'
+    case 'specific_devices':
+      return isDeviceAllowed(permissions, currentDevice.id)
+    case 'local_only':
+      return isLocalDeviceAllowed(permissions, currentDevice.id)
+  }
+}
+
+function canExecutePolicyOnDevice(
+  permissions: DevicePolicy,
+  currentDevice: CurrentDevice,
+  linkedDevices: LinkedDevice[],
+): boolean {
+  const accessLevel = getCurrentDeviceAccessLevel(currentDevice, linkedDevices)
+
+  if (accessLevel !== 'executable' && accessLevel !== 'trusted') {
+    return false
+  }
+
+  switch (permissions.execution) {
+    case 'anywhere':
+      return true
+    case 'trusted_only':
+      return accessLevel === 'trusted'
+    case 'specific_devices':
+      return isDeviceAllowed(permissions, currentDevice.id)
+    case 'local_only':
+      return isLocalDeviceAllowed(permissions, currentDevice.id)
   }
 }
 

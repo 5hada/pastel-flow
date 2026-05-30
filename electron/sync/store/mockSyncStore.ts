@@ -11,7 +11,11 @@ import {
   type SyncImportResult,
   type SyncStatus,
 } from '../../../src/shared/sync'
-import type { TaskTemplate } from '../../../src/shared/tasks'
+import type {
+  ActionDefinition,
+  TaskTemplate,
+  WorkflowDefinition,
+} from '../../../src/shared/tasks'
 
 export type MockSyncStore = {
   getStatus(): Promise<SyncStatus>
@@ -51,11 +55,13 @@ export function createMockSyncStore({
     },
 
     async exportSnapshot() {
-      const [currentDevice, settingsSnapshot, tasks, taskRunEvents] =
+      const [currentDevice, settingsSnapshot, tasks, actions, workflows, taskRunEvents] =
         await Promise.all([
           deviceStore.getCurrentDevice(),
           appSettingsStore.getSnapshot(),
           taskStore.listTasks(),
+          taskStore.listActions(),
+          taskStore.listWorkflows(),
           appSettingsStore
             .getSnapshot()
             .then((snapshot) =>
@@ -69,6 +75,8 @@ export function createMockSyncStore({
         exportedAt: new Date().toISOString(),
         sourceDevice: currentDevice,
         tasks: stripLocalTaskState(tasks),
+        actions,
+        workflows: stripLocalWorkflowState(workflows),
         taskRunEvents,
         linkedDevices: settingsSnapshot.settings.linkedDevices,
       }
@@ -90,7 +98,19 @@ export function createMockSyncStore({
       const nextSnapshot = snapshot ?? (await readSnapshot(exportPath))
       const normalizedSnapshot = normalizeSyncExportSnapshot(nextSnapshot)
       const currentTasks = await taskStore.listTasks()
+      const [currentActions, currentWorkflows] = await Promise.all([
+        taskStore.listActions(),
+        taskStore.listWorkflows(),
+      ])
       const mergedTasks = mergeTasks(currentTasks, normalizedSnapshot.tasks)
+      const mergedActions = mergeDefinitions(
+        currentActions,
+        normalizedSnapshot.actions,
+      )
+      const mergedWorkflows = mergeDefinitions(
+        currentWorkflows,
+        normalizedSnapshot.workflows,
+      )
       const taskRunEventsAdded = await taskRunEventStore.importEvents(
         normalizedSnapshot.taskRunEvents,
       )
@@ -101,7 +121,11 @@ export function createMockSyncStore({
       )
 
       await Promise.all([
-        taskStore.replaceTasks(mergedTasks.tasks),
+        taskStore.replaceTaskData({
+          tasks: mergedTasks.tasks,
+          actions: mergedActions,
+          workflows: mergedWorkflows,
+        }),
         appSettingsStore.updateSettings({
           ...settingsSnapshot.settings,
           linkedDevices,
@@ -152,6 +176,18 @@ function stripLocalTaskState(tasks: TaskTemplate[]): TaskTemplate[] {
   }))
 }
 
+function stripLocalWorkflowState(
+  workflows: SyncExportSnapshot['workflows'],
+): SyncExportSnapshot['workflows'] {
+  return workflows.map((workflow) => ({
+    ...workflow,
+    state: {
+      ...workflow.state,
+      localProfilePath: undefined,
+    },
+  }))
+}
+
 function mergeTasks(
   currentTasks: TaskTemplate[],
   incomingTasks: TaskTemplate[],
@@ -192,6 +228,30 @@ function mergeTasks(
     created,
     updated,
   }
+}
+
+function mergeDefinitions<TDefinition extends ActionDefinition | WorkflowDefinition>(
+  currentDefinitions: TDefinition[],
+  incomingDefinitions: TDefinition[],
+): TDefinition[] {
+  const definitionMap = new Map(
+    currentDefinitions.map((definition) => [definition.id, definition]),
+  )
+
+  for (const incomingDefinition of incomingDefinitions) {
+    const currentDefinition = definitionMap.get(incomingDefinition.id)
+
+    if (
+      !currentDefinition ||
+      incomingDefinition.updatedAt > currentDefinition.updatedAt
+    ) {
+      definitionMap.set(incomingDefinition.id, incomingDefinition)
+    }
+  }
+
+  return [...definitionMap.values()].sort((left, right) =>
+    left.createdAt.localeCompare(right.createdAt),
+  )
 }
 
 function mergeTaskFields(

@@ -8,10 +8,13 @@
 - Renderer: React + TypeScript
 - 번들러/개발 서버: Vite
 - 초기 저장 방식: Electron `userData` 경로의 `tasks.json`
+- Action/Workflow 저장 방식: Electron `userData` 경로의 `tasks.json` 안에 `tasks`, `actions`, `workflows`를 함께 저장
 - 앱 설정 저장 방식: Electron `userData` 경로의 `appSettings.json`
 - 기기 식별자 저장 방식: Electron `userData` 경로의 `device.json`
 - 로컬 secret 저장 방식: Electron `userData` 경로의 `secrets.json`
 - 실행 이벤트 저장 방식: Electron `userData` 경로의 `taskRunEvents.json`
+- Tool Module 등록 저장 방식: Electron `userData` 경로의 `toolModules.json`
+- Tool Module 복사 위치: Electron `userData` 경로의 `tool-modules/`
 - mock sync export 저장 방식: Electron `userData` 경로의 `syncExport.json`
 - 서버 DB 연동 상태: 현재 구현 범위에서 제외. 실제 서버, transport, 계정 backend 없이 로컬 mock 파일 sync만 사용
 - 현재 MVP: 브라우저 탭 그룹 템플릿 생성, 수정, 삭제, 저장, 실행, 목록 표시
@@ -68,6 +71,13 @@ electron/
       secretIpc.ts                secrets:list/create/delete IPC 등록
     store/
       secretStore.ts              secrets.json 기반 로컬 secret 저장소
+  tools/
+    ipc/
+      toolModuleIpc.ts            tools:list/register-folder/run/create-action IPC 등록
+    runner/
+      toolModuleRunner.ts         logic.js 동적 import 실행, permission 기반 context API 제공
+    store/
+      toolModuleStore.ts          toolModules.json 등록 저장소, manifest/logic 검증, tool-modules 복사
   tasks/
     adapters/
       taskAdapter.ts              작업 adapter 공통 인터페이스
@@ -79,12 +89,15 @@ electron/
     ipc/
       taskIpc.ts                  tasks:list/create/update/delete IPC 등록
     runner/
-      taskRunner.ts               작업 조회, adapter 실행, 상태 저장
+      taskRunner.ts               작업 조회, adapter 실행, 상태 저장, legacy task 실행 이벤트에 workflow/action run 참조 기록
     scheduler/
-      taskScheduler.ts            작업별 interval schedule을 확인해 due task 실행
+      taskScheduler.ts            Workflow schedule을 확인해 due Workflow 실행
     store/
       taskRunEventStore.ts        taskRunEvents.json 기반 실행 이벤트 저장소
-      taskStore.ts                tasks.json 기반 로컬 저장소
+      taskStore.ts                tasks.json 기반 로컬 저장소, legacy task를 단일 Action/Workflow로 동기화
+  workflows/
+    runner/
+      workflowRunner.ts           Workflow 조회, enabled Action 확인, legacy task 기반 Workflow 실행/중지 위임
 
 src/
   App.tsx                         현재 최소 Pastel Flow UI
@@ -99,6 +112,7 @@ src/
     devices.ts                    현재 기기, 연동 기기, 허용 수준 타입과 helper
     secrets.ts                    로컬 secret 메타데이터와 생성 입력 타입
     settings.ts                   앱 설정 타입, 기본값, normalize helper
+    tools.ts                      Tool Module manifest, 등록 정보, 실행 결과 타입
     tasks/
       policies.ts                 기기 visibility/execution 정책 helper
       types.ts                    작업 템플릿과 브라우저 config 타입
@@ -120,11 +134,15 @@ App.tsx
   -> Electron userData/tasks.json / appSettings.json
 ```
 
-현재 UI는 브라우저 탭 그룹 생성, 수정, 삭제, 실행, 목록 표시와 앱 설정 편집을 지원한다. 이름, 브라우저 종류, 실행 방식, 초기 URL 목록을 renderer에서 편집하고 `tasks.json`에 저장한다. `dedicated_profile` 실행 방식에서는 전용 프로필 디렉터리를 만든 뒤 Chrome, Edge, Chromium 실행 파일을 찾아 `--user-data-dir` 인자로 브라우저 프로세스를 연다. 초기 URL이 있으면 브라우저 실행 인자로 같이 전달한다. `extension_controlled` 실행 방식은 Pastel Flow companion extension을 로드하고, DevTools 포트로 확장 서비스워커를 호출해 열린 탭 URL과 탭 그룹 이름, 색, 접힘 상태, 그룹-탭 관계를 `config.tabGroupSnapshot`에 저장한다. 확장 프로그램 제어 실행은 기본적으로 작업 전용 프로필을 쓰지만, 사용자가 `profileSource=existing_profile`과 `existingProfilePath`를 명시하면 평소 사용하는 브라우저 user data/profile 경로를 `--user-data-dir`로 실행할 수 있다. `default_browser_deeplink` 실행 방식은 전용 프로필을 만들지 않고 초기 URL을 OS 기본 브라우저로 여는 최소 실행만 담당한다.
+현재 UI는 브라우저 탭 그룹 생성, 수정, 삭제, 실행, 목록 표시와 앱 설정 편집을 지원한다. 이름, 브라우저 종류, 실행 방식, 초기 URL 목록을 renderer에서 편집하고 `tasks.json`에 저장한다. `taskStore`는 legacy `tasks`를 계속 보존하면서 각 task를 같은 ID 기반의 단일 Action과 단일 Workflow로 자동 동기화한다. `actions:list`, `workflows:list`, `workflows:run`, `workflows:stop` IPC는 새 모델 조회와 legacy task 기반 Workflow 실행을 제공한다. `dedicated_profile` 실행 방식에서는 전용 프로필 디렉터리를 만든 뒤 Chrome, Edge, Chromium 실행 파일을 찾아 `--user-data-dir` 인자로 브라우저 프로세스를 연다. 초기 URL이 있으면 브라우저 실행 인자로 같이 전달한다. `extension_controlled` 실행 방식은 Pastel Flow companion extension을 로드하고, DevTools 포트로 확장 서비스워커를 호출해 열린 탭 URL과 탭 그룹 이름, 색, 접힘 상태, 그룹-탭 관계를 `config.tabGroupSnapshot`에 저장한다. 확장 프로그램 제어 실행은 기본적으로 작업 전용 프로필을 쓰지만, 사용자가 `profileSource=existing_profile`과 `existingProfilePath`를 명시하면 평소 사용하는 브라우저 user data/profile 경로를 `--user-data-dir`로 실행할 수 있다. `default_browser_deeplink` 실행 방식은 전용 프로필을 만들지 않고 초기 URL을 OS 기본 브라우저로 여는 최소 실행만 담당한다.
+
+도구 페이지는 `tool-schema.md` 규격 Tool Module 등록과 실행만 지원한다. 사용자가 도구 폴더를 선택하면 main process가 `manifest.json`과 `logic.js`를 검증한 뒤 Electron `userData/tool-modules/` 아래로 복사하고 `toolModules.json`에 등록한다. renderer는 좌측 패널과 본문에 등록된 도구 목록을 표시하고, manifest inputs 기반 자동 실행 폼을 표시한다. input의 `ui` 메타데이터가 있으면 toggle, checkbox, select, radio, color, list, textarea, json 같은 구체 컨트롤로 렌더링한다. 단독 실행은 `tools:run` IPC를 통해 main process에서 `logic.js`를 동적 import해 수행한다. 실행 context는 manifest permissions에 선언된 `clipboard`, `file.read`, `file.write`, `network` API만 노출한다. 도구 페이지의 `Action 생성`은 등록된 module을 `tool_action` Action 정의로 `tasks.json`에 추가한다. 아직 이 Action을 Workflow 작성 화면에 삽입하거나 순수 Workflow runner에서 실행하는 UI/engine 흐름은 남은 작업이다.
+
+설정 페이지는 일반, 브라우저, 단축키, 기기, Secret, 동기화, 실행 이벤트, 데이터 관리 카테고리로 나뉜다. 기존 도구 페이지에 있던 mock sync export/import와 실행 이벤트 정리 기능은 설정 페이지의 동기화/실행 이벤트 카테고리로 이동했다. 데이터 관리 카테고리는 현재 `userData` 위치와 주요 로컬 파일명을 표시한다.
 
 작업 목록과 실행 버튼은 모든 작업 타입을 표시한다. 생성/수정 UI는 브라우저 탭 그룹, crawler, Discord bot dry-run, Notion sync dry-run, trading bot skeleton dry-run 설정을 저장할 수 있다. `crawler` adapter는 `config.urls`를 fetch해 `crawler-results` 디렉터리에 JSON 결과를 저장하고, URL 형식과 성공/실패 개수를 기록한다. `discord_bot`, `notion_sync`는 외부 API 연결 전 dry-run만 지원하며 `dry-run-results` 디렉터리에 실행 artifact를 저장한다. `trading_bot`은 skeleton dry-run만 제공하며 실행 artifact를 남기되 실제 자동매매, 실거래 주문, 거래소 API 주문 실행은 구현하지 않는다.
 
-작업에는 선택적 `schedule`이 있다. 현재 예약 실행은 interval minute, daily wall-clock, weekly wall-clock 방식을 지원한다. `taskScheduler`가 1분마다 작업 목록을 확인해 `nextRunAt`이 지난 작업을 `taskRunner.runTask`로 실행한다. 실행 권한 정책을 통과하지 못하거나 이미 실행 중인 작업은 예약 실행하지 않는다. daily/weekly 스케줄은 로컬 시간 기준 `HH:mm`과 요일 번호 `0=일요일`부터 `6=토요일`을 사용한다.
+작업에는 선택적 `schedule`이 있고 legacy task와 동기화된 Workflow에도 같은 schedule이 노출된다. 현재 예약 실행은 interval minute, daily wall-clock, weekly wall-clock 방식을 지원한다. `taskScheduler`가 1분마다 Workflow 목록을 확인해 `nextRunAt`이 지난 Workflow를 `workflowRunner.runWorkflow`로 실행한다. 실행 권한 정책을 통과하지 못하거나 이미 실행 중인 Workflow는 예약 실행하지 않는다. daily/weekly 스케줄은 로컬 시간 기준 `HH:mm`과 요일 번호 `0=일요일`부터 `6=토요일`을 사용한다.
 
 브라우저 작업에는 `dynamicTemplateUpdates` 토글이 있다. 이 값이 켜져 있으면 adapter가 브라우저를 `--remote-debugging-port`와 함께 실행하고, 실행 중 DevTools target 목록을 주기적으로 읽어 열린 탭 URL 스냅샷을 유지한다. 브라우저 정상 종료 시 마지막 URL 목록을 작업 config의 `initialUrls`로 저장한다. 이 기능은 전용 프로필 MVP에서 가능한 URL 목록 반영이며, 실제 탭 그룹 이름, 색, 그룹 관계는 확장 프로그램 기반 실행 방식에서 다룬다.
 
@@ -140,13 +158,13 @@ App.tsx
 
 Secret 설정 화면은 Electron `safeStorage` 사용 가능 여부, 선택된 backend, 안내 메시지를 표시한다. 암호화가 불가능한 환경에서는 secret 생성이 main process에서 거부되고, renderer는 해당 오류를 설정 화면에 표시한다.
 
-작업 실행 이벤트는 `taskRunEvents.json`에 append-only 형태로 저장한다. `taskRunner`는 실행 시작, 실행 요청 처리, 실행 이후 상태 변경, 실패를 이벤트로 기록한다. renderer는 선택한 작업의 최근 실행 이벤트를 수정 화면에 표시한다. 이벤트 조회도 task visibility policy를 통과한 작업에 대해서만 허용한다.
+작업 실행 이벤트는 `taskRunEvents.json`에 append-only 형태로 저장한다. `taskRunner`는 실행 시작, 실행 요청 처리, 실행 이후 상태 변경, 실패를 이벤트로 기록한다. 새 이벤트는 기존 `taskId`와 함께 `workflowId`, `actionRunId`, `legacyTaskId`를 기록할 수 있다. renderer는 선택한 작업의 최근 실행 이벤트를 수정 화면에 표시한다. 이벤트 조회도 task visibility policy를 통과한 작업에 대해서만 허용한다.
 
 작업 상세 화면은 작업 타입, 설정 요약, 예약, 상태, 마지막 실행 시간, 마지막 메시지, 출력 경로, 생성/수정 시간, 표시/실행 정책을 표시한다. crawler와 dry-run adapter가 남긴 JSON artifact 경로는 `state.outputPath`에 저장되어 상세 화면에서 확인할 수 있다.
 
 서버 DB 동기화 초안은 `sync-schema.md`에 둔다. 이 문서는 서버에 동기화할 작업 설정, 기기 정책, 실행 이벤트와 로컬 전용으로 남길 secret 값, 브라우저 프로필, 기기별 실행 파일 경로의 경계를 정의한다. 현재 구현은 실제 서버 DB 연동, transport, 계정 backend를 만들지 않고 mock 파일 export/import까지만 지원한다.
 
-mock sync는 `syncExport.json` 기본 파일을 사용하며, 도구 화면에서 외부 JSON 파일로 내보내거나 외부 JSON 파일에서 가져올 수 있다. 가져오기 병합은 task ID 기준으로 최신 `updatedAt` 작업을 기본으로 하되, config/policy/schedule/state 일부를 필드 단위로 병합하고 로컬 전용 `state.localProfilePath`와 실행 중 상태는 보존한다.
+mock sync는 `syncExport.json` 기본 파일을 사용하며, 도구 화면에서 외부 JSON 파일로 내보내거나 외부 JSON 파일에서 가져올 수 있다. export snapshot은 legacy `tasks`와 새 `actions`, `workflows`를 함께 포함한다. 가져오기 병합은 task ID 기준으로 최신 `updatedAt` 작업을 기본으로 하되, config/policy/schedule/state 일부를 필드 단위로 병합하고 로컬 전용 `state.localProfilePath`와 실행 중 상태는 보존한다. Action/Workflow 정의는 ID 기준으로 최신 `updatedAt` 정의를 유지한다.
 
 도구 화면의 sync 상태는 `mode=mock_file`, `serverDbSyncEnabled=false`로 표시한다. 이 값은 실제 서버 DB 연동이 비활성화되어 있고 현재 구현이 로컬 mock snapshot에 한정된다는 계약이다.
 

@@ -1,12 +1,12 @@
 import {
-  canExecuteTaskOnDevice,
+  canExecuteWorkflowOnDevice,
   normalizeTaskSchedule,
   type TaskSchedule,
 } from '../../../src/shared/tasks'
 import type { AppSettingsStore } from '../../settings/store/appSettingsStore'
 import type { DeviceStore } from '../../devices/store/deviceStore'
-import type { TaskRunner } from '../runner/taskRunner'
 import type { TaskStore } from '../store/taskStore'
+import type { WorkflowRunner } from '../../workflows/runner/workflowRunner'
 
 export type TaskScheduler = {
   start(): void
@@ -16,15 +16,15 @@ export type TaskScheduler = {
 export type TaskSchedulerOptions = {
   appSettingsStore: AppSettingsStore
   deviceStore: DeviceStore
-  taskRunner: TaskRunner
+  workflowRunner: WorkflowRunner
   taskStore: TaskStore
 }
 
 export function createTaskScheduler({
   appSettingsStore,
   deviceStore,
-  taskRunner,
   taskStore,
+  workflowRunner,
 }: TaskSchedulerOptions): TaskScheduler {
   let interval: NodeJS.Timeout | null = null
   let isTicking = false
@@ -36,21 +36,21 @@ export function createTaskScheduler({
 
     isTicking = true
     try {
-      const [tasks, currentDevice, appSettingsSnapshot] = await Promise.all([
-        taskStore.listTasks(),
+      const [workflows, currentDevice, appSettingsSnapshot] = await Promise.all([
+        taskStore.listWorkflows(),
         deviceStore.getCurrentDevice(),
         appSettingsStore.getSnapshot(),
       ])
       const now = new Date()
 
-      for (const task of tasks) {
-        const schedule = normalizeTaskSchedule(task.schedule)
+      for (const workflow of workflows) {
+        const schedule = normalizeTaskSchedule(workflow.schedule)
 
         if (
           !schedule?.enabled ||
-          task.state.status === 'running' ||
-          !canExecuteTaskOnDevice(
-            task,
+          workflow.state.status === 'running' ||
+          !canExecuteWorkflowOnDevice(
+            workflow,
             currentDevice,
             appSettingsSnapshot.settings.linkedDevices,
           )
@@ -60,20 +60,24 @@ export function createTaskScheduler({
 
         const nextRunAt = schedule.nextRunAt
           ? new Date(schedule.nextRunAt)
-          : new Date(task.updatedAt)
+          : new Date(workflow.updatedAt)
 
         if (Number.isNaN(nextRunAt.getTime()) || nextRunAt > now) {
           continue
         }
 
-        await taskStore.updateTask(task.id, {
+        if (!workflow.legacyTaskId) {
+          continue
+        }
+
+        await taskStore.updateTask(workflow.legacyTaskId, {
           schedule: {
             ...schedule,
             lastTriggeredAt: now.toISOString(),
             nextRunAt: getNextRunAt(now, schedule),
           },
         })
-        void taskRunner.runTask(task.id)
+        void workflowRunner.runWorkflow(workflow.id)
       }
     } finally {
       isTicking = false

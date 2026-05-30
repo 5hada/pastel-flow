@@ -8,6 +8,9 @@ import { registerAppSettingsIpc } from './settings/ipc/appSettingsIpc'
 import { createAppSettingsStore } from './settings/store/appSettingsStore'
 import { registerSyncIpc } from './sync/ipc/syncIpc'
 import { createMockSyncStore } from './sync/store/mockSyncStore'
+import { registerToolModuleIpc } from './tools/ipc/toolModuleIpc'
+import { createToolModuleRunner } from './tools/runner/toolModuleRunner'
+import { createToolModuleStore } from './tools/store/toolModuleStore'
 import { browserTabGroupAdapter } from './tasks/adapters/browserTabGroupAdapter'
 import { crawlerAdapter } from './tasks/adapters/crawlerAdapter'
 import {
@@ -21,6 +24,7 @@ import { createTaskRunner } from './tasks/runner/taskRunner'
 import { createTaskScheduler } from './tasks/scheduler/taskScheduler'
 import { createTaskRunEventStore } from './tasks/store/taskRunEventStore'
 import { createTaskStore } from './tasks/store/taskStore'
+import { createWorkflowRunner } from './workflows/runner/workflowRunner'
 import { canViewTaskOnDevice } from '../src/shared/tasks'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -96,6 +100,12 @@ app.whenReady().then(async () => {
   const taskStore = createTaskStore({
     dataDir,
   })
+  const toolModuleStore = createToolModuleStore({
+    dataDir,
+  })
+  const toolModuleRunner = createToolModuleRunner({
+    toolModuleStore,
+  })
   const taskRunEventStore = createTaskRunEventStore({
     dataDir,
     async getRetentionLimit() {
@@ -156,14 +166,25 @@ app.whenReady().then(async () => {
       }
     },
   })
+  const workflowRunner = createWorkflowRunner({
+    taskRunner,
+    taskStore,
+  })
 
   registerAppSettingsIpc(ipcMain, appSettingsStore, deviceStore)
   registerSecretIpc(ipcMain, secretStore, taskStore)
   registerSyncIpc(ipcMain, mockSyncStore)
+  registerToolModuleIpc(
+    ipcMain,
+    toolModuleStore,
+    toolModuleRunner,
+    taskStore,
+  )
   registerTaskIpc(
     ipcMain,
     taskStore,
     taskRunner,
+    workflowRunner,
     taskRunEventStore,
     appSettingsStore,
     deviceStore,
@@ -171,8 +192,8 @@ app.whenReady().then(async () => {
   createTaskScheduler({
     appSettingsStore,
     deviceStore,
-    taskRunner,
     taskStore,
+    workflowRunner,
   }).start()
   createWindow()
 })

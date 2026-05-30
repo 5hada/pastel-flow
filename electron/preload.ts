@@ -40,6 +40,20 @@ const pastelFlowApi = {
       return ipcRenderer.invoke('sync:import-file')
     },
   },
+  tools: {
+    list() {
+      return ipcRenderer.invoke('tools:list')
+    },
+    registerFolder() {
+      return ipcRenderer.invoke('tools:register-folder')
+    },
+    run(toolId: string, input: unknown) {
+      return ipcRenderer.invoke('tools:run', toolId, input)
+    },
+    createAction(toolId: string) {
+      return ipcRenderer.invoke('tools:create-action', toolId)
+    },
+  },
   tasks: {
     list() {
       return ipcRenderer.invoke('tasks:list')
@@ -74,6 +88,22 @@ const pastelFlowApi = {
       return () => {
         ipcRenderer.off('tasks:changed', wrappedListener)
       }
+    },
+  },
+  actions: {
+    list() {
+      return ipcRenderer.invoke('actions:list')
+    },
+  },
+  workflows: {
+    list() {
+      return ipcRenderer.invoke('workflows:list')
+    },
+    run(id: string) {
+      return ipcRenderer.invoke('workflows:run', id)
+    },
+    stop(id: string) {
+      return ipcRenderer.invoke('workflows:stop', id)
     },
   },
 }

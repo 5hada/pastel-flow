@@ -10,11 +10,16 @@ import type {
   DevicePolicy,
   DeviceExecutionPolicy,
   DeviceVisibilityPolicy,
+  ActionDefinition,
+  ActionType,
   RestorePolicy,
   DayOfWeek,
   TaskSchedule,
   TaskScheduleMode,
   TaskState,
+  TaskTemplate,
+  TaskType,
+  WorkflowDefinition,
 } from './types'
 
 export const defaultDevicePolicy: DevicePolicy = {
@@ -184,6 +189,69 @@ export function isRestrictedDevicePolicy(policy: DevicePolicy): boolean {
     policy.execution !== 'anywhere' ||
     Boolean(policy.secretRefs?.length)
   )
+}
+
+export function getActionTypeForLegacyTaskType(taskType: TaskType): ActionType {
+  switch (taskType) {
+    case 'browser_tab_group':
+      return 'browser_action'
+    case 'crawler':
+      return 'crawler_action'
+    case 'discord_bot':
+      return 'discord_dry_run_action'
+    case 'notion_sync':
+      return 'notion_dry_run_action'
+    case 'trading_bot':
+      return 'trading_dry_run_action'
+  }
+}
+
+export function getLegacyActionId(taskId: string): string {
+  return `action_${taskId}`
+}
+
+export function getLegacyWorkflowId(taskId: string): string {
+  return `workflow_${taskId}`
+}
+
+export function createActionFromLegacyTask(
+  task: TaskTemplate,
+): ActionDefinition {
+  return {
+    id: getLegacyActionId(task.id),
+    name: task.name,
+    type: getActionTypeForLegacyTaskType(task.type),
+    config: task.config,
+    secretRefs: task.permissions.secretRefs,
+    legacyTaskId: task.id,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+  }
+}
+
+export function createWorkflowFromLegacyTask(
+  task: TaskTemplate,
+): WorkflowDefinition {
+  const actionId = getLegacyActionId(task.id)
+
+  return {
+    id: getLegacyWorkflowId(task.id),
+    name: task.name,
+    actionRefs: [
+      {
+        id: `workflow_action_${task.id}`,
+        actionId,
+        order: 0,
+        enabled: true,
+      },
+    ],
+    permissions: normalizeDevicePolicy(task.permissions),
+    schedule: normalizeTaskSchedule(task.schedule),
+    state: task.state,
+    legacyTaskId: task.id,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+  }
 }
 
 function isBrowserKind(value: unknown): value is BrowserKind {

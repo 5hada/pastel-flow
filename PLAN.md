@@ -176,18 +176,21 @@ type WorkflowActionRef = {
 
 - `plan.md`를 Action/Workflow 기준의 실행용 로드맵으로 유지한다.
 - `ui-features.md`와 `ui-detail-design.md`를 Workflow 실행 페이지, Action 관리, Workflow 작성, Tool Module, Settings 구조에 맞게 개정한다.
+- UI 관련 구현을 진행할 때는 `ui-features.md`의 기능 범위와 `ui-detail-design.md`의 화면/컴포넌트 규칙을 먼저 확인하고, 변경 사항이 두 문서의 기준과 어긋나지 않게 반영한다.
 - `structure.md`는 실제 코드 전환이 시작될 때 Action/Workflow 기준으로 업데이트한다.
 
 ### Phase 2: 데이터 모델 전환
 
-- `ActionDefinition`, `WorkflowDefinition`, Workflow state, Workflow schedule 타입을 추가한다.
-- 기존 `TaskTemplate`은 legacy 타입으로 분리한다.
-- legacy task를 Action/Workflow로 변환하는 마이그레이션 로직을 작성한다.
-- 실행 이벤트 저장 모델에 workflowId, actionRunId, legacyTaskId를 구분해 기록할 수 있게 한다.
+- `ActionDefinition`, `WorkflowDefinition`, Workflow state, Workflow schedule 타입을 추가한다. **완료**
+- 기존 `TaskTemplate`은 legacy 타입으로 유지하되 Action/Workflow 모델과 병행 저장한다. **완료**
+- legacy task를 단일 Action/Workflow로 변환하는 마이그레이션/동기화 로직을 작성한다. **완료**
+- 실행 이벤트 저장 모델에 workflowId, actionRunId, legacyTaskId를 구분해 기록할 수 있게 한다. **완료**
+- mock sync export/import가 legacy `tasks`와 새 `actions`, `workflows`를 함께 다루게 한다. **완료**
+- 남은 작업: legacy task와 독립적인 신규 Action/Workflow 생성, 수정, 삭제 저장 API를 추가한다.
 
 ### Phase 3: 실행 엔진 전환
 
-- 기존 task runner/adapter 실행 흐름을 Workflow runner 중심으로 전환한다.
+- 기존 task runner/adapter 실행 흐름을 Workflow runner 중심으로 전환한다. **진행 중**
 - 각 Action 타입별 실행 handler를 등록하는 구조를 만든다.
 - Workflow runner는 Action 순서, enabled 상태, input mapping, 실패 중단 정책을 처리한다.
 - 예약 실행은 Workflow 단위로 실행한다.
@@ -195,24 +198,28 @@ type WorkflowActionRef = {
 
 ### Phase 4: UI 전환
 
-- 실행 페이지를 Workflow 런처로 변경한다.
+- 실행 페이지를 Workflow 런처 관점의 문구와 빈 상태로 변경한다. **완료**
 - 새 작업 생성 흐름을 Action 생성과 Workflow 작성으로 분리한다.
-- 기존 작업 목록/수정 UI는 legacy task UI가 아니라 Action/Workflow UI로 대체한다.
+- 기존 작업 목록/수정 UI는 legacy task UI가 아니라 Action/Workflow UI로 대체한다. **진행 중**
 - Workflow 상세 화면에 개요, Action 목록, 실행 기록, 권한, 예약, 출력 요약을 표시한다.
+- 현재 구현: 상단 모드는 실행, Action, Workflow, 도구, 설정으로 분리했다. 실행 그리드는 Workflow 이름 버튼 중심으로 표시하고 열 수 설정을 제공한다. Action 화면은 Action 목록/상세/생성 진입 구조를 사용하고, Workflow 화면은 Workflow 목록과 Action 순서/Enabled 토글 미리보기를 제공한다. 완전한 Action 삽입, 순서 저장, 입력 매핑 저장 API는 남은 작업이다.
 
 ### Phase 5: Tool Module 시스템
 
-- 도구 업로드 위치와 등록 저장소를 정의한다.
-- 업로드된 폴더에서 `manifest.json`과 `logic.js`를 검증한다.
-- `tool-schema.md`의 input/output/permission 규칙을 검증하는 loader를 만든다.
-- tool module을 단독 실행할 수 있는 main process 실행 경로와 renderer UI를 만든다.
-- tool module을 Workflow의 `tool_action`으로 추가할 수 있게 한다.
+- 도구 업로드 위치와 등록 저장소를 정의한다. **완료**
+- 업로드된 폴더에서 `manifest.json`과 `logic.js`를 검증한다. **완료**
+- `tool-schema.md`의 input/output/permission 규칙을 검증하는 loader를 만든다. **완료**
+- tool module을 단독 실행할 수 있는 main process 실행 경로와 renderer UI를 만든다. **완료**
+- tool module을 Workflow의 `tool_action`으로 추가할 수 있게 한다. **부분 완료**
+- 현재 구현: renderer 도구 페이지에서 폴더 선택으로 module을 등록하고, manifest inputs 기반 자동 폼으로 단독 실행하며, 등록된 도구를 `tool_action` Action 정의로 생성할 수 있다.
+- 도구 inputs의 `ui` 메타데이터를 지원해 toggle, checkbox, select, radio, color, list, textarea, json 같은 고급 자동 폼 컨트롤을 표시한다. **완료**
+- 남은 작업: 생성된 `tool_action`을 Workflow 작성 화면에서 선택/삽입하고, Workflow runner가 legacy task 위임 없이 순수 Action handler로 `tool_action`을 실행하도록 확장한다.
 
 ### Phase 6: 설정 페이지 재배치
 
-- 도구 페이지에 있는 sync/export/import, 실행 이벤트 정리, 로그 보존 관련 UI를 설정 페이지로 이동한다.
-- 설정 카테고리에 동기화, 실행 이벤트, 데이터 관리를 추가한다.
-- 도구 페이지는 tool module 기능만 남긴다.
+- 도구 페이지에 있는 sync/export/import, 실행 이벤트 정리, 로그 보존 관련 UI를 설정 페이지로 이동한다. **완료**
+- 설정 카테고리에 브라우저, 단축키, 동기화, 실행 이벤트, 데이터 관리를 추가한다. **완료**
+- 도구 페이지는 tool module 기능만 남긴다. **완료**
 
 ### Phase 7: 안정화와 검증
 
@@ -256,6 +263,7 @@ npm run lint
 - 앱 이름은 `Pastel Flow`를 사용한다.
 - 앞으로의 실행 단위는 Workflow이다.
 - Action은 Workflow를 구성하는 재사용 가능한 최소 실행 단위이다.
+- UI 작업은 `ui-features.md`와 `ui-detail-design.md`를 기준 문서로 삼아 구현한다.
 - 기존 Task/Adapter 구조는 legacy로 취급하고 Action/Workflow 구조로 호환 마이그레이션한다.
 - 브라우저, crawler, Discord/Notion/trading dry-run은 Action 타입으로 재정의한다.
 - 실행 페이지는 Workflow만 표시한다.

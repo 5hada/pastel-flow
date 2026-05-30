@@ -1,7 +1,9 @@
 import type { IpcMain } from 'electron'
 import {
   canExecuteTaskOnDevice,
+  canExecuteWorkflowOnDevice,
   canViewTaskOnDevice,
+  canViewWorkflowOnDevice,
   createLocalOnlyDevicePolicy,
 } from '../../../src/shared/tasks'
 import type { DeviceStore } from '../../devices/store/deviceStore'
@@ -9,11 +11,13 @@ import type { AppSettingsStore } from '../../settings/store/appSettingsStore'
 import type { TaskRunner } from '../runner/taskRunner'
 import type { TaskRunEventStore } from '../store/taskRunEventStore'
 import type { TaskStore } from '../store/taskStore'
+import type { WorkflowRunner } from '../../workflows/runner/workflowRunner'
 
 export function registerTaskIpc(
   ipcMain: IpcMain,
   taskStore: TaskStore,
   taskRunner: TaskRunner,
+  workflowRunner: WorkflowRunner,
   taskRunEventStore: TaskRunEventStore,
   appSettingsStore: AppSettingsStore,
   deviceStore: DeviceStore,
@@ -32,6 +36,83 @@ export function registerTaskIpc(
         appSettingsSnapshot.settings.linkedDevices,
       ),
     )
+  })
+  ipcMain.handle('actions:list', async () => {
+    const [actions, workflows, currentDevice, appSettingsSnapshot] =
+      await Promise.all([
+        taskStore.listActions(),
+        taskStore.listWorkflows(),
+        deviceStore.getCurrentDevice(),
+        appSettingsStore.getSnapshot(),
+      ])
+    const visibleActionIds = new Set(
+      workflows
+        .filter((workflow) =>
+          canViewWorkflowOnDevice(
+            workflow,
+            currentDevice,
+            appSettingsSnapshot.settings.linkedDevices,
+          ),
+        )
+        .flatMap((workflow) =>
+          workflow.actionRefs.map((actionRef) => actionRef.actionId),
+        ),
+    )
+
+    return actions.filter((action) => visibleActionIds.has(action.id))
+  })
+  ipcMain.handle('workflows:list', async () => {
+    const [workflows, currentDevice, appSettingsSnapshot] = await Promise.all([
+      taskStore.listWorkflows(),
+      deviceStore.getCurrentDevice(),
+      appSettingsStore.getSnapshot(),
+    ])
+
+    return workflows.filter((workflow) =>
+      canViewWorkflowOnDevice(
+        workflow,
+        currentDevice,
+        appSettingsSnapshot.settings.linkedDevices,
+      ),
+    )
+  })
+  ipcMain.handle('workflows:run', async (_event, id) => {
+    const [workflow, currentDevice, appSettingsSnapshot] = await Promise.all([
+      workflowRunner.getWorkflow(id),
+      deviceStore.getCurrentDevice(),
+      appSettingsStore.getSnapshot(),
+    ])
+
+    if (
+      !canExecuteWorkflowOnDevice(
+        workflow,
+        currentDevice,
+        appSettingsSnapshot.settings.linkedDevices,
+      )
+    ) {
+      throw new Error('이 기기에서는 해당 Workflow를 실행할 수 없습니다.')
+    }
+
+    return workflowRunner.runWorkflow(id)
+  })
+  ipcMain.handle('workflows:stop', async (_event, id) => {
+    const [workflow, currentDevice, appSettingsSnapshot] = await Promise.all([
+      workflowRunner.getWorkflow(id),
+      deviceStore.getCurrentDevice(),
+      appSettingsStore.getSnapshot(),
+    ])
+
+    if (
+      !canExecuteWorkflowOnDevice(
+        workflow,
+        currentDevice,
+        appSettingsSnapshot.settings.linkedDevices,
+      )
+    ) {
+      throw new Error('이 기기에서는 해당 Workflow를 중지할 수 없습니다.')
+    }
+
+    return workflowRunner.stopWorkflow(id)
   })
   ipcMain.handle('tasks:list-events', async (_event, taskId?: string) => {
     const [tasks, currentDevice, appSettingsSnapshot] = await Promise.all([

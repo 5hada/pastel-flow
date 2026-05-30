@@ -71,6 +71,9 @@ export function createTaskRunEventStore({
       const event: TaskRunEvent = {
         id: randomUUID(),
         taskId: input.taskId,
+        workflowId: input.workflowId,
+        actionRunId: input.actionRunId,
+        legacyTaskId: input.legacyTaskId,
         deviceId: input.deviceId,
         status: input.status,
         message: input.message,

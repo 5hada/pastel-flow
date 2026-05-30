@@ -1,8 +1,8 @@
-import { BrowserWindow, dialog, app, safeStorage, ipcMain } from "electron";
-import { fileURLToPath } from "node:url";
+import { BrowserWindow, dialog, clipboard, app, safeStorage, ipcMain } from "electron";
+import { pathToFileURL, fileURLToPath } from "node:url";
 import path from "node:path";
 import { randomUUID, randomBytes } from "node:crypto";
-import { readFile, mkdir, writeFile, stat, access } from "node:fs/promises";
+import { readFile, mkdir, writeFile, stat, cp, access } from "node:fs/promises";
 import os from "node:os";
 import { spawn } from "node:child_process";
 import { createConnection } from "node:net";
@@ -21,7 +21,7 @@ function createDeviceStore({ dataDir }) {
       }
       return null;
     } catch (error) {
-      if (isNodeError$5(error) && error.code === "ENOENT") {
+      if (isNodeError$6(error) && error.code === "ENOENT") {
         return null;
       }
       throw error;
@@ -51,7 +51,7 @@ function createDeviceStore({ dataDir }) {
     }
   };
 }
-function isNodeError$5(error) {
+function isNodeError$6(error) {
   return error instanceof Error && "code" in error;
 }
 function registerSecretIpc(ipcMain2, secretStore, taskStore) {
@@ -104,7 +104,7 @@ function createSecretStore({
         secrets: Array.isArray(parsed.secrets) ? parsed.secrets : []
       };
     } catch (error) {
-      if (isNodeError$4(error) && error.code === "ENOENT") {
+      if (isNodeError$5(error) && error.code === "ENOENT") {
         return { secrets: [] };
       }
       throw error;
@@ -200,7 +200,7 @@ function toMetadata(secret) {
     updatedAt: secret.updatedAt
   };
 }
-function isNodeError$4(error) {
+function isNodeError$5(error) {
   return error instanceof Error && "code" in error;
 }
 function registerAppSettingsIpc(ipcMain2, appSettingsStore, deviceStore) {
@@ -239,8 +239,11 @@ const defaultAppSettings = {
   themeMode: "light",
   defaultBrowserKind: "chrome",
   defaultTaskName: "새 브라우저 작업",
+  defaultActionName: "새 Action",
+  defaultWorkflowName: "새 Workflow",
   initialUrlInputMode: "line",
   taskListDisplayMode: "grid",
+  workflowGridColumnCount: 5,
   browserExecutablePaths: {},
   linkedDevices: [],
   taskRunEventRetentionLimit: 300,
@@ -251,8 +254,13 @@ function normalizeAppSettings(settings) {
     themeMode: isThemeMode(settings == null ? void 0 : settings.themeMode) ? settings.themeMode : defaultAppSettings.themeMode,
     defaultBrowserKind: isBrowserKind$1(settings == null ? void 0 : settings.defaultBrowserKind) ? settings.defaultBrowserKind : defaultAppSettings.defaultBrowserKind,
     defaultTaskName: typeof (settings == null ? void 0 : settings.defaultTaskName) === "string" && settings.defaultTaskName.trim() ? settings.defaultTaskName.trim() : defaultAppSettings.defaultTaskName,
+    defaultActionName: typeof (settings == null ? void 0 : settings.defaultActionName) === "string" && settings.defaultActionName.trim() ? settings.defaultActionName.trim() : defaultAppSettings.defaultActionName,
+    defaultWorkflowName: typeof (settings == null ? void 0 : settings.defaultWorkflowName) === "string" && settings.defaultWorkflowName.trim() ? settings.defaultWorkflowName.trim() : defaultAppSettings.defaultWorkflowName,
     initialUrlInputMode: (settings == null ? void 0 : settings.initialUrlInputMode) === "line" ? settings.initialUrlInputMode : defaultAppSettings.initialUrlInputMode,
     taskListDisplayMode: isTaskListDisplayMode(settings == null ? void 0 : settings.taskListDisplayMode) ? settings.taskListDisplayMode : defaultAppSettings.taskListDisplayMode,
+    workflowGridColumnCount: normalizeWorkflowGridColumnCount(
+      settings == null ? void 0 : settings.workflowGridColumnCount
+    ),
     browserExecutablePaths: normalizeBrowserExecutablePaths(
       settings == null ? void 0 : settings.browserExecutablePaths
     ),
@@ -264,6 +272,12 @@ function normalizeAppSettings(settings) {
       settings == null ? void 0 : settings.taskRunEventExportLimit
     )
   };
+}
+function normalizeWorkflowGridColumnCount(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return defaultAppSettings.workflowGridColumnCount;
+  }
+  return Math.min(Math.max(Math.round(value), 2), 8);
 }
 function normalizeRetentionLimit(value) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -319,7 +333,7 @@ function createAppSettingsStore({
       const parsed = JSON.parse(raw);
       return normalizeAppSettings(parsed.settings);
     } catch (error) {
-      if (isNodeError$3(error) && error.code === "ENOENT") {
+      if (isNodeError$4(error) && error.code === "ENOENT") {
         return defaultAppSettings;
       }
       throw error;
@@ -351,7 +365,7 @@ function createAppSettingsStore({
     }
   };
 }
-function isNodeError$3(error) {
+function isNodeError$4(error) {
   return error instanceof Error && "code" in error;
 }
 function registerSyncIpc(ipcMain2, mockSyncStore) {
@@ -397,7 +411,11 @@ function normalizeSyncExportSnapshot(value) {
   if (typeof candidate.exportedAt !== "string" || !candidate.sourceDevice || typeof candidate.sourceDevice.id !== "string" || typeof candidate.sourceDevice.name !== "string" || !Array.isArray(candidate.tasks) || !Array.isArray(candidate.taskRunEvents) || !Array.isArray(candidate.linkedDevices)) {
     throw new Error("동기화 스냅샷 필수 필드가 누락되었습니다.");
   }
-  return candidate;
+  return {
+    ...candidate,
+    actions: Array.isArray(candidate.actions) ? candidate.actions : [],
+    workflows: Array.isArray(candidate.workflows) ? candidate.workflows : []
+  };
 }
 function createMockSyncStore({
   appSettingsStore,
@@ -418,10 +436,12 @@ function createMockSyncStore({
       };
     },
     async exportSnapshot() {
-      const [currentDevice, settingsSnapshot, tasks, taskRunEvents] = await Promise.all([
+      const [currentDevice, settingsSnapshot, tasks, actions, workflows, taskRunEvents] = await Promise.all([
         deviceStore.getCurrentDevice(),
         appSettingsStore.getSnapshot(),
         taskStore.listTasks(),
+        taskStore.listActions(),
+        taskStore.listWorkflows(),
         appSettingsStore.getSnapshot().then(
           (snapshot2) => taskRunEventStore.listEvents(void 0, {
             limit: snapshot2.settings.taskRunEventExportLimit
@@ -433,6 +453,8 @@ function createMockSyncStore({
         exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
         sourceDevice: currentDevice,
         tasks: stripLocalTaskState(tasks),
+        actions,
+        workflows: stripLocalWorkflowState(workflows),
         taskRunEvents,
         linkedDevices: settingsSnapshot.settings.linkedDevices
       };
@@ -451,7 +473,19 @@ function createMockSyncStore({
       const nextSnapshot = snapshot ?? await readSnapshot(exportPath);
       const normalizedSnapshot = normalizeSyncExportSnapshot(nextSnapshot);
       const currentTasks = await taskStore.listTasks();
+      const [currentActions, currentWorkflows] = await Promise.all([
+        taskStore.listActions(),
+        taskStore.listWorkflows()
+      ]);
       const mergedTasks = mergeTasks(currentTasks, normalizedSnapshot.tasks);
+      const mergedActions = mergeDefinitions(
+        currentActions,
+        normalizedSnapshot.actions
+      );
+      const mergedWorkflows = mergeDefinitions(
+        currentWorkflows,
+        normalizedSnapshot.workflows
+      );
       const taskRunEventsAdded = await taskRunEventStore.importEvents(
         normalizedSnapshot.taskRunEvents
       );
@@ -461,7 +495,11 @@ function createMockSyncStore({
         normalizedSnapshot.linkedDevices
       );
       await Promise.all([
-        taskStore.replaceTasks(mergedTasks.tasks),
+        taskStore.replaceTaskData({
+          tasks: mergedTasks.tasks,
+          actions: mergedActions,
+          workflows: mergedWorkflows
+        }),
         appSettingsStore.updateSettings({
           ...settingsSnapshot.settings,
           linkedDevices
@@ -485,7 +523,7 @@ async function getLastExportedAt(exportPath) {
     const fileStat = await stat(exportPath);
     return fileStat.mtime.toISOString();
   } catch (error) {
-    if (isNodeError$2(error) && error.code === "ENOENT") {
+    if (isNodeError$3(error) && error.code === "ENOENT") {
       return void 0;
     }
     throw error;
@@ -500,6 +538,15 @@ function stripLocalTaskState(tasks) {
     ...task,
     state: {
       ...task.state,
+      localProfilePath: void 0
+    }
+  }));
+}
+function stripLocalWorkflowState(workflows) {
+  return workflows.map((workflow) => ({
+    ...workflow,
+    state: {
+      ...workflow.state,
       localProfilePath: void 0
     }
   }));
@@ -533,6 +580,20 @@ function mergeTasks(currentTasks, incomingTasks) {
     created,
     updated
   };
+}
+function mergeDefinitions(currentDefinitions, incomingDefinitions) {
+  const definitionMap = new Map(
+    currentDefinitions.map((definition) => [definition.id, definition])
+  );
+  for (const incomingDefinition of incomingDefinitions) {
+    const currentDefinition = definitionMap.get(incomingDefinition.id);
+    if (!currentDefinition || incomingDefinition.updatedAt > currentDefinition.updatedAt) {
+      definitionMap.set(incomingDefinition.id, incomingDefinition);
+    }
+  }
+  return [...definitionMap.values()].sort(
+    (left, right) => left.createdAt.localeCompare(right.createdAt)
+  );
 }
 function mergeTaskFields(olderTask, newerTask) {
   return {
@@ -573,11 +634,454 @@ function mergeLinkedDevices(currentDevices, incomingDevices) {
   }
   return [...deviceMap.values()];
 }
-function isNodeError$2(error) {
+function isNodeError$3(error) {
   return error instanceof Error && "code" in error;
 }
 function dedupe$2(values) {
   return [...new Set(values)];
+}
+function registerToolModuleIpc(ipcMain2, toolModuleStore, toolModuleRunner, taskStore) {
+  ipcMain2.handle("tools:list", () => toolModuleStore.listTools());
+  ipcMain2.handle("tools:register-folder", async (event) => {
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
+    const options = {
+      properties: ["openDirectory"]
+    };
+    const result = browserWindow ? await dialog.showOpenDialog(browserWindow, options) : await dialog.showOpenDialog(options);
+    if (result.canceled || !result.filePaths[0]) {
+      return void 0;
+    }
+    return toolModuleStore.registerToolFromPath(result.filePaths[0]);
+  });
+  ipcMain2.handle(
+    "tools:run",
+    (_event, toolId, input) => toolModuleRunner.runTool(
+      toolId,
+      input && typeof input === "object" ? input : {}
+    )
+  );
+  ipcMain2.handle("tools:create-action", async (_event, toolId) => {
+    const tool = await toolModuleStore.getTool(toolId);
+    return taskStore.createAction({
+      name: tool.manifest.name,
+      type: "tool_action",
+      config: {
+        toolId: tool.id,
+        version: tool.manifest.version
+      },
+      inputSchema: tool.manifest.inputs.map((field) => ({
+        id: field.key,
+        name: field.key,
+        type: field.type === "json" ? "json" : "string",
+        required: field.required,
+        description: field.description
+      })),
+      outputSchema: tool.manifest.outputs.map((field) => ({
+        id: field.key,
+        name: field.key,
+        type: field.type === "json" ? "json" : "string",
+        required: field.required,
+        description: field.description
+      }))
+    });
+  });
+}
+function createToolModuleRunner({
+  toolModuleStore
+}) {
+  return {
+    async runTool(toolId, input) {
+      const tool = await toolModuleStore.getTool(toolId);
+      const normalizedInput = normalizeRunInput(tool.manifest.inputs, input);
+      const logicPath = pathToFileURL(
+        path.join(tool.sourcePath, "logic.js")
+      ).href;
+      const logicModule = await import(`${logicPath}?updatedAt=${encodeURIComponent(tool.updatedAt)}`);
+      if (typeof logicModule.run !== "function") {
+        throw new Error("logic.js는 run(input, context) 함수를 export해야 합니다.");
+      }
+      const output = await logicModule.run(
+        normalizedInput,
+        createToolContext(tool.manifest.permissions)
+      );
+      if (!output || typeof output !== "object" || Array.isArray(output)) {
+        throw new Error("도구 실행 결과는 객체여야 합니다.");
+      }
+      validateOutputKeys(
+        output,
+        tool.manifest.outputs
+      );
+      return {
+        toolId,
+        runAt: (/* @__PURE__ */ new Date()).toISOString(),
+        output
+      };
+    }
+  };
+}
+function normalizeRunInput(fields, input) {
+  return fields.reduce((result, field) => {
+    const rawValue = input[field.key] ?? field.default;
+    if (field.required && isEmptyValue(rawValue)) {
+      throw new Error(`${field.key} 입력값이 필요합니다.`);
+    }
+    if (isEmptyValue(rawValue)) {
+      return result;
+    }
+    return {
+      ...result,
+      [field.key]: normalizeValue(field, rawValue)
+    };
+  }, {});
+}
+function normalizeValue(field, value) {
+  switch (field.type) {
+    case "string":
+    case "file":
+      return String(value);
+    case "number": {
+      const numericValue = Number(value);
+      if (!Number.isFinite(numericValue)) {
+        throw new Error(`${field.key}는 숫자여야 합니다.`);
+      }
+      return numericValue;
+    }
+    case "boolean":
+      return value === true || value === "true";
+    case "string[]":
+      return Array.isArray(value) ? value.map(String) : String(value).split("\n").map((item) => item.trim()).filter(Boolean);
+    case "number[]": {
+      const values = Array.isArray(value) ? value : String(value).split("\n");
+      return values.map((item) => {
+        const numericValue = Number(item);
+        if (!Number.isFinite(numericValue)) {
+          throw new Error(`${field.key}는 숫자 배열이어야 합니다.`);
+        }
+        return numericValue;
+      });
+    }
+    case "json":
+      if (typeof value === "string") {
+        return JSON.parse(value);
+      }
+      return value;
+  }
+}
+function createToolContext(permissions) {
+  return {
+    clipboard: permissions.includes("clipboard") ? {
+      async readText() {
+        return clipboard.readText();
+      },
+      async writeText(value) {
+        clipboard.writeText(value);
+      }
+    } : void 0,
+    files: permissions.includes("file.read") || permissions.includes("file.write") ? {
+      async open(filePath) {
+        assertPermission(permissions, "file.read");
+        return readFile(filePath, "utf8");
+      },
+      async save(filePath, value) {
+        assertPermission(permissions, "file.write");
+        await writeFile(filePath, value, "utf8");
+      }
+    } : void 0,
+    network: permissions.includes("network") ? {
+      async fetch(input, init) {
+        const response = await fetch(input, init);
+        const contentType = response.headers.get("content-type") ?? "";
+        return contentType.includes("application/json") ? response.json() : response.text();
+      }
+    } : void 0
+  };
+}
+function validateOutputKeys(output, fields) {
+  for (const field of fields) {
+    if (field.required && !(field.key in output)) {
+      throw new Error(`${field.key} 출력값이 필요합니다.`);
+    }
+  }
+}
+function assertPermission(permissions, permission) {
+  if (!permissions.includes(permission)) {
+    throw new Error(`permission이 필요합니다: ${permission}`);
+  }
+}
+function isEmptyValue(value) {
+  return value === void 0 || value === null || value === "";
+}
+const supportedFieldTypes = [
+  "string",
+  "number",
+  "boolean",
+  "string[]",
+  "number[]",
+  "json",
+  "file"
+];
+const supportedPermissions = [
+  "clipboard",
+  "file.read",
+  "file.write",
+  "network"
+];
+function createToolModuleStore({
+  dataDir
+}) {
+  const toolsFilePath = path.join(dataDir, "toolModules.json");
+  const toolModulesDir = path.join(dataDir, "tool-modules");
+  async function readToolModulesFile() {
+    try {
+      const raw = await readFile(toolsFilePath, "utf8");
+      const parsed = JSON.parse(raw);
+      return {
+        tools: Array.isArray(parsed.tools) ? parsed.tools : []
+      };
+    } catch (error) {
+      if (isNodeError$2(error) && error.code === "ENOENT") {
+        return { tools: [] };
+      }
+      throw error;
+    }
+  }
+  async function writeToolModulesFile(toolModulesFile) {
+    await mkdir(dataDir, { recursive: true });
+    await writeFile(
+      toolsFilePath,
+      `${JSON.stringify(toolModulesFile, null, 2)}
+`,
+      "utf8"
+    );
+  }
+  async function validateToolPath(sourcePath) {
+    const errors = [];
+    const manifestPath = path.join(sourcePath, "manifest.json");
+    const logicPath = path.join(sourcePath, "logic.js");
+    try {
+      await stat(logicPath);
+    } catch {
+      errors.push("logic.js 파일이 필요합니다.");
+    }
+    let manifest;
+    try {
+      const rawManifest = await readFile(manifestPath, "utf8");
+      manifest = normalizeManifest(JSON.parse(rawManifest), errors);
+    } catch (error) {
+      errors.push(
+        error instanceof SyntaxError ? "manifest.json 형식이 올바르지 않습니다." : "manifest.json 파일이 필요합니다."
+      );
+    }
+    return {
+      ok: errors.length === 0,
+      manifest,
+      errors
+    };
+  }
+  return {
+    async listTools() {
+      return (await readToolModulesFile()).tools.sort(
+        (left, right) => left.manifest.name.localeCompare(right.manifest.name)
+      );
+    },
+    async getTool(id) {
+      const tool = (await readToolModulesFile()).tools.find(
+        (currentTool) => currentTool.id === id
+      );
+      if (!tool) {
+        throw new Error(`Tool module not found: ${id}`);
+      }
+      return tool;
+    },
+    async registerToolFromPath(sourcePath) {
+      const validation = await validateToolPath(sourcePath);
+      if (!validation.ok || !validation.manifest) {
+        throw new Error(validation.errors.join("\n"));
+      }
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      const toolId = validation.manifest.id;
+      const destinationPath = path.join(
+        toolModulesDir,
+        `${toolId}-${validation.manifest.version}-${randomUUID()}`
+      );
+      await mkdir(toolModulesDir, { recursive: true });
+      await cp(sourcePath, destinationPath, {
+        recursive: true,
+        force: true
+      });
+      const toolModulesFile = await readToolModulesFile();
+      const existingTool = toolModulesFile.tools.find(
+        (tool) => tool.id === toolId
+      );
+      const registeredTool = {
+        id: toolId,
+        manifest: validation.manifest,
+        sourcePath: destinationPath,
+        registeredAt: (existingTool == null ? void 0 : existingTool.registeredAt) ?? now,
+        updatedAt: now,
+        hasCustomView: await pathExists$1(path.join(destinationPath, "view.html")),
+        hasCustomStyle: await pathExists$1(path.join(destinationPath, "style.css"))
+      };
+      await writeToolModulesFile({
+        tools: [
+          ...toolModulesFile.tools.filter((tool) => tool.id !== toolId),
+          registeredTool
+        ]
+      });
+      return registeredTool;
+    },
+    validateToolPath
+  };
+}
+function normalizeManifest(value, errors) {
+  if (!value || typeof value !== "object") {
+    errors.push("manifest.json은 객체여야 합니다.");
+    return void 0;
+  }
+  const candidate = value;
+  if (candidate.schemaVersion !== "1.0") {
+    errors.push('schemaVersion은 "1.0"이어야 합니다.');
+  }
+  if (!isToolId(candidate.id)) {
+    errors.push("id는 영문 소문자, 숫자, 하이픈만 사용할 수 있습니다.");
+  }
+  if (!isNonEmptyString(candidate.name)) {
+    errors.push("name이 필요합니다.");
+  }
+  if (!isNonEmptyString(candidate.version)) {
+    errors.push("version이 필요합니다.");
+  }
+  const inputs = normalizeFields(candidate.inputs, "inputs", errors);
+  const outputs = normalizeFields(candidate.outputs, "outputs", errors);
+  const permissions = normalizePermissions(candidate.permissions, errors);
+  if (errors.length > 0) {
+    return void 0;
+  }
+  return {
+    schemaVersion: "1.0",
+    id: candidate.id ?? "",
+    name: candidate.name ?? "",
+    version: candidate.version ?? "",
+    description: typeof candidate.description === "string" ? candidate.description : void 0,
+    inputs,
+    outputs,
+    permissions
+  };
+}
+function normalizeFields(value, fieldName, errors) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.reduce((fields, field, index) => {
+    if (!field || typeof field !== "object") {
+      errors.push(`${fieldName}[${index}] 형식이 올바르지 않습니다.`);
+      return fields;
+    }
+    const candidate = field;
+    if (!isNonEmptyString(candidate.key)) {
+      errors.push(`${fieldName}[${index}].key가 필요합니다.`);
+      return fields;
+    }
+    if (!isFieldType(candidate.type)) {
+      errors.push(`${fieldName}[${index}].type이 지원되지 않습니다.`);
+      return fields;
+    }
+    return [
+      ...fields,
+      {
+        key: candidate.key,
+        type: candidate.type,
+        required: candidate.required === true,
+        default: candidate.default,
+        description: typeof candidate.description === "string" ? candidate.description : void 0,
+        ui: normalizeFieldUi(candidate.ui)
+      }
+    ];
+  }, []);
+}
+function normalizeFieldUi(value) {
+  if (!value || typeof value !== "object") {
+    return void 0;
+  }
+  const candidate = value;
+  return {
+    control: isFieldControl(candidate.control) ? candidate.control : void 0,
+    label: typeof candidate.label === "string" && candidate.label.trim() ? candidate.label : void 0,
+    placeholder: typeof candidate.placeholder === "string" && candidate.placeholder.trim() ? candidate.placeholder : void 0,
+    helpText: typeof candidate.helpText === "string" && candidate.helpText.trim() ? candidate.helpText : void 0,
+    options: normalizeFieldOptions(candidate.options),
+    min: normalizeOptionalNumber(candidate.min),
+    max: normalizeOptionalNumber(candidate.max),
+    step: normalizeOptionalNumber(candidate.step),
+    rows: normalizeOptionalNumber(candidate.rows)
+  };
+}
+function normalizeFieldOptions(value) {
+  if (!Array.isArray(value)) {
+    return void 0;
+  }
+  const options = value.reduce((result, option) => {
+    if (!option || typeof option !== "object") {
+      return result;
+    }
+    const candidate = option;
+    if (typeof candidate.label !== "string" || !isOptionValue(candidate.value)) {
+      return result;
+    }
+    return [
+      ...result,
+      {
+        label: candidate.label,
+        value: candidate.value,
+        color: typeof candidate.color === "string" && candidate.color.trim() ? candidate.color : void 0
+      }
+    ];
+  }, []);
+  return options.length > 0 ? options : void 0;
+}
+function normalizePermissions(value, errors) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.reduce((permissions, permission) => {
+    if (!isPermission(permission)) {
+      errors.push(`지원하지 않는 permission입니다: ${String(permission)}`);
+      return permissions;
+    }
+    return permissions.includes(permission) ? permissions : [...permissions, permission];
+  }, []);
+}
+async function pathExists$1(value) {
+  try {
+    await stat(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function isToolId(value) {
+  return typeof value === "string" && /^[a-z0-9-]+$/.test(value);
+}
+function isNonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+function isFieldType(value) {
+  return supportedFieldTypes.includes(value);
+}
+function isFieldControl(value) {
+  return value === "text" || value === "textarea" || value === "number" || value === "toggle" || value === "checkbox" || value === "select" || value === "radio" || value === "color" || value === "json" || value === "list" || value === "file";
+}
+function isOptionValue(value) {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+}
+function normalizeOptionalNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : void 0;
+}
+function isPermission(value) {
+  return supportedPermissions.includes(value);
+}
+function isNodeError$2(error) {
+  return error instanceof Error && "code" in error;
 }
 const defaultDevicePolicy = {
   visibility: "local_only",
@@ -630,6 +1134,59 @@ function normalizeTaskSchedule(schedule) {
     daysOfWeek: normalizeDaysOfWeek(schedule.daysOfWeek),
     nextRunAt: typeof schedule.nextRunAt === "string" && schedule.nextRunAt.trim() ? schedule.nextRunAt : void 0,
     lastTriggeredAt: typeof schedule.lastTriggeredAt === "string" && schedule.lastTriggeredAt.trim() ? schedule.lastTriggeredAt : void 0
+  };
+}
+function getActionTypeForLegacyTaskType(taskType) {
+  switch (taskType) {
+    case "browser_tab_group":
+      return "browser_action";
+    case "crawler":
+      return "crawler_action";
+    case "discord_bot":
+      return "discord_dry_run_action";
+    case "notion_sync":
+      return "notion_dry_run_action";
+    case "trading_bot":
+      return "trading_dry_run_action";
+  }
+}
+function getLegacyActionId(taskId) {
+  return `action_${taskId}`;
+}
+function getLegacyWorkflowId(taskId) {
+  return `workflow_${taskId}`;
+}
+function createActionFromLegacyTask(task) {
+  return {
+    id: getLegacyActionId(task.id),
+    name: task.name,
+    type: getActionTypeForLegacyTaskType(task.type),
+    config: task.config,
+    secretRefs: task.permissions.secretRefs,
+    legacyTaskId: task.id,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt
+  };
+}
+function createWorkflowFromLegacyTask(task) {
+  const actionId = getLegacyActionId(task.id);
+  return {
+    id: getLegacyWorkflowId(task.id),
+    name: task.name,
+    actionRefs: [
+      {
+        id: `workflow_action_${task.id}`,
+        actionId,
+        order: 0,
+        enabled: true
+      }
+    ],
+    permissions: normalizeDevicePolicy(task.permissions),
+    schedule: normalizeTaskSchedule(task.schedule),
+    state: task.state,
+    legacyTaskId: task.id,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt
   };
 }
 function isBrowserKind(value) {
@@ -725,36 +1282,24 @@ function isDeviceExecutionPolicy(value) {
   return value === "anywhere" || value === "trusted_only" || value === "specific_devices" || value === "local_only";
 }
 function canViewTaskOnDevice(task, currentDevice, linkedDevices) {
-  const accessLevel = getCurrentDeviceAccessLevel(currentDevice, linkedDevices);
-  if (accessLevel === "blocked") {
-    return false;
-  }
-  switch (task.permissions.visibility) {
-    case "all_devices":
-      return true;
-    case "trusted_devices":
-      return accessLevel === "trusted";
-    case "specific_devices":
-      return isDeviceAllowed(task.permissions, currentDevice.id);
-    case "local_only":
-      return isLocalDeviceAllowed(task.permissions, currentDevice.id);
-  }
+  return canViewPolicyOnDevice(task.permissions, currentDevice, linkedDevices);
+}
+function canViewWorkflowOnDevice(workflow, currentDevice, linkedDevices) {
+  return canViewPolicyOnDevice(
+    workflow.permissions,
+    currentDevice,
+    linkedDevices
+  );
 }
 function canExecuteTaskOnDevice(task, currentDevice, linkedDevices) {
-  const accessLevel = getCurrentDeviceAccessLevel(currentDevice, linkedDevices);
-  if (accessLevel !== "executable" && accessLevel !== "trusted") {
-    return false;
-  }
-  switch (task.permissions.execution) {
-    case "anywhere":
-      return true;
-    case "trusted_only":
-      return accessLevel === "trusted";
-    case "specific_devices":
-      return isDeviceAllowed(task.permissions, currentDevice.id);
-    case "local_only":
-      return isLocalDeviceAllowed(task.permissions, currentDevice.id);
-  }
+  return canExecutePolicyOnDevice(task.permissions, currentDevice, linkedDevices);
+}
+function canExecuteWorkflowOnDevice(workflow, currentDevice, linkedDevices) {
+  return canExecutePolicyOnDevice(
+    workflow.permissions,
+    currentDevice,
+    linkedDevices
+  );
 }
 function createLocalOnlyDevicePolicy(currentDevice) {
   return {
@@ -762,6 +1307,38 @@ function createLocalOnlyDevicePolicy(currentDevice) {
     execution: "local_only",
     allowedDeviceIds: [currentDevice.id]
   };
+}
+function canViewPolicyOnDevice(permissions, currentDevice, linkedDevices) {
+  const accessLevel = getCurrentDeviceAccessLevel(currentDevice, linkedDevices);
+  if (accessLevel === "blocked") {
+    return false;
+  }
+  switch (permissions.visibility) {
+    case "all_devices":
+      return true;
+    case "trusted_devices":
+      return accessLevel === "trusted";
+    case "specific_devices":
+      return isDeviceAllowed(permissions, currentDevice.id);
+    case "local_only":
+      return isLocalDeviceAllowed(permissions, currentDevice.id);
+  }
+}
+function canExecutePolicyOnDevice(permissions, currentDevice, linkedDevices) {
+  const accessLevel = getCurrentDeviceAccessLevel(currentDevice, linkedDevices);
+  if (accessLevel !== "executable" && accessLevel !== "trusted") {
+    return false;
+  }
+  switch (permissions.execution) {
+    case "anywhere":
+      return true;
+    case "trusted_only":
+      return accessLevel === "trusted";
+    case "specific_devices":
+      return isDeviceAllowed(permissions, currentDevice.id);
+    case "local_only":
+      return isLocalDeviceAllowed(permissions, currentDevice.id);
+  }
 }
 function getCurrentDeviceAccessLevel(currentDevice, linkedDevices) {
   var _a;
@@ -1582,7 +2159,7 @@ function createTaskAdapterRegistry(adapters) {
     }
   };
 }
-function registerTaskIpc(ipcMain2, taskStore, taskRunner, taskRunEventStore, appSettingsStore, deviceStore) {
+function registerTaskIpc(ipcMain2, taskStore, taskRunner, workflowRunner, taskRunEventStore, appSettingsStore, deviceStore) {
   ipcMain2.handle("tasks:list", async () => {
     const [tasks, currentDevice, appSettingsSnapshot] = await Promise.all([
       taskStore.listTasks(),
@@ -1596,6 +2173,70 @@ function registerTaskIpc(ipcMain2, taskStore, taskRunner, taskRunEventStore, app
         appSettingsSnapshot.settings.linkedDevices
       )
     );
+  });
+  ipcMain2.handle("actions:list", async () => {
+    const [actions, workflows, currentDevice, appSettingsSnapshot] = await Promise.all([
+      taskStore.listActions(),
+      taskStore.listWorkflows(),
+      deviceStore.getCurrentDevice(),
+      appSettingsStore.getSnapshot()
+    ]);
+    const visibleActionIds = new Set(
+      workflows.filter(
+        (workflow) => canViewWorkflowOnDevice(
+          workflow,
+          currentDevice,
+          appSettingsSnapshot.settings.linkedDevices
+        )
+      ).flatMap(
+        (workflow) => workflow.actionRefs.map((actionRef) => actionRef.actionId)
+      )
+    );
+    return actions.filter((action) => visibleActionIds.has(action.id));
+  });
+  ipcMain2.handle("workflows:list", async () => {
+    const [workflows, currentDevice, appSettingsSnapshot] = await Promise.all([
+      taskStore.listWorkflows(),
+      deviceStore.getCurrentDevice(),
+      appSettingsStore.getSnapshot()
+    ]);
+    return workflows.filter(
+      (workflow) => canViewWorkflowOnDevice(
+        workflow,
+        currentDevice,
+        appSettingsSnapshot.settings.linkedDevices
+      )
+    );
+  });
+  ipcMain2.handle("workflows:run", async (_event, id) => {
+    const [workflow, currentDevice, appSettingsSnapshot] = await Promise.all([
+      workflowRunner.getWorkflow(id),
+      deviceStore.getCurrentDevice(),
+      appSettingsStore.getSnapshot()
+    ]);
+    if (!canExecuteWorkflowOnDevice(
+      workflow,
+      currentDevice,
+      appSettingsSnapshot.settings.linkedDevices
+    )) {
+      throw new Error("이 기기에서는 해당 Workflow를 실행할 수 없습니다.");
+    }
+    return workflowRunner.runWorkflow(id);
+  });
+  ipcMain2.handle("workflows:stop", async (_event, id) => {
+    const [workflow, currentDevice, appSettingsSnapshot] = await Promise.all([
+      workflowRunner.getWorkflow(id),
+      deviceStore.getCurrentDevice(),
+      appSettingsStore.getSnapshot()
+    ]);
+    if (!canExecuteWorkflowOnDevice(
+      workflow,
+      currentDevice,
+      appSettingsSnapshot.settings.linkedDevices
+    )) {
+      throw new Error("이 기기에서는 해당 Workflow를 중지할 수 없습니다.");
+    }
+    return workflowRunner.stopWorkflow(id);
   });
   ipcMain2.handle("tasks:list-events", async (_event, taskId) => {
     const [tasks, currentDevice, appSettingsSnapshot] = await Promise.all([
@@ -1700,6 +2341,8 @@ function createTaskRunner({
     async runTask(id) {
       const task = await taskStore.getTask(id);
       const adapter = adapterRegistry.getAdapter(task.type);
+      const workflowId = getLegacyWorkflowId(task.id);
+      const actionRunId = randomUUID();
       let resolveRunStateSaved = () => void 0;
       const runStateSaved = new Promise((resolve) => {
         resolveRunStateSaved = resolve;
@@ -1707,6 +2350,9 @@ function createTaskRunner({
       try {
         await taskRunEventStore.appendEvent({
           taskId: task.id,
+          workflowId,
+          actionRunId,
+          legacyTaskId: task.id,
           deviceId,
           status: "running",
           message: "작업 실행을 시작했습니다."
@@ -1725,6 +2371,9 @@ function createTaskRunner({
             });
             await taskRunEventStore.appendEvent({
               taskId: task.id,
+              workflowId,
+              actionRunId,
+              legacyTaskId: task.id,
               deviceId,
               status: updatedTask2.state.status,
               message: "브라우저 탭 변경사항을 템플릿에 반영했습니다."
@@ -1742,6 +2391,9 @@ function createTaskRunner({
             });
             await taskRunEventStore.appendEvent({
               taskId: task.id,
+              workflowId,
+              actionRunId,
+              legacyTaskId: task.id,
               deviceId,
               status: updatedTask2.state.status,
               message: updatedTask2.state.lastError ?? "작업 상태가 변경되었습니다."
@@ -1758,6 +2410,9 @@ function createTaskRunner({
         });
         await taskRunEventStore.appendEvent({
           taskId: task.id,
+          workflowId,
+          actionRunId,
+          legacyTaskId: task.id,
           deviceId,
           status: updatedTask.state.status,
           message: result.message ?? "작업 실행 요청을 처리했습니다."
@@ -1776,6 +2431,9 @@ function createTaskRunner({
         });
         await taskRunEventStore.appendEvent({
           taskId: task.id,
+          workflowId,
+          actionRunId,
+          legacyTaskId: task.id,
           deviceId,
           status: "failed",
           message
@@ -1788,6 +2446,7 @@ function createTaskRunner({
     async stopTask(id) {
       const task = await taskStore.getTask(id);
       const adapter = adapterRegistry.getAdapter(task.type);
+      const workflowId = getLegacyWorkflowId(task.id);
       if (!adapter.stop) {
         throw new Error("이 작업 타입은 중지를 지원하지 않습니다.");
       }
@@ -1802,6 +2461,8 @@ function createTaskRunner({
         });
         await taskRunEventStore.appendEvent({
           taskId: task.id,
+          workflowId,
+          legacyTaskId: task.id,
           deviceId,
           status: "idle",
           message: "작업 중지를 요청했습니다."
@@ -1819,6 +2480,8 @@ function createTaskRunner({
         });
         await taskRunEventStore.appendEvent({
           taskId: task.id,
+          workflowId,
+          legacyTaskId: task.id,
           deviceId,
           status: "failed",
           message
@@ -1838,8 +2501,8 @@ function getErrorMessage(error) {
 function createTaskScheduler({
   appSettingsStore,
   deviceStore,
-  taskRunner,
-  taskStore
+  taskStore,
+  workflowRunner
 }) {
   let interval = null;
   let isTicking = false;
@@ -1849,33 +2512,36 @@ function createTaskScheduler({
     }
     isTicking = true;
     try {
-      const [tasks, currentDevice, appSettingsSnapshot] = await Promise.all([
-        taskStore.listTasks(),
+      const [workflows, currentDevice, appSettingsSnapshot] = await Promise.all([
+        taskStore.listWorkflows(),
         deviceStore.getCurrentDevice(),
         appSettingsStore.getSnapshot()
       ]);
       const now = /* @__PURE__ */ new Date();
-      for (const task of tasks) {
-        const schedule = normalizeTaskSchedule(task.schedule);
-        if (!(schedule == null ? void 0 : schedule.enabled) || task.state.status === "running" || !canExecuteTaskOnDevice(
-          task,
+      for (const workflow of workflows) {
+        const schedule = normalizeTaskSchedule(workflow.schedule);
+        if (!(schedule == null ? void 0 : schedule.enabled) || workflow.state.status === "running" || !canExecuteWorkflowOnDevice(
+          workflow,
           currentDevice,
           appSettingsSnapshot.settings.linkedDevices
         )) {
           continue;
         }
-        const nextRunAt = schedule.nextRunAt ? new Date(schedule.nextRunAt) : new Date(task.updatedAt);
+        const nextRunAt = schedule.nextRunAt ? new Date(schedule.nextRunAt) : new Date(workflow.updatedAt);
         if (Number.isNaN(nextRunAt.getTime()) || nextRunAt > now) {
           continue;
         }
-        await taskStore.updateTask(task.id, {
+        if (!workflow.legacyTaskId) {
+          continue;
+        }
+        await taskStore.updateTask(workflow.legacyTaskId, {
           schedule: {
             ...schedule,
             lastTriggeredAt: now.toISOString(),
             nextRunAt: getNextRunAt(now, schedule)
           }
         });
-        void taskRunner.runTask(task.id);
+        void workflowRunner.runWorkflow(workflow.id);
       }
     } finally {
       isTicking = false;
@@ -1963,6 +2629,9 @@ function createTaskRunEventStore({
       const event = {
         id: randomUUID(),
         taskId: input.taskId,
+        workflowId: input.workflowId,
+        actionRunId: input.actionRunId,
+        legacyTaskId: input.legacyTaskId,
         deviceId: input.deviceId,
         status: input.status,
         message: input.message,
@@ -2012,11 +2681,13 @@ function createTaskStore({ dataDir }) {
       const raw = await readFile(tasksFilePath, "utf8");
       const parsed = JSON.parse(raw);
       return {
-        tasks: Array.isArray(parsed.tasks) ? parsed.tasks : []
+        tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
+        actions: Array.isArray(parsed.actions) ? parsed.actions : [],
+        workflows: Array.isArray(parsed.workflows) ? parsed.workflows : []
       };
     } catch (error) {
       if (isNodeError(error) && error.code === "ENOENT") {
-        return { tasks: [] };
+        return { tasks: [], actions: [], workflows: [] };
       }
       throw error;
     }
@@ -2043,6 +2714,34 @@ function createTaskStore({ dataDir }) {
       const taskFile = await readTaskFile();
       return taskFile.tasks;
     },
+    async listActions() {
+      const taskFile = await readTaskFile();
+      return ensureLegacyWorkflowData(taskFile).actions;
+    },
+    async listWorkflows() {
+      const taskFile = await readTaskFile();
+      return ensureLegacyWorkflowData(taskFile).workflows;
+    },
+    async createAction(input) {
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      const action = {
+        id: randomUUID(),
+        name: input.name.trim(),
+        type: input.type,
+        config: input.config,
+        secretRefs: input.secretRefs,
+        inputSchema: input.inputSchema,
+        outputSchema: input.outputSchema,
+        createdAt: now,
+        updatedAt: now
+      };
+      const taskFile = ensureLegacyWorkflowData(await readTaskFile());
+      await writeTaskFile({
+        ...taskFile,
+        actions: [...taskFile.actions, action]
+      });
+      return action;
+    },
     async createTask(input) {
       const now = (/* @__PURE__ */ new Date()).toISOString();
       const task = {
@@ -2059,9 +2758,15 @@ function createTaskStore({ dataDir }) {
         updatedAt: now
       };
       const taskFile = await readTaskFile();
-      await writeTaskFile({
-        tasks: [...taskFile.tasks, task]
-      });
+      await writeTaskFile(
+        upsertLegacyTaskModel(
+          {
+            ...taskFile,
+            tasks: [...taskFile.tasks, task]
+          },
+          task
+        )
+      );
       return task;
     },
     async updateTask(id, input) {
@@ -2082,29 +2787,137 @@ function createTaskStore({ dataDir }) {
       };
       const tasks = [...taskFile.tasks];
       tasks[taskIndex] = updatedTask;
-      await writeTaskFile({ tasks });
+      await writeTaskFile(upsertLegacyTaskModel({ ...taskFile, tasks }, updatedTask));
       return updatedTask;
     },
     async replaceTasks(tasks) {
-      await writeTaskFile({
-        tasks: tasks.map((task) => ({
-          ...task,
-          name: task.name.trim(),
-          permissions: normalizeDevicePolicy(task.permissions),
-          schedule: normalizeTaskSchedule(task.schedule)
-        }))
-      });
+      const normalizedTasks = tasks.map((task) => ({
+        ...task,
+        name: task.name.trim(),
+        permissions: normalizeDevicePolicy(task.permissions),
+        schedule: normalizeTaskSchedule(task.schedule)
+      }));
+      await writeTaskFile(
+        ensureLegacyWorkflowData({
+          tasks: normalizedTasks,
+          actions: [],
+          workflows: []
+        })
+      );
+    },
+    async replaceTaskData(input) {
+      const normalizedTasks = input.tasks.map((task) => ({
+        ...task,
+        name: task.name.trim(),
+        permissions: normalizeDevicePolicy(task.permissions),
+        schedule: normalizeTaskSchedule(task.schedule)
+      }));
+      await writeTaskFile(
+        ensureLegacyWorkflowData({
+          tasks: normalizedTasks,
+          actions: input.actions ?? [],
+          workflows: input.workflows ?? []
+        })
+      );
     },
     async deleteTask(id) {
       const taskFile = await readTaskFile();
       await writeTaskFile({
-        tasks: taskFile.tasks.filter((task) => task.id !== id)
+        tasks: taskFile.tasks.filter((task) => task.id !== id),
+        actions: taskFile.actions.filter(
+          (action) => action.legacyTaskId !== id && action.id !== getLegacyActionId(id)
+        ),
+        workflows: taskFile.workflows.filter(
+          (workflow) => workflow.legacyTaskId !== id && workflow.id !== getLegacyWorkflowId(id)
+        )
       });
     }
   };
 }
+function ensureLegacyWorkflowData(taskFile) {
+  const legacyActionIds = new Set(
+    taskFile.tasks.map((task) => getLegacyActionId(task.id))
+  );
+  const legacyWorkflowIds = new Set(
+    taskFile.tasks.map((task) => getLegacyWorkflowId(task.id))
+  );
+  const nonLegacyActions = taskFile.actions.filter(
+    (action) => !legacyActionIds.has(action.id) && !action.legacyTaskId
+  );
+  const nonLegacyWorkflows = taskFile.workflows.filter(
+    (workflow) => !legacyWorkflowIds.has(workflow.id) && !workflow.legacyTaskId
+  );
+  return {
+    tasks: taskFile.tasks,
+    actions: [
+      ...nonLegacyActions,
+      ...taskFile.tasks.map((task) => createActionFromLegacyTask(task))
+    ],
+    workflows: [
+      ...nonLegacyWorkflows,
+      ...taskFile.tasks.map((task) => createWorkflowFromLegacyTask(task))
+    ]
+  };
+}
+function upsertLegacyTaskModel(taskFile, task) {
+  const taskWithNormalizedModel = ensureLegacyWorkflowData(taskFile);
+  const action = createActionFromLegacyTask(task);
+  const workflow = createWorkflowFromLegacyTask(task);
+  return {
+    tasks: taskWithNormalizedModel.tasks,
+    actions: [
+      ...taskWithNormalizedModel.actions.filter(
+        (currentAction) => currentAction.id !== action.id
+      ),
+      action
+    ],
+    workflows: [
+      ...taskWithNormalizedModel.workflows.filter(
+        (currentWorkflow) => currentWorkflow.id !== workflow.id
+      ),
+      workflow
+    ]
+  };
+}
 function isNodeError(error) {
   return error instanceof Error && "code" in error;
+}
+function createWorkflowRunner({
+  taskRunner,
+  taskStore
+}) {
+  async function getWorkflow(id) {
+    const workflow = (await taskStore.listWorkflows()).find(
+      (currentWorkflow) => currentWorkflow.id === id
+    );
+    if (!workflow) {
+      throw new Error(`Workflow not found: ${id}`);
+    }
+    return workflow;
+  }
+  function getRunnableLegacyTaskId(workflow) {
+    const enabledActions = workflow.actionRefs.filter((actionRef) => actionRef.enabled).sort((left, right) => left.order - right.order);
+    if (enabledActions.length === 0) {
+      throw new Error("실행 가능한 Action이 없는 Workflow입니다.");
+    }
+    if (!workflow.legacyTaskId) {
+      throw new Error(
+        "아직 legacy task에 연결되지 않은 Workflow 실행은 지원하지 않습니다."
+      );
+    }
+    return workflow.legacyTaskId;
+  }
+  return {
+    getWorkflow,
+    async runWorkflow(id) {
+      const workflow = await getWorkflow(id);
+      return taskRunner.runTask(getRunnableLegacyTaskId(workflow));
+    },
+    async stopWorkflow(id) {
+      const workflow = await getWorkflow(id);
+      return taskRunner.stopTask(getRunnableLegacyTaskId(workflow));
+    }
+  };
 }
 const __dirname$1 = path.dirname(fileURLToPath(import.meta.url));
 process.env.APP_ROOT = path.join(__dirname$1, "..");
@@ -2151,6 +2964,12 @@ app.whenReady().then(async () => {
   const currentDevice = await deviceStore.getCurrentDevice();
   const taskStore = createTaskStore({
     dataDir
+  });
+  const toolModuleStore = createToolModuleStore({
+    dataDir
+  });
+  const toolModuleRunner = createToolModuleRunner({
+    toolModuleStore
   });
   const taskRunEventStore = createTaskRunEventStore({
     dataDir,
@@ -2205,13 +3024,24 @@ app.whenReady().then(async () => {
       }
     }
   });
+  const workflowRunner = createWorkflowRunner({
+    taskRunner,
+    taskStore
+  });
   registerAppSettingsIpc(ipcMain, appSettingsStore, deviceStore);
   registerSecretIpc(ipcMain, secretStore, taskStore);
   registerSyncIpc(ipcMain, mockSyncStore);
+  registerToolModuleIpc(
+    ipcMain,
+    toolModuleStore,
+    toolModuleRunner,
+    taskStore
+  );
   registerTaskIpc(
     ipcMain,
     taskStore,
     taskRunner,
+    workflowRunner,
     taskRunEventStore,
     appSettingsStore,
     deviceStore
@@ -2219,8 +3049,8 @@ app.whenReady().then(async () => {
   createTaskScheduler({
     appSettingsStore,
     deviceStore,
-    taskRunner,
-    taskStore
+    taskStore,
+    workflowRunner
   }).start();
   createWindow();
 });

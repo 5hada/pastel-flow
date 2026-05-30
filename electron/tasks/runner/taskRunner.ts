@@ -1,4 +1,9 @@
-import type { TaskState, TaskTemplate } from '../../../src/shared/tasks'
+import { randomUUID } from 'node:crypto'
+import {
+  getLegacyWorkflowId,
+  type TaskState,
+  type TaskTemplate,
+} from '../../../src/shared/tasks'
 import type { TaskAdapterRegistry } from '../adapters/taskAdapterRegistry'
 import type { AppSettingsStore } from '../../settings/store/appSettingsStore'
 import type { TaskRunEventStore } from '../store/taskRunEventStore'
@@ -32,6 +37,8 @@ export function createTaskRunner({
     async runTask(id) {
       const task = await taskStore.getTask(id)
       const adapter = adapterRegistry.getAdapter(task.type)
+      const workflowId = getLegacyWorkflowId(task.id)
+      const actionRunId = randomUUID()
       let resolveRunStateSaved: () => void = () => undefined
       const runStateSaved = new Promise<void>((resolve) => {
         resolveRunStateSaved = resolve
@@ -40,6 +47,9 @@ export function createTaskRunner({
       try {
         await taskRunEventStore.appendEvent({
           taskId: task.id,
+          workflowId,
+          actionRunId,
+          legacyTaskId: task.id,
           deviceId,
           status: 'running',
           message: '작업 실행을 시작했습니다.',
@@ -58,6 +68,9 @@ export function createTaskRunner({
             })
             await taskRunEventStore.appendEvent({
               taskId: task.id,
+              workflowId,
+              actionRunId,
+              legacyTaskId: task.id,
               deviceId,
               status: updatedTask.state.status,
               message: '브라우저 탭 변경사항을 템플릿에 반영했습니다.',
@@ -75,6 +88,9 @@ export function createTaskRunner({
             })
             await taskRunEventStore.appendEvent({
               taskId: task.id,
+              workflowId,
+              actionRunId,
+              legacyTaskId: task.id,
               deviceId,
               status: updatedTask.state.status,
               message: updatedTask.state.lastError ?? '작업 상태가 변경되었습니다.',
@@ -92,6 +108,9 @@ export function createTaskRunner({
         })
         await taskRunEventStore.appendEvent({
           taskId: task.id,
+          workflowId,
+          actionRunId,
+          legacyTaskId: task.id,
           deviceId,
           status: updatedTask.state.status,
           message: result.message ?? '작업 실행 요청을 처리했습니다.',
@@ -111,6 +130,9 @@ export function createTaskRunner({
         })
         await taskRunEventStore.appendEvent({
           taskId: task.id,
+          workflowId,
+          actionRunId,
+          legacyTaskId: task.id,
           deviceId,
           status: 'failed',
           message,
@@ -124,6 +146,7 @@ export function createTaskRunner({
     async stopTask(id) {
       const task = await taskStore.getTask(id)
       const adapter = adapterRegistry.getAdapter(task.type)
+      const workflowId = getLegacyWorkflowId(task.id)
 
       if (!adapter.stop) {
         throw new Error('이 작업 타입은 중지를 지원하지 않습니다.')
@@ -140,6 +163,8 @@ export function createTaskRunner({
         })
         await taskRunEventStore.appendEvent({
           taskId: task.id,
+          workflowId,
+          legacyTaskId: task.id,
           deviceId,
           status: 'idle',
           message: '작업 중지를 요청했습니다.',
@@ -158,6 +183,8 @@ export function createTaskRunner({
         })
         await taskRunEventStore.appendEvent({
           taskId: task.id,
+          workflowId,
+          legacyTaskId: task.id,
           deviceId,
           status: 'failed',
           message,

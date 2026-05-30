@@ -1,12 +1,14 @@
 import type { CurrentDevice, LinkedDevice } from './devices'
 import type { TaskRunEvent } from './taskRunEvents'
-import type { TaskTemplate } from './tasks'
+import type { ActionDefinition, TaskTemplate, WorkflowDefinition } from './tasks'
 
 export type SyncExportSnapshot = {
   schemaVersion: 1
   exportedAt: string
   sourceDevice: CurrentDevice
   tasks: TaskTemplate[]
+  actions: ActionDefinition[]
+  workflows: WorkflowDefinition[]
   taskRunEvents: TaskRunEvent[]
   linkedDevices: LinkedDevice[]
 }
@@ -53,5 +55,9 @@ export function normalizeSyncExportSnapshot(
     throw new Error('동기화 스냅샷 필수 필드가 누락되었습니다.')
   }
 
-  return candidate as SyncExportSnapshot
+  return {
+    ...candidate,
+    actions: Array.isArray(candidate.actions) ? candidate.actions : [],
+    workflows: Array.isArray(candidate.workflows) ? candidate.workflows : [],
+  } as SyncExportSnapshot
 }

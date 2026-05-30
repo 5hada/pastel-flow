@@ -40,6 +40,20 @@ const pastelFlowApi = {
       return electron.ipcRenderer.invoke("sync:import-file");
     }
   },
+  tools: {
+    list() {
+      return electron.ipcRenderer.invoke("tools:list");
+    },
+    registerFolder() {
+      return electron.ipcRenderer.invoke("tools:register-folder");
+    },
+    run(toolId, input) {
+      return electron.ipcRenderer.invoke("tools:run", toolId, input);
+    },
+    createAction(toolId) {
+      return electron.ipcRenderer.invoke("tools:create-action", toolId);
+    }
+  },
   tasks: {
     list() {
       return electron.ipcRenderer.invoke("tasks:list");
@@ -71,6 +85,22 @@ const pastelFlowApi = {
       return () => {
         electron.ipcRenderer.off("tasks:changed", wrappedListener);
       };
+    }
+  },
+  actions: {
+    list() {
+      return electron.ipcRenderer.invoke("actions:list");
+    }
+  },
+  workflows: {
+    list() {
+      return electron.ipcRenderer.invoke("workflows:list");
+    },
+    run(id) {
+      return electron.ipcRenderer.invoke("workflows:run", id);
+    },
+    stop(id) {
+      return electron.ipcRenderer.invoke("workflows:stop", id);
     }
   }
 };

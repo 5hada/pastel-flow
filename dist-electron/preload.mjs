@@ -96,6 +96,15 @@ const pastelFlowApi = {
     list() {
       return electron.ipcRenderer.invoke("workflows:list");
     },
+    create(input) {
+      return electron.ipcRenderer.invoke("workflows:create", input);
+    },
+    update(id, input) {
+      return electron.ipcRenderer.invoke("workflows:update", id, input);
+    },
+    delete(id) {
+      return electron.ipcRenderer.invoke("workflows:delete", id);
+    },
     run(id) {
       return electron.ipcRenderer.invoke("workflows:run", id);
     },

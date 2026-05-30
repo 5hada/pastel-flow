@@ -1,8 +1,8 @@
-import { BrowserWindow, dialog, clipboard, app, safeStorage, ipcMain } from "electron";
+import { BrowserWindow, dialog, clipboard, app, Menu, safeStorage, ipcMain } from "electron";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import path from "node:path";
 import { randomUUID, randomBytes } from "node:crypto";
-import { readFile, mkdir, writeFile, stat, cp, access } from "node:fs/promises";
+import { readFile, mkdir, writeFile, stat, cp, readdir, access } from "node:fs/promises";
 import os from "node:os";
 import { spawn } from "node:child_process";
 import { createConnection } from "node:net";
@@ -651,7 +651,7 @@ function registerToolModuleIpc(ipcMain2, toolModuleStore, toolModuleRunner, task
     if (result.canceled || !result.filePaths[0]) {
       return void 0;
     }
-    return toolModuleStore.registerToolFromPath(result.filePaths[0]);
+    return toolModuleStore.registerToolRootFromPath(result.filePaths[0]);
   });
   ipcMain2.handle(
     "tools:run",
@@ -693,16 +693,14 @@ function createToolModuleRunner({
     async runTool(toolId, input) {
       const tool = await toolModuleStore.getTool(toolId);
       const normalizedInput = normalizeRunInput(tool.manifest.inputs, input);
-      const logicPath = pathToFileURL(
-        path.join(tool.sourcePath, "logic.mjs")
-      ).href;
+      const logicPath = pathToFileURL(await getToolLogicPath(tool.sourcePath)).href;
       const logicModule = await import(`${logicPath}?updatedAt=${encodeURIComponent(tool.updatedAt)}`);
       if (typeof logicModule.run !== "function") {
         throw new Error("logic.mjs는 run(input, context) 함수를 export해야 합니다.");
       }
       const output = await logicModule.run(
         normalizedInput,
-        createToolContext(tool.manifest.permissions)
+        createToolContext(tool.sourcePath, tool.manifest)
       );
       if (!output || typeof output !== "object" || Array.isArray(output)) {
         throw new Error("도구 실행 결과는 객체여야 합니다.");
@@ -738,6 +736,9 @@ function normalizeValue(field, value) {
   switch (field.type) {
     case "string":
     case "file":
+    case "image":
+    case "color":
+    case "url":
       return String(value);
     case "number": {
       const numericValue = Number(value);
@@ -748,7 +749,13 @@ function normalizeValue(field, value) {
     }
     case "boolean":
       return value === true || value === "true";
+    case "boolean[]":
+      return normalizeArray(value).map((item) => item === true || item === "true");
     case "string[]":
+    case "file[]":
+    case "image[]":
+    case "color[]":
+    case "url[]":
       return Array.isArray(value) ? value.map(String) : String(value).split("\n").map((item) => item.trim()).filter(Boolean);
     case "number[]": {
       const values = Array.isArray(value) ? value : String(value).split("\n");
@@ -761,13 +768,15 @@ function normalizeValue(field, value) {
       });
     }
     case "json":
+    case "record[]":
       if (typeof value === "string") {
         return JSON.parse(value);
       }
       return value;
   }
 }
-function createToolContext(permissions) {
+function createToolContext(toolPath, manifest) {
+  const permissions = manifest.permissions;
   return {
     clipboard: permissions.includes("clipboard") ? {
       async readText() {
@@ -793,8 +802,51 @@ function createToolContext(permissions) {
         const contentType = response.headers.get("content-type") ?? "";
         return contentType.includes("application/json") ? response.json() : response.text();
       }
-    } : void 0
+    } : void 0,
+    assets: {
+      getPath(key) {
+        return getAssetPath(toolPath, manifest, key);
+      },
+      async readText(key) {
+        return readFile(getAssetPath(toolPath, manifest, key), "utf8");
+      },
+      async readJson(key) {
+        return JSON.parse(
+          await readFile(getAssetPath(toolPath, manifest, key), "utf8")
+        );
+      }
+    },
+    dataSources: {
+      async get(key) {
+        const dataSource = manifest.dataSources.find(
+          (currentDataSource) => currentDataSource.key === key
+        );
+        if (!dataSource) {
+          throw new Error(`dataSource를 찾을 수 없습니다: ${key}`);
+        }
+        return dataSource;
+      },
+      async query(key) {
+        const dataSource = manifest.dataSources.find(
+          (currentDataSource) => currentDataSource.key === key
+        );
+        if (!dataSource) {
+          throw new Error(`dataSource를 찾을 수 없습니다: ${key}`);
+        }
+        throw new Error("dataSource query는 아직 지원하지 않습니다.");
+      }
+    }
   };
+}
+function normalizeArray(value) {
+  return Array.isArray(value) ? value : String(value).split("\n").map((item) => item.trim()).filter(Boolean);
+}
+function getAssetPath(toolPath, manifest, key) {
+  const asset = manifest.assets.find((currentAsset) => currentAsset.key === key);
+  if (!asset) {
+    throw new Error(`asset을 찾을 수 없습니다: ${key}`);
+  }
+  return path.join(toolPath, asset.path);
 }
 function validateOutputKeys(output, fields) {
   for (const field of fields) {
@@ -811,14 +863,38 @@ function assertPermission(permissions, permission) {
 function isEmptyValue(value) {
   return value === void 0 || value === null || value === "";
 }
+async function getToolLogicPath(toolPath) {
+  const logicPath = path.join(toolPath, "logic.mjs");
+  if (await pathExists$2(logicPath)) {
+    return logicPath;
+  }
+  throw new Error("logic.mjs 파일을 찾을 수 없습니다.");
+}
+async function pathExists$2(value) {
+  try {
+    await stat(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
 const supportedFieldTypes = [
   "string",
   "number",
   "boolean",
+  "boolean[]",
   "string[]",
   "number[]",
   "json",
-  "file"
+  "file",
+  "file[]",
+  "image",
+  "image[]",
+  "color",
+  "color[]",
+  "url",
+  "url[]",
+  "record[]"
 ];
 const supportedPermissions = [
   "clipboard",
@@ -836,11 +912,12 @@ function createToolModuleStore({
       const raw = await readFile(toolsFilePath, "utf8");
       const parsed = JSON.parse(raw);
       return {
-        tools: Array.isArray(parsed.tools) ? parsed.tools : []
+        tools: Array.isArray(parsed.tools) ? parsed.tools.map(normalizeRegisteredTool) : [],
+        watchedRoots: Array.isArray(parsed.watchedRoots) ? parsed.watchedRoots.filter((root) => typeof root === "string") : []
       };
     } catch (error) {
       if (isNodeError$2(error) && error.code === "ENOENT") {
-        return { tools: [] };
+        return { tools: [], watchedRoots: [] };
       }
       throw error;
     }
@@ -858,9 +935,7 @@ function createToolModuleStore({
     const errors = [];
     const manifestPath = path.join(sourcePath, "manifest.json");
     const logicPath = path.join(sourcePath, "logic.mjs");
-    try {
-      await stat(logicPath);
-    } catch {
+    if (!await pathExists$1(logicPath)) {
       errors.push("logic.mjs 파일이 필요합니다.");
     }
     let manifest;
@@ -880,6 +955,7 @@ function createToolModuleStore({
   }
   return {
     async listTools() {
+      await refreshWatchedRoots();
       return (await readToolModulesFile()).tools.sort(
         (left, right) => left.manifest.name.localeCompare(right.manifest.name)
       );
@@ -917,12 +993,14 @@ function createToolModuleStore({
         id: toolId,
         manifest: validation.manifest,
         sourcePath: destinationPath,
+        relativePath: path.basename(sourcePath),
         registeredAt: (existingTool == null ? void 0 : existingTool.registeredAt) ?? now,
         updatedAt: now,
         hasCustomView: await pathExists$1(path.join(destinationPath, "view.html")),
         hasCustomStyle: await pathExists$1(path.join(destinationPath, "style.css"))
       };
       await writeToolModulesFile({
+        watchedRoots: toolModulesFile.watchedRoots,
         tools: [
           ...toolModulesFile.tools.filter((tool) => tool.id !== toolId),
           registeredTool
@@ -930,7 +1008,115 @@ function createToolModuleStore({
       });
       return registeredTool;
     },
+    async registerToolRootFromPath(rootPath) {
+      const watchedRootPath = path.resolve(rootPath);
+      const modulePaths = await findToolModulePaths(watchedRootPath);
+      if (modulePaths.length === 0) {
+        throw new Error("등록 가능한 Tool Module을 찾지 못했습니다.");
+      }
+      const toolModulesFile = await readToolModulesFile();
+      const registeredTools = await createRegisteredToolsFromRoot(
+        watchedRootPath,
+        modulePaths,
+        toolModulesFile.tools
+      );
+      const registeredToolIds = new Set(registeredTools.map((tool) => tool.id));
+      await writeToolModulesFile({
+        watchedRoots: [
+          .../* @__PURE__ */ new Set([...toolModulesFile.watchedRoots, watchedRootPath])
+        ],
+        tools: [
+          ...toolModulesFile.tools.filter(
+            (tool) => tool.watchedRootPath !== watchedRootPath && !registeredToolIds.has(tool.id)
+          ),
+          ...registeredTools
+        ]
+      });
+      return registeredTools;
+    },
     validateToolPath
+  };
+  async function refreshWatchedRoots() {
+    const toolModulesFile = await readToolModulesFile();
+    if (toolModulesFile.watchedRoots.length === 0) {
+      return;
+    }
+    const watchedRootSet = new Set(toolModulesFile.watchedRoots);
+    const retainedTools = toolModulesFile.tools.filter(
+      (tool) => !tool.watchedRootPath || !watchedRootSet.has(tool.watchedRootPath)
+    );
+    const refreshedTools = [];
+    const existingTools = toolModulesFile.tools;
+    for (const watchedRootPath of watchedRootSet) {
+      if (!await pathExists$1(watchedRootPath)) {
+        continue;
+      }
+      const modulePaths = await findToolModulePaths(watchedRootPath);
+      refreshedTools.push(
+        ...await createRegisteredToolsFromRoot(
+          watchedRootPath,
+          modulePaths,
+          existingTools
+        )
+      );
+    }
+    const refreshedToolIds = new Set(refreshedTools.map((tool) => tool.id));
+    await writeToolModulesFile({
+      watchedRoots: [...watchedRootSet],
+      tools: [
+        ...retainedTools.filter((tool) => !refreshedToolIds.has(tool.id)),
+        ...refreshedTools
+      ]
+    });
+  }
+  async function createRegisteredToolsFromRoot(watchedRootPath, modulePaths, existingTools) {
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const registeredTools = [];
+    for (const modulePath of modulePaths) {
+      const validation = await validateToolPath(modulePath);
+      if (!validation.ok || !validation.manifest) {
+        continue;
+      }
+      const existingTool = existingTools.find(
+        (tool) => {
+          var _a;
+          return tool.id === ((_a = validation.manifest) == null ? void 0 : _a.id);
+        }
+      );
+      registeredTools.push({
+        id: validation.manifest.id,
+        manifest: validation.manifest,
+        sourcePath: modulePath,
+        watchedRootPath,
+        relativePath: path.relative(watchedRootPath, modulePath) || ".",
+        registeredAt: (existingTool == null ? void 0 : existingTool.registeredAt) ?? now,
+        updatedAt: now,
+        hasCustomView: await pathExists$1(path.join(modulePath, "view.html")),
+        hasCustomStyle: await pathExists$1(path.join(modulePath, "style.css"))
+      });
+    }
+    return registeredTools;
+  }
+}
+function normalizeRegisteredTool(tool) {
+  return {
+    ...tool,
+    manifest: normalizeStoredManifest(tool.manifest),
+    watchedRootPath: typeof tool.watchedRootPath === "string" ? tool.watchedRootPath : void 0,
+    hasCustomView: tool.hasCustomView === true,
+    hasCustomStyle: tool.hasCustomStyle === true
+  };
+}
+function normalizeStoredManifest(manifest) {
+  return {
+    ...manifest,
+    schemaVersion: manifest.schemaVersion === "1.1" || manifest.schemaVersion === "1.0" ? manifest.schemaVersion : "1.0",
+    assets: Array.isArray(manifest.assets) ? manifest.assets : [],
+    dataSources: Array.isArray(manifest.dataSources) ? manifest.dataSources : [],
+    datasets: Array.isArray(manifest.datasets) ? manifest.datasets : [],
+    inputs: Array.isArray(manifest.inputs) ? manifest.inputs : [],
+    outputs: Array.isArray(manifest.outputs) ? manifest.outputs : [],
+    permissions: Array.isArray(manifest.permissions) ? manifest.permissions : []
   };
 }
 function normalizeManifest(value, errors) {
@@ -939,8 +1125,8 @@ function normalizeManifest(value, errors) {
     return void 0;
   }
   const candidate = value;
-  if (candidate.schemaVersion !== "1.0") {
-    errors.push('schemaVersion은 "1.0"이어야 합니다.');
+  if (candidate.schemaVersion !== "1.0" && candidate.schemaVersion !== "1.1") {
+    errors.push('schemaVersion은 "1.0" 또는 "1.1"이어야 합니다.');
   }
   if (!isToolId(candidate.id)) {
     errors.push("id는 영문 소문자, 숫자, 하이픈만 사용할 수 있습니다.");
@@ -952,21 +1138,48 @@ function normalizeManifest(value, errors) {
     errors.push("version이 필요합니다.");
   }
   const inputs = normalizeFields(candidate.inputs, "inputs", errors);
-  const outputs = normalizeFields(candidate.outputs, "outputs", errors);
+  const outputs = normalizeOutputFields(candidate.outputs, errors);
+  const assets = normalizeAssets(candidate.assets, errors);
+  const dataSources = normalizeDataSources(candidate.dataSources, errors);
+  const datasets = normalizeDatasets(candidate.datasets, errors);
+  const indexing = normalizeIndexing(candidate.indexing);
   const permissions = normalizePermissions(candidate.permissions, errors);
   if (errors.length > 0) {
     return void 0;
   }
   return {
-    schemaVersion: "1.0",
+    schemaVersion: candidate.schemaVersion ?? "1.1",
     id: candidate.id ?? "",
     name: candidate.name ?? "",
     version: candidate.version ?? "",
     description: typeof candidate.description === "string" ? candidate.description : void 0,
+    assets,
+    dataSources,
+    datasets,
     inputs,
     outputs,
+    indexing,
     permissions
   };
+}
+function normalizeOutputFields(value, errors) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.reduce((fields, field) => {
+    const normalizedField = normalizeFields([field], "outputs", errors)[0];
+    if (!normalizedField) {
+      return fields;
+    }
+    const candidate = field;
+    return [
+      ...fields,
+      {
+        ...normalizedField,
+        ui: normalizeOutputUi(candidate.ui)
+      }
+    ];
+  }, []);
 }
 function normalizeFields(value, fieldName, errors) {
   if (!Array.isArray(value)) {
@@ -994,7 +1207,9 @@ function normalizeFields(value, fieldName, errors) {
         required: candidate.required === true,
         default: candidate.default,
         description: typeof candidate.description === "string" ? candidate.description : void 0,
-        ui: normalizeFieldUi(candidate.ui)
+        ui: normalizeFieldUi(candidate.ui),
+        fields: Array.isArray(candidate.fields) ? normalizeFields(candidate.fields, `${fieldName}[${index}].fields`, errors) : void 0,
+        schema: candidate.schema
       }
     ];
   }, []);
@@ -1013,7 +1228,120 @@ function normalizeFieldUi(value) {
     min: normalizeOptionalNumber(candidate.min),
     max: normalizeOptionalNumber(candidate.max),
     step: normalizeOptionalNumber(candidate.step),
-    rows: normalizeOptionalNumber(candidate.rows)
+    rows: normalizeOptionalNumber(candidate.rows),
+    accept: typeof candidate.accept === "string" && candidate.accept.trim() ? candidate.accept : void 0,
+    multiple: candidate.multiple === true,
+    fields: Array.isArray(candidate.fields) ? normalizeFields(candidate.fields, "ui.fields", []) : void 0
+  };
+}
+function normalizeOutputUi(value) {
+  if (!value || typeof value !== "object") {
+    return void 0;
+  }
+  const candidate = value;
+  return {
+    view: isOutputView(candidate.view) ? candidate.view : void 0,
+    label: typeof candidate.label === "string" ? candidate.label : void 0,
+    helpText: typeof candidate.helpText === "string" ? candidate.helpText : void 0,
+    emptyText: typeof candidate.emptyText === "string" ? candidate.emptyText : void 0,
+    columns: Array.isArray(candidate.columns) ? candidate.columns.filter((column) => typeof column === "string") : void 0,
+    thumbnail: candidate.thumbnail === true,
+    maxItems: normalizeOptionalNumber(candidate.maxItems),
+    actions: Array.isArray(candidate.actions) ? candidate.actions.filter((action) => typeof action === "string") : void 0
+  };
+}
+function normalizeAssets(value, errors) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.reduce((assets, asset, index) => {
+    if (!asset || typeof asset !== "object") {
+      errors.push(`assets[${index}] 형식이 올바르지 않습니다.`);
+      return assets;
+    }
+    const candidate = asset;
+    if (!isNonEmptyString(candidate.key) || !isNonEmptyString(candidate.path)) {
+      errors.push(`assets[${index}]에는 key와 path가 필요합니다.`);
+      return assets;
+    }
+    if (!isAssetType(candidate.type)) {
+      errors.push(`assets[${index}].type이 지원되지 않습니다.`);
+      return assets;
+    }
+    return [
+      ...assets,
+      {
+        key: candidate.key,
+        path: candidate.path,
+        type: candidate.type,
+        description: candidate.description
+      }
+    ];
+  }, []);
+}
+function normalizeDataSources(value, errors) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.reduce((result, dataSource, index) => {
+    if (!dataSource || typeof dataSource !== "object") {
+      errors.push(`dataSources[${index}] 형식이 올바르지 않습니다.`);
+      return result;
+    }
+    const candidate = dataSource;
+    if (!isNonEmptyString(candidate.key) || !isDataSourceType(candidate.type)) {
+      errors.push(`dataSources[${index}]에는 key와 지원 type이 필요합니다.`);
+      return result;
+    }
+    return [
+      ...result,
+      {
+        key: candidate.key,
+        type: candidate.type,
+        required: candidate.required === true,
+        description: candidate.description,
+        permissions: normalizePermissions(candidate.permissions, errors),
+        schema: candidate.schema
+      }
+    ];
+  }, []);
+}
+function normalizeDatasets(value, errors) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.reduce((result, dataset, index) => {
+    if (!dataset || typeof dataset !== "object") {
+      errors.push(`datasets[${index}] 형식이 올바르지 않습니다.`);
+      return result;
+    }
+    const candidate = dataset;
+    if (!isNonEmptyString(candidate.key) || !isNonEmptyString(candidate.source) || !isFieldType(candidate.recordType)) {
+      errors.push(`datasets[${index}]에는 key, source, recordType이 필요합니다.`);
+      return result;
+    }
+    return [
+      ...result,
+      {
+        key: candidate.key,
+        source: candidate.source,
+        recordType: candidate.recordType,
+        schema: Array.isArray(candidate.schema) ? normalizeFields(candidate.schema, `datasets[${index}].schema`, errors) : void 0,
+        index: candidate.index === true,
+        description: candidate.description
+      }
+    ];
+  }, []);
+}
+function normalizeIndexing(value) {
+  if (!value || typeof value !== "object") {
+    return void 0;
+  }
+  const candidate = value;
+  return {
+    enabled: candidate.enabled === true,
+    fields: Array.isArray(candidate.fields) ? candidate.fields.filter((field) => typeof field === "string") : void 0,
+    datasets: Array.isArray(candidate.datasets) ? candidate.datasets.filter((dataset) => typeof dataset === "string") : void 0
   };
 }
 function normalizeFieldOptions(value) {
@@ -1069,7 +1397,16 @@ function isFieldType(value) {
   return supportedFieldTypes.includes(value);
 }
 function isFieldControl(value) {
-  return value === "text" || value === "textarea" || value === "number" || value === "toggle" || value === "checkbox" || value === "select" || value === "radio" || value === "color" || value === "json" || value === "list" || value === "file";
+  return value === "text" || value === "textarea" || value === "number" || value === "toggle" || value === "checkbox" || value === "select" || value === "radio" || value === "color" || value === "json" || value === "list" || value === "file" || value === "files" || value === "image" || value === "images" || value === "url" || value === "table";
+}
+function isOutputView(value) {
+  return value === "text" || value === "code" || value === "list" || value === "table" || value === "image" || value === "gallery" || value === "color" || value === "palette" || value === "link" || value === "links" || value === "file" || value === "files" || value === "download";
+}
+function isAssetType(value) {
+  return value === "file" || value === "image" || value === "json" || value === "text";
+}
+function isDataSourceType(value) {
+  return value === "file" || value === "folder" || value === "sqlite" || value === "json" || value === "csv" || value === "http" || value === "custom";
 }
 function isOptionValue(value) {
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
@@ -1082,6 +1419,26 @@ function isPermission(value) {
 }
 function isNodeError$2(error) {
   return error instanceof Error && "code" in error;
+}
+async function findToolModulePaths(rootPath) {
+  const results = [];
+  async function walk(currentPath) {
+    if (path.basename(currentPath) === "node_modules") {
+      return;
+    }
+    if (await pathExists$1(path.join(currentPath, "manifest.json")) && await pathExists$1(path.join(currentPath, "logic.mjs"))) {
+      results.push(currentPath);
+      return;
+    }
+    const entries = await readdir(currentPath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        await walk(path.join(currentPath, entry.name));
+      }
+    }
+  }
+  await walk(rootPath);
+  return results;
 }
 const defaultDevicePolicy = {
   visibility: "local_only",
@@ -1543,8 +1900,11 @@ const browserTabGroupAdapter = {
         message: "기본 브라우저로 초기 URL을 열었습니다."
       };
     }
+    const isExistingProfile = config.runMode === "extension_controlled" && config.profileSource === "existing_profile" && config.existingProfilePath;
     const localProfilePath = getBrowserProfilePath(dataDir, config);
-    await mkdir(localProfilePath, { recursive: true });
+    if (!isExistingProfile) {
+      await mkdir(localProfilePath, { recursive: true });
+    }
     const browserExecutable = await findBrowserExecutable(
       config.browserKind,
       appSettings.browserExecutablePaths
@@ -1552,8 +1912,12 @@ const browserTabGroupAdapter = {
     const shouldLoadExtensionBridge = config.runMode === "extension_controlled";
     const extensionBridgePath = shouldLoadExtensionBridge ? await ensureBrowserExtensionBridge(dataDir) : null;
     const remoteDebuggingPort = config.dynamicTemplateUpdates || shouldLoadExtensionBridge ? getRemoteDebuggingPort(task.id) : null;
+    const browserArgs = isExistingProfile ? [
+      `--user-data-dir=${path.dirname(config.existingProfilePath)}`,
+      `--profile-directory=${path.basename(config.existingProfilePath)}`
+    ] : [`--user-data-dir=${localProfilePath}`];
     const browserProcess = await launchBrowser(browserExecutable.path, [
-      `--user-data-dir=${localProfilePath}`,
+      ...browserArgs,
       "--no-first-run",
       "--new-window",
       ...remoteDebuggingPort ? [`--remote-debugging-port=${remoteDebuggingPort}`] : [],
@@ -2175,24 +2539,7 @@ function registerTaskIpc(ipcMain2, taskStore, taskRunner, workflowRunner, taskRu
     );
   });
   ipcMain2.handle("actions:list", async () => {
-    const [actions, workflows, currentDevice, appSettingsSnapshot] = await Promise.all([
-      taskStore.listActions(),
-      taskStore.listWorkflows(),
-      deviceStore.getCurrentDevice(),
-      appSettingsStore.getSnapshot()
-    ]);
-    const visibleActionIds = new Set(
-      workflows.filter(
-        (workflow) => canViewWorkflowOnDevice(
-          workflow,
-          currentDevice,
-          appSettingsSnapshot.settings.linkedDevices
-        )
-      ).flatMap(
-        (workflow) => workflow.actionRefs.map((actionRef) => actionRef.actionId)
-      )
-    );
-    return actions.filter((action) => visibleActionIds.has(action.id));
+    return taskStore.listActions();
   });
   ipcMain2.handle("workflows:list", async () => {
     const [workflows, currentDevice, appSettingsSnapshot] = await Promise.all([
@@ -2207,6 +2554,43 @@ function registerTaskIpc(ipcMain2, taskStore, taskRunner, workflowRunner, taskRu
         appSettingsSnapshot.settings.linkedDevices
       )
     );
+  });
+  ipcMain2.handle("workflows:create", async (_event, input) => {
+    const currentDevice = await deviceStore.getCurrentDevice();
+    return taskStore.createWorkflow({
+      ...input,
+      permissions: input.permissions ?? createLocalOnlyDevicePolicy(currentDevice)
+    });
+  });
+  ipcMain2.handle("workflows:update", async (_event, id, input) => {
+    const [workflow, currentDevice, appSettingsSnapshot] = await Promise.all([
+      workflowRunner.getWorkflow(id),
+      deviceStore.getCurrentDevice(),
+      appSettingsStore.getSnapshot()
+    ]);
+    if (!canExecuteWorkflowOnDevice(
+      workflow,
+      currentDevice,
+      appSettingsSnapshot.settings.linkedDevices
+    )) {
+      throw new Error("이 기기에서는 해당 Workflow를 수정할 수 없습니다.");
+    }
+    return taskStore.updateWorkflow(id, input);
+  });
+  ipcMain2.handle("workflows:delete", async (_event, id) => {
+    const [workflow, currentDevice, appSettingsSnapshot] = await Promise.all([
+      workflowRunner.getWorkflow(id),
+      deviceStore.getCurrentDevice(),
+      appSettingsStore.getSnapshot()
+    ]);
+    if (!canExecuteWorkflowOnDevice(
+      workflow,
+      currentDevice,
+      appSettingsSnapshot.settings.linkedDevices
+    )) {
+      throw new Error("이 기기에서는 해당 Workflow를 삭제할 수 없습니다.");
+    }
+    return taskStore.deleteWorkflow(id);
   });
   ipcMain2.handle("workflows:run", async (_event, id) => {
     const [workflow, currentDevice, appSettingsSnapshot] = await Promise.all([
@@ -2742,6 +3126,81 @@ function createTaskStore({ dataDir }) {
       });
       return action;
     },
+    async createWorkflow(input) {
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      const workflow = {
+        id: randomUUID(),
+        name: input.name.trim(),
+        actionRefs: normalizeWorkflowActionRefs(input.actionRefs ?? []),
+        permissions: normalizeDevicePolicy(
+          input.permissions ?? defaultDevicePolicy
+        ),
+        schedule: normalizeTaskSchedule(input.schedule),
+        state: input.state ?? defaultTaskState,
+        createdAt: now,
+        updatedAt: now
+      };
+      const taskFile = ensureLegacyWorkflowData(await readTaskFile());
+      await writeTaskFile({
+        ...taskFile,
+        workflows: [...taskFile.workflows, workflow]
+      });
+      return workflow;
+    },
+    async updateWorkflow(id, input) {
+      var _a;
+      const taskFile = ensureLegacyWorkflowData(await readTaskFile());
+      const workflowIndex = taskFile.workflows.findIndex(
+        (workflow) => workflow.id === id
+      );
+      if (workflowIndex === -1) {
+        throw new Error(`Workflow not found: ${id}`);
+      }
+      const currentWorkflow = taskFile.workflows[workflowIndex];
+      const updatedWorkflow = {
+        ...currentWorkflow,
+        ...input,
+        name: ((_a = input.name) == null ? void 0 : _a.trim()) ?? currentWorkflow.name,
+        actionRefs: input.actionRefs === void 0 ? currentWorkflow.actionRefs : normalizeWorkflowActionRefs(input.actionRefs),
+        permissions: input.permissions ? normalizeDevicePolicy(input.permissions) : currentWorkflow.permissions,
+        schedule: input.schedule === void 0 ? currentWorkflow.schedule : normalizeTaskSchedule(input.schedule),
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      const workflows = [...taskFile.workflows];
+      workflows[workflowIndex] = updatedWorkflow;
+      await writeTaskFile({
+        ...taskFile,
+        workflows
+      });
+      return updatedWorkflow;
+    },
+    async deleteWorkflow(id) {
+      const taskFile = ensureLegacyWorkflowData(await readTaskFile());
+      const workflow = taskFile.workflows.find(
+        (currentWorkflow) => currentWorkflow.id === id
+      );
+      if (!workflow) {
+        throw new Error(`Workflow not found: ${id}`);
+      }
+      if (workflow.legacyTaskId) {
+        await writeTaskFile({
+          tasks: taskFile.tasks.filter((task) => task.id !== workflow.legacyTaskId),
+          actions: taskFile.actions.filter(
+            (action) => action.legacyTaskId !== workflow.legacyTaskId && action.id !== getLegacyActionId(workflow.legacyTaskId)
+          ),
+          workflows: taskFile.workflows.filter(
+            (currentWorkflow) => currentWorkflow.legacyTaskId !== workflow.legacyTaskId && currentWorkflow.id !== getLegacyWorkflowId(workflow.legacyTaskId)
+          )
+        });
+        return;
+      }
+      await writeTaskFile({
+        ...taskFile,
+        workflows: taskFile.workflows.filter(
+          (currentWorkflow) => currentWorkflow.id !== id
+        )
+      });
+    },
     async createTask(input) {
       const now = (/* @__PURE__ */ new Date()).toISOString();
       const task = {
@@ -2879,12 +3338,25 @@ function upsertLegacyTaskModel(taskFile, task) {
     ]
   };
 }
+function normalizeWorkflowActionRefs(actionRefs) {
+  return actionRefs.filter((actionRef) => typeof actionRef.actionId === "string" && actionRef.actionId).map((actionRef, index) => ({
+    id: actionRef.id || randomUUID(),
+    actionId: actionRef.actionId,
+    order: Number.isFinite(actionRef.order) ? actionRef.order : index,
+    inputMapping: actionRef.inputMapping,
+    enabled: actionRef.enabled !== false
+  })).sort((left, right) => left.order - right.order).map((actionRef, index) => ({
+    ...actionRef,
+    order: index
+  }));
+}
 function isNodeError(error) {
   return error instanceof Error && "code" in error;
 }
 function createWorkflowRunner({
   taskRunner,
-  taskStore
+  taskStore,
+  toolModuleRunner
 }) {
   async function getWorkflow(id) {
     const workflow = (await taskStore.listWorkflows()).find(
@@ -2911,13 +3383,96 @@ function createWorkflowRunner({
     getWorkflow,
     async runWorkflow(id) {
       const workflow = await getWorkflow(id);
+      if (!workflow.legacyTaskId) {
+        return runActionWorkflow(workflow, await taskStore.listActions(), {
+          taskStore,
+          toolModuleRunner
+        });
+      }
       return taskRunner.runTask(getRunnableLegacyTaskId(workflow));
     },
     async stopWorkflow(id) {
       const workflow = await getWorkflow(id);
+      if (!workflow.legacyTaskId) {
+        return taskStore.updateWorkflow(workflow.id, {
+          state: {
+            ...workflow.state,
+            status: "idle",
+            lastMessage: "Workflow 중지를 요청했습니다."
+          }
+        });
+      }
       return taskRunner.stopTask(getRunnableLegacyTaskId(workflow));
     }
   };
+}
+async function runActionWorkflow(workflow, actions, context) {
+  const actionMap = new Map(actions.map((action) => [action.id, action]));
+  const enabledActionRefs = workflow.actionRefs.filter((actionRef) => actionRef.enabled).sort((left, right) => left.order - right.order);
+  let outputScope = {};
+  await context.taskStore.updateWorkflow(workflow.id, {
+    state: {
+      ...workflow.state,
+      status: "running",
+      lastRunAt: (/* @__PURE__ */ new Date()).toISOString(),
+      lastMessage: "Workflow 실행을 시작했습니다.",
+      lastError: void 0
+    }
+  });
+  try {
+    for (const actionRef of enabledActionRefs) {
+      const action = actionMap.get(actionRef.actionId);
+      if (!action) {
+        throw new Error(`Action을 찾을 수 없습니다: ${actionRef.actionId}`);
+      }
+      if (action.type !== "tool_action") {
+        throw new Error(
+          `순수 Workflow runner는 아직 ${action.type} 실행을 지원하지 않습니다.`
+        );
+      }
+      const config = action.config;
+      if (!config.toolId) {
+        throw new Error("tool_action config.toolId가 필요합니다.");
+      }
+      const result = await context.toolModuleRunner.runTool(config.toolId, {
+        ...config.inputDefaults ?? {},
+        ...resolveInputMapping(actionRef.inputMapping, outputScope)
+      });
+      outputScope = {
+        ...outputScope,
+        [actionRef.id]: result.output
+      };
+    }
+    return context.taskStore.updateWorkflow(workflow.id, {
+      state: {
+        status: "idle",
+        lastRunAt: (/* @__PURE__ */ new Date()).toISOString(),
+        lastMessage: `${enabledActionRefs.length}개 Action 실행을 완료했습니다.`
+      }
+    });
+  } catch (error) {
+    return context.taskStore.updateWorkflow(workflow.id, {
+      state: {
+        status: "failed",
+        lastRunAt: (/* @__PURE__ */ new Date()).toISOString(),
+        lastError: getErrorMessage(error)
+      }
+    });
+  }
+}
+function resolveInputMapping(inputMapping, outputScope) {
+  if (!inputMapping) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(inputMapping).map(([inputKey, outputPath]) => [
+      inputKey,
+      outputScope[outputPath]
+    ])
+  );
+}
+function getErrorMessage(error) {
+  return error instanceof Error ? error.message : "알 수 없는 Workflow 실행 오류가 발생했습니다.";
 }
 const __dirname$1 = path.dirname(fileURLToPath(import.meta.url));
 process.env.APP_ROOT = path.join(__dirname$1, "..");
@@ -2925,14 +3480,22 @@ const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
 const MAIN_DIST = path.join(process.env.APP_ROOT, "dist-electron");
 const RENDERER_DIST = path.join(process.env.APP_ROOT, "dist");
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, "public") : RENDERER_DIST;
+app.setPath("userData", path.join(app.getPath("appData"), "pastel-flow"));
+app.setName("Pastel Flow");
+app.setAppUserModelId("com.pastelflow.app");
 let win;
+const appIconPath = path.join(process.env.VITE_PUBLIC, "pastel-flow.png");
 function createWindow() {
   win = new BrowserWindow({
-    icon: path.join(process.env.VITE_PUBLIC, "electron-vite.svg"),
+    autoHideMenuBar: true,
+    icon: appIconPath,
+    title: "Pastel Flow",
     webPreferences: {
       preload: path.join(__dirname$1, "preload.mjs")
     }
   });
+  win.setIcon(appIconPath);
+  win.setMenu(null);
   win.webContents.on("did-finish-load", () => {
     win == null ? void 0 : win.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
   });
@@ -2954,6 +3517,7 @@ app.on("activate", () => {
   }
 });
 app.whenReady().then(async () => {
+  Menu.setApplicationMenu(null);
   const dataDir = app.getPath("userData");
   const appSettingsStore = createAppSettingsStore({
     dataDir
@@ -3026,7 +3590,8 @@ app.whenReady().then(async () => {
   });
   const workflowRunner = createWorkflowRunner({
     taskRunner,
-    taskStore
+    taskStore,
+    toolModuleRunner
   });
   registerAppSettingsIpc(ipcMain, appSettingsStore, deviceStore);
   registerSecretIpc(ipcMain, secretStore, taskStore);

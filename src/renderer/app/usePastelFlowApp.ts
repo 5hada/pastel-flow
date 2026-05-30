@@ -33,7 +33,6 @@ export function usePastelFlowApp() {
     selectedCategory,
     setErrorMessage,
     setWorkspaceMode,
-    workspaceMode,
   })
   const secrets = useSecretsData(
     setErrorMessage,

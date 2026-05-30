@@ -30,7 +30,6 @@ type UseTaskDataOptions = {
   selectedCategory: NavigationCategory
   setErrorMessage(message: string | null): void
   setWorkspaceMode(mode: WorkspaceMode): void
-  workspaceMode: WorkspaceMode
 }
 
 export function useTaskData({
@@ -40,7 +39,6 @@ export function useTaskData({
   selectedCategory,
   setErrorMessage,
   setWorkspaceMode,
-  workspaceMode,
 }: UseTaskDataOptions) {
   const [tasks, setTasks] = useState<TaskTemplate[]>([])
   const [taskRunEvents, setTaskRunEvents] = useState<TaskRunEvent[]>([])
@@ -108,16 +106,13 @@ export function useTaskData({
     if (tasks.length === 0) {
       setSelectedTaskId(null)
       setConfirmDeleteTaskId(null)
-      if (workspaceMode === 'workflows') {
-        setWorkspaceMode('run')
-      }
       return
     }
 
     if (!selectedTaskId || !tasks.some((task) => task.id === selectedTaskId)) {
       setSelectedTaskId(tasks[0].id)
     }
-  }, [tasks, isLoading, selectedTaskId, setWorkspaceMode, workspaceMode])
+  }, [tasks, isLoading, selectedTaskId])
 
   async function loadTasks() {
     if (!window.pastelFlow) {

@@ -57,9 +57,17 @@ export const browserTabGroupAdapter: TaskAdapter<
       }
     }
 
+    const isExistingProfile =
+      config.runMode === 'extension_controlled' &&
+      config.profileSource === 'existing_profile' &&
+      config.existingProfilePath
+
     const localProfilePath = getBrowserProfilePath(dataDir, config)
 
-    await mkdir(localProfilePath, { recursive: true })
+    if (!isExistingProfile) {
+      await mkdir(localProfilePath, { recursive: true })
+    }
+
     const browserExecutable = await findBrowserExecutable(
       config.browserKind,
       appSettings.browserExecutablePaths,
@@ -72,8 +80,14 @@ export const browserTabGroupAdapter: TaskAdapter<
       config.dynamicTemplateUpdates || shouldLoadExtensionBridge
       ? getRemoteDebuggingPort(task.id)
       : null
+    const browserArgs = isExistingProfile
+      ? [
+        `--user-data-dir=${path.dirname(config.existingProfilePath!)}`,
+        `--profile-directory=${path.basename(config.existingProfilePath!)}`,
+        ]
+      : [`--user-data-dir=${localProfilePath}`]
     const browserProcess = await launchBrowser(browserExecutable.path, [
-      `--user-data-dir=${localProfilePath}`,
+      ...browserArgs,
       '--no-first-run',
       '--new-window',
       ...(remoteDebuggingPort

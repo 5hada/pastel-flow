@@ -1,4 +1,6 @@
-# Pastel Tool Module Specification v1.0
+# Pastel Tool Module Specification v1.1
+
+사용자 전용 규격서
 
 ## 개요
 
@@ -34,6 +36,9 @@ my-tool/
 my-tool/
 ├─ manifest.json
 ├─ logic.mjs
+├─ assets/
+│  ├─ sample.png
+│  └─ examples.json
 ├─ view.html
 ├─ style.css
 └─ README.md
@@ -45,6 +50,7 @@ my-tool/
 | ------------- | -- | ----------     |
 | manifest.json | O  | 도구 메타데이터 |
 | logic.mjs      | O  | 실행 로직      |
+| assets/       | X  | 정적 데이터, 이미지, 샘플 파일 |
 | view.html     | X  | 사용자 정의 UI  |
 | style.css     | X  | 사용자 정의 스타일 |
 | README.md     | X  | 설명 문서      |
@@ -59,11 +65,38 @@ manifest.json은 도구의 메타데이터를 정의한다.
 
 ```json
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "id": "wildcard-generator",
   "name": "Wildcard Generator",
   "version": "1.0.0",
   "description": "Generate random strings from a pattern.",
+
+  "assets": [
+    {
+      "key": "examples",
+      "path": "assets/examples.json",
+      "type": "json",
+      "description": "Sample pattern presets."
+    }
+  ],
+
+  "dataSources": [
+    {
+      "key": "localPresets",
+      "type": "file",
+      "required": false,
+      "description": "Optional local preset file selected by the user."
+    }
+  ],
+
+  "datasets": [
+    {
+      "key": "patternSamples",
+      "source": "asset:examples",
+      "recordType": "json",
+      "index": true
+    }
+  ],
 
   "inputs": [
     {
@@ -84,14 +117,14 @@ manifest.json은 도구의 메타데이터를 정의한다.
     },
     {
       "key": "theme",
-      "type": "string",
-      "default": "mint",
+      "type": "color",
+      "default": "#1f6f68",
       "ui": {
         "control": "radio",
         "label": "Theme",
         "options": [
-          { "label": "Mint", "value": "mint", "color": "#1f6f68" },
-          { "label": "Rose", "value": "rose", "color": "#b94a48" }
+          { "label": "Mint", "value": "#1f6f68", "color": "#1f6f68" },
+          { "label": "Rose", "value": "#b94a48", "color": "#b94a48" }
         ]
       }
     }
@@ -100,9 +133,18 @@ manifest.json은 도구의 메타데이터를 정의한다.
   "outputs": [
     {
       "key": "items",
-      "type": "string[]"
+      "type": "string[]",
+      "ui": {
+        "view": "list",
+        "label": "Generated items"
+      }
     }
   ],
+
+  "indexing": {
+    "enabled": true,
+    "fields": ["name", "description", "inputs.key", "outputs.key", "datasets.key"]
+  },
 
   "permissions": [
     "clipboard"
@@ -119,7 +161,7 @@ manifest.json은 도구의 메타데이터를 정의한다.
 현재 규격 버전.
 
 ```json
-"schemaVersion": "1.0"
+"schemaVersion": "1.1"
 ```
 
 ---
@@ -203,8 +245,39 @@ Semantic Versioning 사용 권장.
 | boolean  | 참/거짓    |
 | string[] | 문자열 배열  |
 | number[] | 숫자 배열   |
+| boolean[] | 참/거짓 배열 |
 | json     | JSON 객체 |
 | file     | 파일      |
+| file[]   | 파일 배열 |
+| image    | 이미지 파일 또는 이미지 참조 |
+| image[]  | 이미지 배열 |
+| color    | 색상 값. 기본 표현은 hex 문자열 |
+| color[]  | 색상 값 배열 |
+| url      | URL 문자열 |
+| url[]    | URL 문자열 배열 |
+| record[] | 같은 구조의 레코드 배열 |
+
+타입 규칙:
+
+* `file`과 `file[]`은 사용자가 선택한 로컬 파일 참조를 나타낸다.
+* `image`와 `image[]`는 이미지 파일 또는 이미지 결과 참조를 나타낸다.
+* `color`와 `color[]`는 기본적으로 `#RRGGBB` 형식을 권장한다. alpha가 필요한 경우 `#RRGGBBAA`를 사용할 수 있다.
+* `url`과 `url[]`는 `http://`, `https://`, 또는 앱이 허용한 프로토콜을 사용한다.
+* `record[]`는 `fields` 또는 `schema` 메타데이터로 레코드 구조를 설명해야 한다.
+
+`record[]` 예시:
+
+```json
+{
+  "key": "rows",
+  "type": "record[]",
+  "fields": [
+    { "key": "name", "type": "string" },
+    { "key": "score", "type": "number" },
+    { "key": "url", "type": "url" }
+  ]
+}
+```
 
 ---
 
@@ -240,8 +313,13 @@ Semantic Versioning 사용 권장.
 | radio    | string, number, boolean | 단일 선택 버튼 그룹 |
 | color    | string    | 색상 선택 |
 | json     | json      | JSON 편집 |
-| list     | string[], number[] | 항목 추가/삭제형 목록 입력 |
+| list     | string[], number[], boolean[], file[], image[], color[], url[], record[] | 항목 추가/삭제형 목록 입력 |
 | file     | file      | 파일 경로 입력 |
+| files    | file[]    | 여러 파일 선택 |
+| image    | image     | 이미지 파일 선택 또는 미리보기 |
+| images   | image[]   | 여러 이미지 선택 또는 미리보기 |
+| url      | url       | URL 입력 |
+| table    | record[]  | 레코드 배열 표 편집 |
 
 `ui` 필드:
 
@@ -254,6 +332,9 @@ Semantic Versioning 사용 권장.
 | options | `select`, `radio`에서 사용할 선택지 |
 | min, max, step | 숫자 입력 제약 |
 | rows | textarea 높이 |
+| accept | file/image 선택에서 허용할 확장자 또는 MIME type |
+| multiple | 복수 선택 여부 |
+| fields | record[] 편집에 사용할 열 정의 |
 
 `options` 항목:
 
@@ -283,6 +364,209 @@ Semantic Versioning 사용 권장.
   }
 ]
 ```
+
+---
+
+# 출력 UI 메타데이터
+
+각 output은 선택적으로 `ui` 객체를 가질 수 있다. 출력 UI 메타데이터는 Pastel Flow가 실행 결과를 더 적절한 형태로 렌더링하기 위한 힌트이다. 출력값의 실제 데이터 계약은 `type`이 결정한다.
+
+예시:
+
+```json
+{
+  "key": "preview",
+  "type": "image",
+  "ui": {
+    "view": "image",
+    "label": "Preview",
+    "thumbnail": true
+  }
+}
+```
+
+지원 view:
+
+| view | 권장 타입 | 설명 |
+| ---- | --------- | ---- |
+| text | string, number, boolean | 단일 값 표시 |
+| code | string, json | 코드 블록 또는 JSON 표시 |
+| list | string[], number[], url[], file[], image[], color[] | 목록 표시 |
+| table | record[] | 표 형태 표시 |
+| image | image | 이미지 미리보기 |
+| gallery | image[] | 이미지 갤러리 |
+| color | color | 색상 swatch |
+| palette | color[] | 색상 팔레트 |
+| link | url | 링크 표시 |
+| links | url[] | 링크 목록 |
+| file | file | 파일 경로 또는 파일 열기 액션 |
+| files | file[] | 파일 목록 |
+| download | file, file[] | 다운로드 또는 저장 액션 중심 표시 |
+
+`ui` 필드:
+
+| 필드 | 설명 |
+| ---- | ---- |
+| view | 출력 렌더링 방식 |
+| label | 화면에 표시할 출력 이름 |
+| helpText | 보조 설명 |
+| emptyText | 결과가 비어 있을 때 표시할 문구 |
+| columns | table view에서 표시할 열 |
+| thumbnail | image/gallery view에서 썸네일 사용 여부 |
+| maxItems | list/gallery/table view에서 기본 표시할 최대 항목 수 |
+| actions | 출력 옆에 표시할 보조 액션. 예: copy, open, save |
+
+---
+
+# assets
+
+`assets`는 도구가 사용하는 정적 데이터, 이미지, 샘플 파일을 선언한다. asset은 도구 패키지 내부 경로만 참조해야 하며, 임의의 외부 경로나 사용자 파일을 가리키면 안 된다.
+
+예시:
+
+```json
+"assets": [
+  {
+    "key": "logo",
+    "path": "assets/logo.png",
+    "type": "image",
+    "description": "Default logo used in previews."
+  },
+  {
+    "key": "samples",
+    "path": "assets/samples.json",
+    "type": "json"
+  }
+]
+```
+
+asset 필드:
+
+| 필드 | 필수 | 설명 |
+| ---- | ---- | ---- |
+| key | O | 도구 내부에서 사용할 asset 식별자 |
+| path | O | 도구 폴더 기준 상대 경로 |
+| type | O | asset 타입. `file`, `image`, `json`, `text` 권장 |
+| description | X | 설명 |
+
+실행 시 asset은 `context.assets`를 통해 참조한다.
+
+```js
+export async function run(input, context) {
+  const samples = await context.assets.readJson("samples");
+  return { count: samples.length };
+}
+```
+
+---
+
+# dataSources
+
+`dataSources`는 도구가 외부 데이터나 로컬 DB, 사용자 선택 파일, 네트워크 API 같은 외부 참조를 필요로 할 때 선언한다. dataSource는 정적 asset과 다르며, 사용자 환경이나 권한에 따라 접근 가능 여부가 달라질 수 있다.
+
+예시:
+
+```json
+"dataSources": [
+  {
+    "key": "customersDb",
+    "type": "sqlite",
+    "required": true,
+    "description": "Local customer database."
+  },
+  {
+    "key": "remoteCatalog",
+    "type": "http",
+    "required": false,
+    "description": "Optional remote product catalog."
+  }
+]
+```
+
+지원 type:
+
+| type | 설명 |
+| ---- | ---- |
+| file | 사용자 선택 파일 |
+| folder | 사용자 선택 폴더 |
+| sqlite | 로컬 SQLite DB |
+| json | 로컬 또는 원격 JSON 데이터 |
+| csv | CSV 데이터 |
+| http | HTTP API |
+| custom | 도구가 정의한 외부 데이터 원천 |
+
+dataSource 필드:
+
+| 필드 | 필수 | 설명 |
+| ---- | ---- | ---- |
+| key | O | dataSource 식별자 |
+| type | O | 데이터 원천 타입 |
+| required | X | 실행에 필수인지 여부 |
+| description | X | 사용자에게 보여줄 설명 |
+| permissions | X | 필요한 permission 목록 |
+| schema | X | 데이터 구조 설명 |
+
+dataSource 접근은 `context.dataSources`를 통해 수행한다. 필요한 permission은 manifest `permissions`에도 선언해야 한다.
+
+---
+
+# datasets
+
+`datasets`는 Tool Module이 제공하거나 참조하는 데이터셋을 선언한다. dataset은 asset 또는 dataSource를 기반으로 할 수 있으며, Workflow의 다른 Action에서 입력 후보나 검색 대상으로 사용할 수 있다.
+
+예시:
+
+```json
+"datasets": [
+  {
+    "key": "productRecords",
+    "source": "dataSource:remoteCatalog",
+    "recordType": "record[]",
+    "schema": [
+      { "key": "id", "type": "string" },
+      { "key": "name", "type": "string" },
+      { "key": "image", "type": "image" },
+      { "key": "url", "type": "url" }
+    ],
+    "index": true
+  }
+]
+```
+
+dataset 필드:
+
+| 필드 | 필수 | 설명 |
+| ---- | ---- | ---- |
+| key | O | dataset 식별자 |
+| source | O | `asset:key`, `dataSource:key`, 또는 `output:key` |
+| recordType | O | 데이터 타입. 보통 `record[]` |
+| schema | X | 레코드 필드 정의 |
+| index | X | 인덱싱 대상 여부 |
+| description | X | 설명 |
+
+---
+
+# 인덱싱
+
+도구는 검색, 빠른 선택, Workflow 연결 후보 제공을 위해 인덱싱 메타데이터를 선언할 수 있다.
+
+예시:
+
+```json
+"indexing": {
+  "enabled": true,
+  "fields": ["name", "description", "datasets.productRecords.name"],
+  "datasets": ["productRecords"]
+}
+```
+
+인덱싱 규칙:
+
+* `indexing.enabled`가 `true`이면 Pastel Flow는 manifest와 선언된 dataset을 검색 인덱스 후보로 본다.
+* `fields`는 manifest 또는 dataset record에서 인덱싱할 필드를 지정한다.
+* `datasets`는 인덱싱할 dataset key 목록이다.
+* 인덱싱은 도구 실행 결과를 바꾸지 않는다.
+* 외부 dataSource 기반 dataset은 권한과 접근 가능 여부에 따라 인덱싱이 지연되거나 실패할 수 있다.
 
 ---
 
@@ -407,27 +691,38 @@ context.network.fetch()
 
 ---
 
+## assets
+
+정적 asset 접근
+
+```js
+context.assets.getPath("logo")
+context.assets.readText("samples")
+context.assets.readJson("samples")
+```
+
+---
+
+## dataSources
+
+외부 데이터 원천 접근
+
+```js
+context.dataSources.get("customersDb")
+context.dataSources.query("customersDb", { limit: 10 })
+```
+
+---
+
 # 사용자 정의 UI
 
 기본적으로 Pastel Flow는 입력 정의를 기반으로 자동 UI를 생성한다.
-
-도구 제작자는 UI를 만들 필요가 없다.
 
 ---
 
 ## view.html
 
 복잡한 인터페이스가 필요한 경우 사용할 수 있다.
-
-예시:
-
-```txt
-graph-generator
-image-editor
-prompt-builder
-```
-
-view.html은 선택 사항이다.
 
 ---
 
@@ -472,24 +767,6 @@ if (!input.text) {
 
 Pastel Flow는 해당 오류를 사용자에게 표시한다.
 
----
-
-# 모범 사례
-
-좋은 도구:
-
-* 입력이 명확하다.
-* 출력이 명확하다.
-* UI 없이도 동작한다.
-* 자동화에서 사용할 수 있다.
-
-나쁜 도구:
-
-* 화면에만 결과를 표시한다.
-* 전역 상태에 의존한다.
-* 입력/출력이 정의되어 있지 않다.
-
----
 
 # 설계 철학
 
@@ -506,5 +783,3 @@ Run
  ↓
 Output
 ```
-
-모든 도구는 이 구조를 유지해야 한다.

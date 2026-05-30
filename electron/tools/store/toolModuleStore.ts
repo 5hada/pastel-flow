@@ -1,12 +1,17 @@
 import { randomUUID } from 'node:crypto'
-import { cp, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
+  type ToolModuleAsset,
+  type ToolModuleDataSource,
+  type ToolModuleDataset,
   type RegisteredToolModule,
   type ToolModuleField,
   type ToolModuleFieldOption,
   type ToolModuleFieldType,
+  type ToolModuleIndexing,
   type ToolModuleManifest,
+  type ToolModuleOutputField,
   type ToolModulePermission,
   type ToolModuleValidationResult,
 } from '../../../src/shared/tools'
@@ -15,6 +20,7 @@ export type ToolModuleStore = {
   listTools(): Promise<RegisteredToolModule[]>
   getTool(id: string): Promise<RegisteredToolModule>
   registerToolFromPath(sourcePath: string): Promise<RegisteredToolModule>
+  registerToolRootFromPath(rootPath: string): Promise<RegisteredToolModule[]>
   validateToolPath(sourcePath: string): Promise<ToolModuleValidationResult>
 }
 
@@ -24,16 +30,26 @@ export type ToolModuleStoreOptions = {
 
 type ToolModulesFile = {
   tools: RegisteredToolModule[]
+  watchedRoots: string[]
 }
 
 const supportedFieldTypes: ToolModuleFieldType[] = [
   'string',
   'number',
   'boolean',
+  'boolean[]',
   'string[]',
   'number[]',
   'json',
   'file',
+  'file[]',
+  'image',
+  'image[]',
+  'color',
+  'color[]',
+  'url',
+  'url[]',
+  'record[]',
 ]
 
 const supportedPermissions: ToolModulePermission[] = [
@@ -55,11 +71,16 @@ export function createToolModuleStore({
       const parsed = JSON.parse(raw) as Partial<ToolModulesFile>
 
       return {
-        tools: Array.isArray(parsed.tools) ? parsed.tools : [],
+        tools: Array.isArray(parsed.tools)
+          ? parsed.tools.map(normalizeRegisteredTool)
+          : [],
+        watchedRoots: Array.isArray(parsed.watchedRoots)
+          ? parsed.watchedRoots.filter((root) => typeof root === 'string')
+          : [],
       }
     } catch (error) {
       if (isNodeError(error) && error.code === 'ENOENT') {
-        return { tools: [] }
+        return { tools: [], watchedRoots: [] }
       }
 
       throw error
@@ -83,10 +104,7 @@ export function createToolModuleStore({
     const errors: string[] = []
     const manifestPath = path.join(sourcePath, 'manifest.json')
     const logicPath = path.join(sourcePath, 'logic.mjs')
-
-    try {
-      await stat(logicPath)
-    } catch {
+    if (!(await pathExists(logicPath))) {
       errors.push('logic.mjs 파일이 필요합니다.')
     }
 
@@ -111,6 +129,7 @@ export function createToolModuleStore({
 
   return {
     async listTools() {
+      await refreshWatchedRoots()
       return (await readToolModulesFile()).tools.sort((left, right) =>
         left.manifest.name.localeCompare(right.manifest.name),
       )
@@ -155,6 +174,7 @@ export function createToolModuleStore({
         id: toolId,
         manifest: validation.manifest,
         sourcePath: destinationPath,
+        relativePath: path.basename(sourcePath),
         registeredAt: existingTool?.registeredAt ?? now,
         updatedAt: now,
         hasCustomView: await pathExists(path.join(destinationPath, 'view.html')),
@@ -162,6 +182,7 @@ export function createToolModuleStore({
       }
 
       await writeToolModulesFile({
+        watchedRoots: toolModulesFile.watchedRoots,
         tools: [
           ...toolModulesFile.tools.filter((tool) => tool.id !== toolId),
           registeredTool,
@@ -171,7 +192,144 @@ export function createToolModuleStore({
       return registeredTool
     },
 
+    async registerToolRootFromPath(rootPath) {
+      const watchedRootPath = path.resolve(rootPath)
+      const modulePaths = await findToolModulePaths(watchedRootPath)
+
+      if (modulePaths.length === 0) {
+        throw new Error('등록 가능한 Tool Module을 찾지 못했습니다.')
+      }
+
+      const toolModulesFile = await readToolModulesFile()
+      const registeredTools = await createRegisteredToolsFromRoot(
+        watchedRootPath,
+        modulePaths,
+        toolModulesFile.tools,
+      )
+      const registeredToolIds = new Set(registeredTools.map((tool) => tool.id))
+
+      await writeToolModulesFile({
+        watchedRoots: [
+          ...new Set([...toolModulesFile.watchedRoots, watchedRootPath]),
+        ],
+        tools: [
+          ...toolModulesFile.tools.filter(
+            (tool) =>
+              tool.watchedRootPath !== watchedRootPath &&
+              !registeredToolIds.has(tool.id),
+          ),
+          ...registeredTools,
+        ],
+      })
+
+      return registeredTools
+    },
+
     validateToolPath,
+  }
+
+  async function refreshWatchedRoots(): Promise<void> {
+    const toolModulesFile = await readToolModulesFile()
+    if (toolModulesFile.watchedRoots.length === 0) {
+      return
+    }
+
+    const watchedRootSet = new Set(toolModulesFile.watchedRoots)
+    const retainedTools = toolModulesFile.tools.filter(
+      (tool) => !tool.watchedRootPath || !watchedRootSet.has(tool.watchedRootPath),
+    )
+    const refreshedTools: RegisteredToolModule[] = []
+    const existingTools = toolModulesFile.tools
+
+    for (const watchedRootPath of watchedRootSet) {
+      if (!(await pathExists(watchedRootPath))) {
+        continue
+      }
+
+      const modulePaths = await findToolModulePaths(watchedRootPath)
+      refreshedTools.push(
+        ...(await createRegisteredToolsFromRoot(
+          watchedRootPath,
+          modulePaths,
+          existingTools,
+        )),
+      )
+    }
+
+    const refreshedToolIds = new Set(refreshedTools.map((tool) => tool.id))
+    await writeToolModulesFile({
+      watchedRoots: [...watchedRootSet],
+      tools: [
+        ...retainedTools.filter((tool) => !refreshedToolIds.has(tool.id)),
+        ...refreshedTools,
+      ],
+    })
+  }
+
+  async function createRegisteredToolsFromRoot(
+    watchedRootPath: string,
+    modulePaths: string[],
+    existingTools: RegisteredToolModule[],
+  ): Promise<RegisteredToolModule[]> {
+    const now = new Date().toISOString()
+    const registeredTools: RegisteredToolModule[] = []
+
+    for (const modulePath of modulePaths) {
+      const validation = await validateToolPath(modulePath)
+      if (!validation.ok || !validation.manifest) {
+        continue
+      }
+
+      const existingTool = existingTools.find(
+        (tool) => tool.id === validation.manifest?.id,
+      )
+      registeredTools.push({
+        id: validation.manifest.id,
+        manifest: validation.manifest,
+        sourcePath: modulePath,
+        watchedRootPath,
+        relativePath: path.relative(watchedRootPath, modulePath) || '.',
+        registeredAt: existingTool?.registeredAt ?? now,
+        updatedAt: now,
+        hasCustomView: await pathExists(path.join(modulePath, 'view.html')),
+        hasCustomStyle: await pathExists(path.join(modulePath, 'style.css')),
+      })
+    }
+
+    return registeredTools
+  }
+}
+
+function normalizeRegisteredTool(tool: RegisteredToolModule): RegisteredToolModule {
+  return {
+    ...tool,
+    manifest: normalizeStoredManifest(tool.manifest),
+    watchedRootPath:
+      typeof tool.watchedRootPath === 'string' ? tool.watchedRootPath : undefined,
+    hasCustomView: tool.hasCustomView === true,
+    hasCustomStyle: tool.hasCustomStyle === true,
+  }
+}
+
+function normalizeStoredManifest(
+  manifest: ToolModuleManifest,
+): ToolModuleManifest {
+  return {
+    ...manifest,
+    schemaVersion:
+      manifest.schemaVersion === '1.1' || manifest.schemaVersion === '1.0'
+        ? manifest.schemaVersion
+        : '1.0',
+    assets: Array.isArray(manifest.assets) ? manifest.assets : [],
+    dataSources: Array.isArray(manifest.dataSources)
+      ? manifest.dataSources
+      : [],
+    datasets: Array.isArray(manifest.datasets) ? manifest.datasets : [],
+    inputs: Array.isArray(manifest.inputs) ? manifest.inputs : [],
+    outputs: Array.isArray(manifest.outputs) ? manifest.outputs : [],
+    permissions: Array.isArray(manifest.permissions)
+      ? manifest.permissions
+      : [],
   }
 }
 
@@ -185,8 +343,8 @@ function normalizeManifest(
   }
 
   const candidate = value as Partial<ToolModuleManifest>
-  if (candidate.schemaVersion !== '1.0') {
-    errors.push('schemaVersion은 "1.0"이어야 합니다.')
+  if (candidate.schemaVersion !== '1.0' && candidate.schemaVersion !== '1.1') {
+    errors.push('schemaVersion은 "1.0" 또는 "1.1"이어야 합니다.')
   }
 
   if (!isToolId(candidate.id)) {
@@ -202,7 +360,11 @@ function normalizeManifest(
   }
 
   const inputs = normalizeFields(candidate.inputs, 'inputs', errors)
-  const outputs = normalizeFields(candidate.outputs, 'outputs', errors)
+  const outputs = normalizeOutputFields(candidate.outputs, errors)
+  const assets = normalizeAssets(candidate.assets, errors)
+  const dataSources = normalizeDataSources(candidate.dataSources, errors)
+  const datasets = normalizeDatasets(candidate.datasets, errors)
+  const indexing = normalizeIndexing(candidate.indexing)
   const permissions = normalizePermissions(candidate.permissions, errors)
 
   if (errors.length > 0) {
@@ -210,7 +372,7 @@ function normalizeManifest(
   }
 
   return {
-    schemaVersion: '1.0',
+    schemaVersion: candidate.schemaVersion ?? '1.1',
     id: candidate.id ?? '',
     name: candidate.name ?? '',
     version: candidate.version ?? '',
@@ -218,10 +380,38 @@ function normalizeManifest(
       typeof candidate.description === 'string'
         ? candidate.description
         : undefined,
+    assets,
+    dataSources,
+    datasets,
     inputs,
     outputs,
+    indexing,
     permissions,
   }
+}
+
+function normalizeOutputFields(
+  value: unknown,
+  errors: string[],
+): ToolModuleOutputField[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.reduce<ToolModuleOutputField[]>((fields, field) => {
+    const normalizedField = normalizeFields([field], 'outputs', errors)[0]
+    if (!normalizedField) {
+      return fields
+    }
+    const candidate = field as Partial<ToolModuleOutputField>
+    return [
+      ...fields,
+      {
+      ...normalizedField,
+      ui: normalizeOutputUi(candidate.ui),
+      },
+    ]
+  }, [])
 }
 
 function normalizeFields(
@@ -262,6 +452,10 @@ function normalizeFields(
             ? candidate.description
             : undefined,
         ui: normalizeFieldUi(candidate.ui),
+        fields: Array.isArray(candidate.fields)
+          ? normalizeFields(candidate.fields, `${fieldName}[${index}].fields`, errors)
+          : undefined,
+        schema: candidate.schema,
       },
     ]
   }, [])
@@ -292,6 +486,163 @@ function normalizeFieldUi(value: unknown): ToolModuleField['ui'] {
     max: normalizeOptionalNumber(candidate.max),
     step: normalizeOptionalNumber(candidate.step),
     rows: normalizeOptionalNumber(candidate.rows),
+    accept:
+      typeof candidate.accept === 'string' && candidate.accept.trim()
+        ? candidate.accept
+        : undefined,
+    multiple: candidate.multiple === true,
+    fields: Array.isArray(candidate.fields)
+      ? normalizeFields(candidate.fields, 'ui.fields', [])
+      : undefined,
+  }
+}
+
+function normalizeOutputUi(value: unknown): ToolModuleOutputField['ui'] {
+  if (!value || typeof value !== 'object') {
+    return undefined
+  }
+
+  const candidate = value as NonNullable<ToolModuleOutputField['ui']>
+  return {
+    view: isOutputView(candidate.view) ? candidate.view : undefined,
+    label: typeof candidate.label === 'string' ? candidate.label : undefined,
+    helpText:
+      typeof candidate.helpText === 'string' ? candidate.helpText : undefined,
+    emptyText:
+      typeof candidate.emptyText === 'string' ? candidate.emptyText : undefined,
+    columns: Array.isArray(candidate.columns)
+      ? candidate.columns.filter((column) => typeof column === 'string')
+      : undefined,
+    thumbnail: candidate.thumbnail === true,
+    maxItems: normalizeOptionalNumber(candidate.maxItems),
+    actions: Array.isArray(candidate.actions)
+      ? candidate.actions.filter((action) => typeof action === 'string')
+      : undefined,
+  }
+}
+
+function normalizeAssets(value: unknown, errors: string[]): ToolModuleAsset[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.reduce<ToolModuleAsset[]>((assets, asset, index) => {
+    if (!asset || typeof asset !== 'object') {
+      errors.push(`assets[${index}] 형식이 올바르지 않습니다.`)
+      return assets
+    }
+
+    const candidate = asset as Partial<ToolModuleAsset>
+    if (!isNonEmptyString(candidate.key) || !isNonEmptyString(candidate.path)) {
+      errors.push(`assets[${index}]에는 key와 path가 필요합니다.`)
+      return assets
+    }
+
+    if (!isAssetType(candidate.type)) {
+      errors.push(`assets[${index}].type이 지원되지 않습니다.`)
+      return assets
+    }
+
+    return [
+      ...assets,
+      {
+        key: candidate.key,
+        path: candidate.path,
+        type: candidate.type,
+        description: candidate.description,
+      },
+    ]
+  }, [])
+}
+
+function normalizeDataSources(
+  value: unknown,
+  errors: string[],
+): ToolModuleDataSource[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.reduce<ToolModuleDataSource[]>((result, dataSource, index) => {
+    if (!dataSource || typeof dataSource !== 'object') {
+      errors.push(`dataSources[${index}] 형식이 올바르지 않습니다.`)
+      return result
+    }
+
+    const candidate = dataSource as Partial<ToolModuleDataSource>
+    if (!isNonEmptyString(candidate.key) || !isDataSourceType(candidate.type)) {
+      errors.push(`dataSources[${index}]에는 key와 지원 type이 필요합니다.`)
+      return result
+    }
+
+    return [
+      ...result,
+      {
+        key: candidate.key,
+        type: candidate.type,
+        required: candidate.required === true,
+        description: candidate.description,
+        permissions: normalizePermissions(candidate.permissions, errors),
+        schema: candidate.schema,
+      },
+    ]
+  }, [])
+}
+
+function normalizeDatasets(
+  value: unknown,
+  errors: string[],
+): ToolModuleDataset[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.reduce<ToolModuleDataset[]>((result, dataset, index) => {
+    if (!dataset || typeof dataset !== 'object') {
+      errors.push(`datasets[${index}] 형식이 올바르지 않습니다.`)
+      return result
+    }
+
+    const candidate = dataset as Partial<ToolModuleDataset>
+    if (
+      !isNonEmptyString(candidate.key) ||
+      !isNonEmptyString(candidate.source) ||
+      !isFieldType(candidate.recordType)
+    ) {
+      errors.push(`datasets[${index}]에는 key, source, recordType이 필요합니다.`)
+      return result
+    }
+
+    return [
+      ...result,
+      {
+        key: candidate.key,
+        source: candidate.source,
+        recordType: candidate.recordType,
+        schema: Array.isArray(candidate.schema)
+          ? normalizeFields(candidate.schema, `datasets[${index}].schema`, errors)
+          : undefined,
+        index: candidate.index === true,
+        description: candidate.description,
+      },
+    ]
+  }, [])
+}
+
+function normalizeIndexing(value: unknown): ToolModuleIndexing | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined
+  }
+
+  const candidate = value as Partial<ToolModuleIndexing>
+  return {
+    enabled: candidate.enabled === true,
+    fields: Array.isArray(candidate.fields)
+      ? candidate.fields.filter((field) => typeof field === 'string')
+      : undefined,
+    datasets: Array.isArray(candidate.datasets)
+      ? candidate.datasets.filter((dataset) => typeof dataset === 'string')
+      : undefined,
   }
 }
 
@@ -384,7 +735,53 @@ function isFieldControl(
     value === 'color' ||
     value === 'json' ||
     value === 'list' ||
-    value === 'file'
+    value === 'file' ||
+    value === 'files' ||
+    value === 'image' ||
+    value === 'images' ||
+    value === 'url' ||
+    value === 'table'
+  )
+}
+
+function isOutputView(
+  value: unknown,
+): value is NonNullable<ToolModuleOutputField['ui']>['view'] {
+  return (
+    value === 'text' ||
+    value === 'code' ||
+    value === 'list' ||
+    value === 'table' ||
+    value === 'image' ||
+    value === 'gallery' ||
+    value === 'color' ||
+    value === 'palette' ||
+    value === 'link' ||
+    value === 'links' ||
+    value === 'file' ||
+    value === 'files' ||
+    value === 'download'
+  )
+}
+
+function isAssetType(value: unknown): value is ToolModuleAsset['type'] {
+  return (
+    value === 'file' ||
+    value === 'image' ||
+    value === 'json' ||
+    value === 'text'
+  )
+}
+
+function isDataSourceType(value: unknown): value is ToolModuleDataSource['type'] {
+  return (
+    value === 'file' ||
+    value === 'folder' ||
+    value === 'sqlite' ||
+    value === 'json' ||
+    value === 'csv' ||
+    value === 'http' ||
+    value === 'custom'
   )
 }
 
@@ -406,4 +803,32 @@ function isPermission(value: unknown): value is ToolModulePermission {
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && 'code' in error
+}
+
+async function findToolModulePaths(rootPath: string): Promise<string[]> {
+  const results: string[] = []
+
+  async function walk(currentPath: string): Promise<void> {
+    if (path.basename(currentPath) === 'node_modules') {
+      return
+    }
+
+    if (
+      (await pathExists(path.join(currentPath, 'manifest.json'))) &&
+      (await pathExists(path.join(currentPath, 'logic.mjs')))
+    ) {
+      results.push(currentPath)
+      return
+    }
+
+    const entries = await readdir(currentPath, { withFileTypes: true })
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        await walk(path.join(currentPath, entry.name))
+      }
+    }
+  }
+
+  await walk(rootPath)
+  return results
 }

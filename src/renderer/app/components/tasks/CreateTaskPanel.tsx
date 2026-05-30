@@ -9,6 +9,7 @@ import { TaskTypeConfigFields, ScheduleFields, PolicyFields } from './TaskFormFi
 export type CreateTaskPanelProps = {
   createForm: BrowserTaskFormState
   currentDevice: CurrentDevice
+  isEmbedded?: boolean
   secrets: LocalSecretMetadata[]
   onCancel(): void
   onChange(value: BrowserTaskFormState): void
@@ -18,13 +19,17 @@ export type CreateTaskPanelProps = {
 export function CreateTaskPanel({
   createForm,
   currentDevice,
+  isEmbedded = false,
   onCancel,
   onChange,
   onSubmit,
   secrets,
 }: CreateTaskPanelProps) {
   return (
-    <section className="mode-panel" aria-label="새 브라우저 작업 생성">
+    <section
+      className={isEmbedded ? 'create-task-panel' : 'mode-panel create-task-panel'}
+      aria-label="새 브라우저 작업 생성"
+    >
       <div className="panel-heading">
         <div>
           <p className="eyebrow">New template</p>

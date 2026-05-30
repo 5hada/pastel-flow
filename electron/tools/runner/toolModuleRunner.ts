@@ -1,9 +1,10 @@
 import { clipboard } from 'electron'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type {
   ToolModuleField,
+  ToolModuleManifest,
   ToolModulePermission,
   ToolModuleRunResult,
 } from '../../../src/shared/tools'
@@ -39,6 +40,15 @@ type ToolRunContext = {
   network?: {
     fetch(input: string, init?: RequestInit): Promise<unknown>
   }
+  assets: {
+    getPath(key: string): string
+    readText(key: string): Promise<string>
+    readJson(key: string): Promise<unknown>
+  }
+  dataSources: {
+    get(key: string): Promise<unknown>
+    query(key: string, query?: unknown): Promise<unknown>
+  }
 }
 
 export function createToolModuleRunner({
@@ -48,9 +58,7 @@ export function createToolModuleRunner({
     async runTool(toolId, input) {
       const tool = await toolModuleStore.getTool(toolId)
       const normalizedInput = normalizeRunInput(tool.manifest.inputs, input)
-      const logicPath = pathToFileURL(
-        path.join(tool.sourcePath, 'logic.mjs'),
-      ).href
+      const logicPath = pathToFileURL(await getToolLogicPath(tool.sourcePath)).href
       const logicModule = (await import(
         `${logicPath}?updatedAt=${encodeURIComponent(tool.updatedAt)}`
       )) as ToolLogicModule
@@ -61,7 +69,7 @@ export function createToolModuleRunner({
 
       const output = await logicModule.run(
         normalizedInput,
-        createToolContext(tool.manifest.permissions),
+        createToolContext(tool.sourcePath, tool.manifest),
       )
 
       if (!output || typeof output !== 'object' || Array.isArray(output)) {
@@ -108,6 +116,9 @@ function normalizeValue(field: ToolModuleField, value: unknown): unknown {
   switch (field.type) {
     case 'string':
     case 'file':
+    case 'image':
+    case 'color':
+    case 'url':
       return String(value)
     case 'number': {
       const numericValue = Number(value)
@@ -118,7 +129,13 @@ function normalizeValue(field: ToolModuleField, value: unknown): unknown {
     }
     case 'boolean':
       return value === true || value === 'true'
+    case 'boolean[]':
+      return normalizeArray(value).map((item) => item === true || item === 'true')
     case 'string[]':
+    case 'file[]':
+    case 'image[]':
+    case 'color[]':
+    case 'url[]':
       return Array.isArray(value)
         ? value.map(String)
         : String(value)
@@ -136,6 +153,7 @@ function normalizeValue(field: ToolModuleField, value: unknown): unknown {
       })
     }
     case 'json':
+    case 'record[]':
       if (typeof value === 'string') {
         return JSON.parse(value)
       }
@@ -144,8 +162,10 @@ function normalizeValue(field: ToolModuleField, value: unknown): unknown {
 }
 
 function createToolContext(
-  permissions: ToolModulePermission[],
+  toolPath: string,
+  manifest: ToolModuleManifest,
 ): ToolRunContext {
+  const permissions = manifest.permissions
   return {
     clipboard: permissions.includes('clipboard')
       ? {
@@ -181,7 +201,61 @@ function createToolContext(
           },
         }
       : undefined,
+    assets: {
+      getPath(key) {
+        return getAssetPath(toolPath, manifest, key)
+      },
+      async readText(key) {
+        return readFile(getAssetPath(toolPath, manifest, key), 'utf8')
+      },
+      async readJson(key) {
+        return JSON.parse(
+          await readFile(getAssetPath(toolPath, manifest, key), 'utf8'),
+        )
+      },
+    },
+    dataSources: {
+      async get(key) {
+        const dataSource = manifest.dataSources.find(
+          (currentDataSource) => currentDataSource.key === key,
+        )
+        if (!dataSource) {
+          throw new Error(`dataSource를 찾을 수 없습니다: ${key}`)
+        }
+        return dataSource
+      },
+      async query(key) {
+        const dataSource = manifest.dataSources.find(
+          (currentDataSource) => currentDataSource.key === key,
+        )
+        if (!dataSource) {
+          throw new Error(`dataSource를 찾을 수 없습니다: ${key}`)
+        }
+        throw new Error('dataSource query는 아직 지원하지 않습니다.')
+      },
+    },
   }
+}
+
+function normalizeArray(value: unknown): unknown[] {
+  return Array.isArray(value)
+    ? value
+    : String(value)
+        .split('\n')
+        .map((item) => item.trim())
+        .filter(Boolean)
+}
+
+function getAssetPath(
+  toolPath: string,
+  manifest: ToolModuleManifest,
+  key: string,
+): string {
+  const asset = manifest.assets.find((currentAsset) => currentAsset.key === key)
+  if (!asset) {
+    throw new Error(`asset을 찾을 수 없습니다: ${key}`)
+  }
+  return path.join(toolPath, asset.path)
 }
 
 function validateOutputKeys(
@@ -206,4 +280,22 @@ function assertPermission(
 
 function isEmptyValue(value: unknown): boolean {
   return value === undefined || value === null || value === ''
+}
+
+async function getToolLogicPath(toolPath: string): Promise<string> {
+  const logicPath = path.join(toolPath, 'logic.mjs')
+  if (await pathExists(logicPath)) {
+    return logicPath
+  }
+
+  throw new Error('logic.mjs 파일을 찾을 수 없습니다.')
+}
+
+async function pathExists(value: string): Promise<boolean> {
+  try {
+    await stat(value)
+    return true
+  } catch {
+    return false
+  }
 }

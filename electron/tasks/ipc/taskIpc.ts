@@ -38,28 +38,7 @@ export function registerTaskIpc(
     )
   })
   ipcMain.handle('actions:list', async () => {
-    const [actions, workflows, currentDevice, appSettingsSnapshot] =
-      await Promise.all([
-        taskStore.listActions(),
-        taskStore.listWorkflows(),
-        deviceStore.getCurrentDevice(),
-        appSettingsStore.getSnapshot(),
-      ])
-    const visibleActionIds = new Set(
-      workflows
-        .filter((workflow) =>
-          canViewWorkflowOnDevice(
-            workflow,
-            currentDevice,
-            appSettingsSnapshot.settings.linkedDevices,
-          ),
-        )
-        .flatMap((workflow) =>
-          workflow.actionRefs.map((actionRef) => actionRef.actionId),
-        ),
-    )
-
-    return actions.filter((action) => visibleActionIds.has(action.id))
+    return taskStore.listActions()
   })
   ipcMain.handle('workflows:list', async () => {
     const [workflows, currentDevice, appSettingsSnapshot] = await Promise.all([
@@ -75,6 +54,51 @@ export function registerTaskIpc(
         appSettingsSnapshot.settings.linkedDevices,
       ),
     )
+  })
+  ipcMain.handle('workflows:create', async (_event, input) => {
+    const currentDevice = await deviceStore.getCurrentDevice()
+    return taskStore.createWorkflow({
+      ...input,
+      permissions: input.permissions ?? createLocalOnlyDevicePolicy(currentDevice),
+    })
+  })
+  ipcMain.handle('workflows:update', async (_event, id, input) => {
+    const [workflow, currentDevice, appSettingsSnapshot] = await Promise.all([
+      workflowRunner.getWorkflow(id),
+      deviceStore.getCurrentDevice(),
+      appSettingsStore.getSnapshot(),
+    ])
+
+    if (
+      !canExecuteWorkflowOnDevice(
+        workflow,
+        currentDevice,
+        appSettingsSnapshot.settings.linkedDevices,
+      )
+    ) {
+      throw new Error('이 기기에서는 해당 Workflow를 수정할 수 없습니다.')
+    }
+
+    return taskStore.updateWorkflow(id, input)
+  })
+  ipcMain.handle('workflows:delete', async (_event, id) => {
+    const [workflow, currentDevice, appSettingsSnapshot] = await Promise.all([
+      workflowRunner.getWorkflow(id),
+      deviceStore.getCurrentDevice(),
+      appSettingsStore.getSnapshot(),
+    ])
+
+    if (
+      !canExecuteWorkflowOnDevice(
+        workflow,
+        currentDevice,
+        appSettingsSnapshot.settings.linkedDevices,
+      )
+    ) {
+      throw new Error('이 기기에서는 해당 Workflow를 삭제할 수 없습니다.')
+    }
+
+    return taskStore.deleteWorkflow(id)
   })
   ipcMain.handle('workflows:run', async (_event, id) => {
     const [workflow, currentDevice, appSettingsSnapshot] = await Promise.all([

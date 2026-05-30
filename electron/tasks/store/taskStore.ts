@@ -40,6 +40,12 @@ export type TaskStore = {
   listActions(): Promise<ActionDefinition[]>
   listWorkflows(): Promise<WorkflowDefinition[]>
   createAction(input: CreateActionInput): Promise<ActionDefinition>
+  createWorkflow(input: CreateWorkflowInput): Promise<WorkflowDefinition>
+  updateWorkflow(
+    id: string,
+    input: UpdateWorkflowInput,
+  ): Promise<WorkflowDefinition>
+  deleteWorkflow(id: string): Promise<void>
   createTask(input: CreateTaskInput): Promise<TaskTemplate>
   updateTask(id: string, input: UpdateTaskInput): Promise<TaskTemplate>
   replaceTasks(tasks: TaskTemplate[]): Promise<void>
@@ -55,6 +61,18 @@ export type CreateActionInput<TConfig = unknown> = {
   inputSchema?: ActionDefinition<TConfig>['inputSchema']
   outputSchema?: ActionDefinition<TConfig>['outputSchema']
 }
+
+export type CreateWorkflowInput = {
+  name: string
+  actionRefs?: WorkflowDefinition['actionRefs']
+  permissions?: DevicePolicy
+  schedule?: TaskSchedule
+  state?: TaskState
+}
+
+export type UpdateWorkflowInput = Partial<
+  Pick<WorkflowDefinition, 'name' | 'actionRefs' | 'permissions' | 'schedule' | 'state'>
+>
 
 export type TaskStoreOptions = {
   dataDir: string
@@ -151,6 +169,104 @@ export function createTaskStore({ dataDir }: TaskStoreOptions): TaskStore {
       })
 
       return action
+    },
+
+    async createWorkflow(input) {
+      const now = new Date().toISOString()
+      const workflow: WorkflowDefinition = {
+        id: randomUUID(),
+        name: input.name.trim(),
+        actionRefs: normalizeWorkflowActionRefs(input.actionRefs ?? []),
+        permissions: normalizeDevicePolicy(
+          input.permissions ?? defaultDevicePolicy,
+        ),
+        schedule: normalizeTaskSchedule(input.schedule),
+        state: input.state ?? defaultTaskState,
+        createdAt: now,
+        updatedAt: now,
+      }
+      const taskFile = ensureLegacyWorkflowData(await readTaskFile())
+
+      await writeTaskFile({
+        ...taskFile,
+        workflows: [...taskFile.workflows, workflow],
+      })
+
+      return workflow
+    },
+
+    async updateWorkflow(id, input) {
+      const taskFile = ensureLegacyWorkflowData(await readTaskFile())
+      const workflowIndex = taskFile.workflows.findIndex(
+        (workflow) => workflow.id === id,
+      )
+
+      if (workflowIndex === -1) {
+        throw new Error(`Workflow not found: ${id}`)
+      }
+
+      const currentWorkflow = taskFile.workflows[workflowIndex]
+      const updatedWorkflow: WorkflowDefinition = {
+        ...currentWorkflow,
+        ...input,
+        name: input.name?.trim() ?? currentWorkflow.name,
+        actionRefs:
+          input.actionRefs === undefined
+            ? currentWorkflow.actionRefs
+            : normalizeWorkflowActionRefs(input.actionRefs),
+        permissions: input.permissions
+          ? normalizeDevicePolicy(input.permissions)
+          : currentWorkflow.permissions,
+        schedule:
+          input.schedule === undefined
+            ? currentWorkflow.schedule
+            : normalizeTaskSchedule(input.schedule),
+        updatedAt: new Date().toISOString(),
+      }
+      const workflows = [...taskFile.workflows]
+      workflows[workflowIndex] = updatedWorkflow
+
+      await writeTaskFile({
+        ...taskFile,
+        workflows,
+      })
+
+      return updatedWorkflow
+    },
+
+    async deleteWorkflow(id) {
+      const taskFile = ensureLegacyWorkflowData(await readTaskFile())
+      const workflow = taskFile.workflows.find(
+        (currentWorkflow) => currentWorkflow.id === id,
+      )
+
+      if (!workflow) {
+        throw new Error(`Workflow not found: ${id}`)
+      }
+
+      if (workflow.legacyTaskId) {
+        await writeTaskFile({
+          tasks: taskFile.tasks.filter((task) => task.id !== workflow.legacyTaskId),
+          actions: taskFile.actions.filter(
+            (action) =>
+              action.legacyTaskId !== workflow.legacyTaskId &&
+              action.id !== getLegacyActionId(workflow.legacyTaskId as string),
+          ),
+          workflows: taskFile.workflows.filter(
+            (currentWorkflow) =>
+              currentWorkflow.legacyTaskId !== workflow.legacyTaskId &&
+              currentWorkflow.id !== getLegacyWorkflowId(workflow.legacyTaskId as string),
+          ),
+        })
+        return
+      }
+
+      await writeTaskFile({
+        ...taskFile,
+        workflows: taskFile.workflows.filter(
+          (currentWorkflow) => currentWorkflow.id !== id,
+        ),
+      })
     },
 
     async createTask(input) {
@@ -310,6 +426,25 @@ function upsertLegacyTaskModel(taskFile: TaskFile, task: TaskTemplate): TaskFile
       workflow,
     ],
   }
+}
+
+function normalizeWorkflowActionRefs(
+  actionRefs: WorkflowDefinition['actionRefs'],
+): WorkflowDefinition['actionRefs'] {
+  return actionRefs
+    .filter((actionRef) => typeof actionRef.actionId === 'string' && actionRef.actionId)
+    .map((actionRef, index) => ({
+      id: actionRef.id || randomUUID(),
+      actionId: actionRef.actionId,
+      order: Number.isFinite(actionRef.order) ? actionRef.order : index,
+      inputMapping: actionRef.inputMapping,
+      enabled: actionRef.enabled !== false,
+    }))
+    .sort((left, right) => left.order - right.order)
+    .map((actionRef, index) => ({
+      ...actionRef,
+      order: index,
+    }))
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

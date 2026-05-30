@@ -21,7 +21,7 @@
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--surface-muted);
+  background: var(--rail-bg);
 }
 
 .segmented-control label {
@@ -46,7 +46,7 @@
 }
 
 .segmented-control input:checked + span {
-  color: var(--surface);
+  color: var(--accent-contrast);
   background: var(--accent);
 }
 
@@ -57,7 +57,7 @@
   border-radius: 8px;
   padding: 14px;
   color: var(--text);
-  background: var(--surface-muted);
+  background: var(--surface);
 }
 
 .theme-preview strong,
@@ -125,7 +125,7 @@
   border-radius: 8px;
   padding: 12px;
   color: var(--text);
-  background: var(--surface-muted);
+  background: var(--surface);
 }
 
 .device-current span,
@@ -151,7 +151,7 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px;
-  background: var(--surface-muted);
+  background: var(--surface);
 }
 
 .secret-form {
@@ -167,7 +167,7 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px;
-  background: var(--surface-muted);
+  background: var(--surface);
 }
 
 .secret-storage-status.is-ok {
@@ -200,7 +200,7 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px;
-  background: var(--surface-muted);
+  background: var(--surface);
 }
 
 .secret-row div {

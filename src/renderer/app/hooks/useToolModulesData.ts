@@ -47,16 +47,17 @@ export function useToolModulesData(
     try {
       setErrorMessage(null)
       setToolMessage(null)
-      const registeredTool = await window.pastelFlow.tools.registerFolder()
-      if (!registeredTool) {
+      const registeredTools = await window.pastelFlow.tools.registerFolder()
+      if (!registeredTools?.length) {
         return
       }
 
       await loadToolModules()
+      const registeredTool = registeredTools[0]
       setSelectedToolId(registeredTool.id)
       setToolRunResult(null)
       setToolInputValues(createToolInputDefaults(registeredTool))
-      setToolMessage(`${registeredTool.manifest.name} 도구를 등록했습니다.`)
+      setToolMessage(`${registeredTools.length}개 도구를 등록했습니다.`)
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     }

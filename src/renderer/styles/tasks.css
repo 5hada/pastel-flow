@@ -1,6 +1,6 @@
 .task-list {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .compact-select {
@@ -13,7 +13,7 @@
 }
 
 .task-list-grid .task-row {
-  min-height: 76px;
+  min-height: 96px;
   grid-template-columns: 1fr;
   align-content: stretch;
   align-items: stretch;
@@ -32,11 +32,22 @@
 
 .workflow-grid-button {
   width: 100%;
-  min-height: 74px;
+  min-height: 94px;
   border: 0;
   border-radius: 8px;
-  padding: 8px;
+  padding: 12px;
   overflow-wrap: anywhere;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.workflow-grid-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.86;
+}
+
+.workflow-grid-button.status-idle {
+  color: var(--text);
+  background: var(--readonly-bg);
 }
 
 .workflow-grid-button.status-running {
@@ -45,7 +56,21 @@
 }
 
 .workflow-grid-button.status-failed {
-  color: var(--surface);
+  color: var(--danger-foreground, var(--accent-contrast));
+  background: var(--danger);
+}
+
+.workflow-grid-button.status-idle:hover {
+  background: var(--surface-selected);
+}
+
+.workflow-grid-button.status-running:disabled {
+  color: var(--warning-text);
+  background: var(--warning);
+}
+
+.workflow-grid-button.status-failed:disabled {
+  color: var(--danger-foreground, var(--accent-contrast));
   background: var(--danger);
 }
 
@@ -68,6 +93,7 @@
   justify-items: start;
   gap: 4px;
   border-color: var(--border);
+  border-radius: 8px;
   padding: 12px;
   color: var(--text);
   background: var(--surface-muted);
@@ -101,7 +127,7 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px;
-  background: var(--surface-muted);
+  background: var(--surface);
 }
 
 .workflow-action-row div {
@@ -166,7 +192,10 @@
 }
 
 .display-toggle button {
+  display: inline-flex;
   min-height: 32px;
+  align-items: center;
+  justify-content: center;
   border: 0;
   border-radius: 6px;
   padding: 0;
@@ -180,6 +209,80 @@
   background: var(--surface);
 }
 
+.display-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 4px);
+  grid-template-rows: repeat(3, 4px);
+  gap: 2px;
+}
+
+.display-icon-grid i,
+.display-icon-list i {
+  display: block;
+  background: currentColor;
+}
+
+.display-icon-grid i {
+  width: 4px;
+  height: 4px;
+  border-radius: 1px;
+}
+
+.display-icon-list {
+  display: grid;
+  width: 16px;
+  gap: 3px;
+}
+
+.display-icon-list i {
+  width: 16px;
+  height: 2px;
+  border-radius: 999px;
+}
+
+.grid-column-stepper {
+  display: inline-grid;
+  grid-template-columns: 30px 30px 30px;
+  align-items: center;
+  gap: 3px;
+  border-radius: 8px;
+  padding: 3px;
+  background: var(--rail-bg);
+}
+
+.grid-column-stepper button {
+  min-height: 30px;
+  width: 30px;
+  min-width: 30px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.grid-column-stepper button:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.grid-column-stepper button:disabled {
+  color: color-mix(in srgb, var(--text-muted) 44%, transparent);
+  background: transparent;
+}
+
+.grid-column-stepper span {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
 .compact-list {
   gap: 8px;
 }
@@ -187,17 +290,19 @@
 .task-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto auto;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
-  padding: 10px;
+  padding: 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--surface-muted);
+  background: var(--surface);
+  box-shadow: 0 1px 0 rgba(24, 34, 49, 0.03);
 }
 
 .task-row.is-selected {
   border-color: var(--border-strong);
   background: var(--surface-selected);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .task-picker {
@@ -249,7 +354,8 @@
 
 .task-row-title {
   color: var(--text);
-  font-weight: 800;
+  font-size: 0.98rem;
+  font-weight: 850;
   overflow-wrap: anywhere;
 }
 
@@ -283,6 +389,11 @@
 .status-failed {
   color: var(--danger);
   background: var(--danger-soft);
+}
+
+.status-succeeded {
+  color: var(--success);
+  background: var(--success-soft);
 }
 
 .detail-list {

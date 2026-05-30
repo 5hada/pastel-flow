@@ -20,7 +20,26 @@ export function TaskListDisplayToggle({
           title={displayMode === 'grid' ? '그리드' : '목록'}
           onClick={() => onChange(displayMode)}
         >
-          <span aria-hidden="true">{displayMode === 'grid' ? '▦' : '☰'}</span>
+          <span
+            aria-hidden="true"
+            className={
+              displayMode === 'grid' ? 'display-icon-grid' : 'display-icon-list'
+            }
+          >
+            {displayMode === 'grid' ? (
+              <>
+                {Array.from({ length: 9 }, (_, index) => (
+                  <i key={index} />
+                ))}
+              </>
+            ) : (
+              <>
+                <i />
+                <i />
+                <i />
+              </>
+            )}
+          </span>
         </button>
       ))}
     </div>

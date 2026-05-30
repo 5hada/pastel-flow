@@ -124,7 +124,7 @@ export function createToolInputDefaults(
 
 export function getToolFieldDefaultValue(field: ToolModuleField): unknown {
   if (field.default !== undefined) {
-    return field.type === 'json'
+    return field.type === 'json' || field.type === 'record[]'
       ? JSON.stringify(field.default, null, 2)
       : field.default
   }
@@ -139,14 +139,24 @@ export function getToolFieldDefaultValue(field: ToolModuleField): unknown {
   switch (field.type) {
     case 'boolean':
       return false
+    case 'boolean[]':
     case 'json':
+    case 'record[]':
       return '{}'
     case 'number':
       return ''
     case 'number[]':
     case 'string[]':
+    case 'file[]':
+    case 'image[]':
+    case 'color[]':
+    case 'url[]':
       return ''
+    case 'color':
+      return '#1f6f68'
     case 'file':
+    case 'image':
+    case 'url':
     case 'string':
       return ''
   }

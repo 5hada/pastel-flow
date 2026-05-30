@@ -18,9 +18,10 @@
   justify-items: start;
   gap: 4px;
   border-color: var(--border);
+  border-radius: 8px;
   padding: 12px;
   color: var(--text);
-  background: var(--surface-muted);
+  background: var(--surface);
   text-align: left;
 }
 
@@ -50,9 +51,63 @@
   border-radius: 8px;
   padding: 12px;
   color: var(--text);
-  background: var(--control-bg);
+  background: var(--surface-muted);
   font-size: 0.86rem;
   white-space: pre-wrap;
+}
+
+.tool-output-list {
+  display: grid;
+  gap: 12px;
+}
+
+.tool-output-item {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface);
+}
+
+.tool-output-item h4,
+.tool-output-text {
+  margin: 0;
+}
+
+.tool-output-image {
+  max-width: min(100%, 420px);
+  border-radius: 8px;
+}
+
+.tool-output-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.tool-output-gallery img {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.tool-output-list-values {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.palette-chip {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 10px;
+  color: var(--text);
 }
 
 .toggle-field {
@@ -79,7 +134,7 @@
   min-height: 34px;
   align-items: center;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 8px;
   padding: 0 12px;
   color: var(--text);
   background: var(--surface-muted);

@@ -39,11 +39,17 @@ export type EditWorkspaceProps = {
   selectedWorkflowId: string | null
   taskRunEvents: TaskRunEvent[]
   workflows: WorkflowDefinition[]
+  onCreateWorkflow(): Promise<void>
   onChange(value: BrowserTaskFormState): void
   onConfirmDelete(taskId: string): Promise<void>
+  onConfirmDeleteWorkflow(workflowId: string): Promise<void>
   onDeleteRequest(taskId: string | null): void
   onSelectWorkflow(workflowId: string | null): void
   onSubmit(event: FormEvent<HTMLFormElement>): void
+  onUpdateWorkflow(
+    workflowId: string,
+    input: Partial<WorkflowDefinition>,
+  ): Promise<void>
 }
 
 export function EditWorkspace({
@@ -54,9 +60,12 @@ export function EditWorkspace({
   isLoading,
   onChange,
   onConfirmDelete,
+  onConfirmDeleteWorkflow,
+  onCreateWorkflow,
   onDeleteRequest,
   onSelectWorkflow,
   onSubmit,
+  onUpdateWorkflow,
   secrets,
   selectedWorkflowId,
   selectedTask,
@@ -81,6 +90,7 @@ export function EditWorkspace({
         )
       : null
   const isConfirmingDelete = confirmDeleteTaskId === selectedTask?.id
+  const isConfirmingWorkflowDelete = confirmDeleteTaskId === selectedWorkflow?.id
 
   return (
     <section aria-label="기존 작업 수정">
@@ -93,7 +103,7 @@ export function EditWorkspace({
           <button
             aria-label="새 Workflow"
             type="button"
-            onClick={() => onSelectWorkflow(null)}
+            onClick={() => void onCreateWorkflow()}
           >
             +
           </button>
@@ -108,7 +118,90 @@ export function EditWorkspace({
             <WorkflowActionList
               actions={actions}
               workflow={selectedWorkflow}
+              onAddAction={(actionId) => {
+                if (!selectedWorkflow) {
+                  return
+                }
+                void onUpdateWorkflow(selectedWorkflow.id, {
+                  actionRefs: [
+                    ...selectedWorkflow.actionRefs,
+                    {
+                      id: crypto.randomUUID(),
+                      actionId,
+                      order: selectedWorkflow.actionRefs.length,
+                      enabled: true,
+                    },
+                  ],
+                })
+              }}
+              onMoveAction={(actionRefId, direction) => {
+                if (!selectedWorkflow) {
+                  return
+                }
+                void onUpdateWorkflow(selectedWorkflow.id, {
+                  actionRefs: moveWorkflowActionRef(
+                    selectedWorkflow.actionRefs,
+                    actionRefId,
+                    direction,
+                  ),
+                })
+              }}
+              onRemoveAction={(actionRefId) => {
+                if (!selectedWorkflow) {
+                  return
+                }
+                void onUpdateWorkflow(selectedWorkflow.id, {
+                  actionRefs: selectedWorkflow.actionRefs.filter(
+                    (actionRef) => actionRef.id !== actionRefId,
+                  ),
+                })
+              }}
+              onToggleAction={(actionRefId) => {
+                if (!selectedWorkflow) {
+                  return
+                }
+                void onUpdateWorkflow(selectedWorkflow.id, {
+                  actionRefs: selectedWorkflow.actionRefs.map((actionRef) =>
+                    actionRef.id === actionRefId
+                      ? { ...actionRef, enabled: !actionRef.enabled }
+                      : actionRef,
+                  ),
+                })
+              }}
             />
+            {selectedWorkflow ? (
+              <section className="danger-zone" aria-label="Workflow 삭제">
+                {isConfirmingWorkflowDelete ? (
+                  <>
+                    <p>이 Workflow를 삭제할까요? 연결된 Action은 유지됩니다.</p>
+                    <div className="form-actions">
+                      <button
+                        className="danger-button"
+                        type="button"
+                        onClick={() => void onConfirmDeleteWorkflow(selectedWorkflow.id)}
+                      >
+                        삭제 확정
+                      </button>
+                      <button
+                        className="ghost-button"
+                        type="button"
+                        onClick={() => onDeleteRequest(null)}
+                      >
+                        취소
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <button
+                    className="danger-button"
+                    type="button"
+                    onClick={() => onDeleteRequest(selectedWorkflow.id)}
+                  >
+                    Workflow 삭제
+                  </button>
+                )}
+              </section>
+            ) : null}
         </div>
       </section>
       {selectedTask ? (
@@ -223,4 +316,32 @@ export function EditWorkspace({
       )}
     </section>
   )
+}
+
+function moveWorkflowActionRef(
+  actionRefs: WorkflowDefinition['actionRefs'],
+  actionRefId: string,
+  direction: 'up' | 'down',
+): WorkflowDefinition['actionRefs'] {
+  const sortedActionRefs = [...actionRefs].sort(
+    (left, right) => left.order - right.order,
+  )
+  const index = sortedActionRefs.findIndex(
+    (actionRef) => actionRef.id === actionRefId,
+  )
+  const nextIndex = direction === 'up' ? index - 1 : index + 1
+
+  if (index < 0 || nextIndex < 0 || nextIndex >= sortedActionRefs.length) {
+    return sortedActionRefs
+  }
+
+  const nextActionRefs = [...sortedActionRefs]
+  const currentActionRef = nextActionRefs[index]
+  nextActionRefs[index] = nextActionRefs[nextIndex]
+  nextActionRefs[nextIndex] = currentActionRef
+
+  return nextActionRefs.map((actionRef, currentIndex) => ({
+    ...actionRef,
+    order: currentIndex,
+  }))
 }

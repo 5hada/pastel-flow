@@ -28,7 +28,7 @@ export function registerToolModuleIpc(
       return undefined
     }
 
-    return toolModuleStore.registerToolFromPath(result.filePaths[0])
+    return toolModuleStore.registerToolRootFromPath(result.filePaths[0])
   })
   ipcMain.handle('tools:run', (_event, toolId, input) =>
     toolModuleRunner.runTool(

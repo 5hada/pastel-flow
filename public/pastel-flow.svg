@@ -1,0 +1,33 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .bg { fill: #f6f8fb; }
+    .body { fill: #e9f6f3; }
+    .primary { fill: #226f68; }
+    .secondary { fill: #9ad9d1; }
+    .line { stroke: #226f68; }
+    .node-a { fill: #b7a7ff; }
+    .node-b { fill: #ffcf70; }
+    .dot { fill: #ffffff; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #1f1f2b; }
+      .body { fill: #292941; }
+      .primary { fill: #8f7cff; }
+      .secondary { fill: #3b3b58; }
+      .line { stroke: #8f7cff; }
+      .node-a { fill: #78dcca; }
+      .node-b { fill: #ffd37a; }
+      .dot { fill: #f4f2ff; }
+    }
+  </style>
+  <rect class="bg" width="256" height="256" rx="56"/>
+  <path class="body" d="M72 82C72 68.7452 82.7452 58 96 58H160C173.255 58 184 68.7452 184 82V174C184 187.255 173.255 198 160 198H96C82.7452 198 72 187.255 72 174V82Z"/>
+  <path class="primary" d="M92 88C92 81.3726 97.3726 76 104 76H152C158.627 76 164 81.3726 164 88V116C164 122.627 158.627 128 152 128H104C97.3726 128 92 122.627 92 116V88Z"/>
+  <path class="secondary" d="M92 148C92 141.373 97.3726 136 104 136H152C158.627 136 164 141.373 164 148V168C164 174.627 158.627 180 152 180H104C97.3726 180 92 174.627 92 168V148Z"/>
+  <path class="line" d="M128 128V136" stroke-width="8" stroke-linecap="round"/>
+  <path class="line" d="M68 118H92" stroke-width="10" stroke-linecap="round"/>
+  <path class="line" d="M164 158H188" stroke-width="10" stroke-linecap="round"/>
+  <circle class="node-a" cx="68" cy="118" r="14"/>
+  <circle class="node-b" cx="188" cy="158" r="14"/>
+  <circle class="dot" cx="128" cy="102" r="11"/>
+  <path class="line" d="M112 158H144" stroke-width="8" stroke-linecap="round"/>
+</svg>

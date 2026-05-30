@@ -1,4 +1,9 @@
-import type { RegisteredToolModule, ToolModuleField, ToolModuleRunResult } from '../../../../shared/tools'
+import type {
+  RegisteredToolModule,
+  ToolModuleField,
+  ToolModuleOutputField,
+  ToolModuleRunResult,
+} from '../../../../shared/tools'
 import { DetailItem } from '../tasks/DetailItem'
 
 export type ToolsPanelProps = {
@@ -87,6 +92,22 @@ export function ToolsPanel({
                     label="등록 위치"
                     value={selectedTool.sourcePath}
                   />
+                  <DetailItem
+                    label="Assets"
+                    value={`${selectedTool.manifest.assets.length}개`}
+                  />
+                  <DetailItem
+                    label="Data sources"
+                    value={`${selectedTool.manifest.dataSources.length}개`}
+                  />
+                  <DetailItem
+                    label="Datasets"
+                    value={`${selectedTool.manifest.datasets.length}개`}
+                  />
+                  <DetailItem
+                    label="Indexing"
+                    value={selectedTool.manifest.indexing?.enabled ? '사용' : '미사용'}
+                  />
                 </dl>
                 <div className="tool-runner">
                   {selectedTool.manifest.inputs.length > 0 ? (
@@ -111,9 +132,10 @@ export function ToolsPanel({
                   <p className="panel-success">{toolMessage}</p>
                 ) : null}
                 {toolRunResult ? (
-                  <pre className="tool-output">
-                    {JSON.stringify(toolRunResult.output, null, 2)}
-                  </pre>
+                  <ToolOutputRenderer
+                    output={toolRunResult.output}
+                    outputs={selectedTool.manifest.outputs}
+                  />
                 ) : null}
           </div>
         ) : (
@@ -127,6 +149,115 @@ export function ToolsPanel({
       </section>
     </section>
   )
+}
+
+type ToolOutputRendererProps = {
+  output: Record<string, unknown>
+  outputs: ToolModuleOutputField[]
+}
+
+function ToolOutputRenderer({ output, outputs }: ToolOutputRendererProps) {
+  if (outputs.length === 0) {
+    return (
+      <pre className="tool-output">{JSON.stringify(output, null, 2)}</pre>
+    )
+  }
+
+  return (
+    <div className="tool-output-list">
+      {outputs.map((field) => (
+        <section className="tool-output-item" key={field.key}>
+          <h4>{field.ui?.label ?? field.key}</h4>
+          <ToolOutputValue field={field} value={output[field.key]} />
+        </section>
+      ))}
+    </div>
+  )
+}
+
+function ToolOutputValue({
+  field,
+  value,
+}: {
+  field: ToolModuleOutputField
+  value: unknown
+}) {
+  const view = field.ui?.view
+
+  if (value === undefined || value === null || value === '') {
+    return <p className="empty-state">{field.ui?.emptyText ?? '결과 없음'}</p>
+  }
+
+  if (view === 'image' && typeof value === 'string') {
+    return <img className="tool-output-image" alt={field.key} src={value} />
+  }
+
+  if (view === 'gallery' && Array.isArray(value)) {
+    return (
+      <div className="tool-output-gallery">
+        {value.map((item, index) => (
+          <img
+            alt={`${field.key}-${index + 1}`}
+            key={`${field.key}-${index}`}
+            src={String(item)}
+          />
+        ))}
+      </div>
+    )
+  }
+
+  if (view === 'palette' && Array.isArray(value)) {
+    return (
+      <div className="option-swatch-list">
+        {value.map((item, index) => (
+          <span
+            className="palette-chip"
+            key={`${field.key}-${index}`}
+            style={{ backgroundColor: String(item) }}
+          >
+            {String(item)}
+          </span>
+        ))}
+      </div>
+    )
+  }
+
+  if (view === 'link' && typeof value === 'string') {
+    return (
+      <a href={value} rel="noreferrer" target="_blank">
+        {value}
+      </a>
+    )
+  }
+
+  if (
+    view === 'list' ||
+    view === 'links' ||
+    view === 'files' ||
+    Array.isArray(value)
+  ) {
+    return (
+      <ul className="tool-output-list-values">
+        {(Array.isArray(value) ? value : [value]).map((item, index) => (
+          <li key={`${field.key}-${index}`}>{String(item)}</li>
+        ))}
+      </ul>
+    )
+  }
+
+  if (view === 'table' && Array.isArray(value)) {
+    return (
+      <pre className="tool-output">{JSON.stringify(value, null, 2)}</pre>
+    )
+  }
+
+  if (view === 'code' || typeof value === 'object') {
+    return (
+      <pre className="tool-output">{JSON.stringify(value, null, 2)}</pre>
+    )
+  }
+
+  return <p className="tool-output-text">{String(value)}</p>
 }
 
 type ToolInputFieldProps = {

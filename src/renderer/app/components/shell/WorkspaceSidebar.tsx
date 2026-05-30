@@ -6,7 +6,7 @@ import {
 } from '../../../../shared/tasks'
 import type { RegisteredToolModule } from '../../../../shared/tools'
 import type { NavigationCategory, SettingsCategory, WorkspaceMode } from '../../taskFormState'
-import { getActionTypeLabel, getWorkspaceModeLabel } from '../../utils/viewLabels'
+import { getActionTypeLabel } from '../../utils/viewLabels'
 
 export type WorkspaceSidebarProps = {
   currentMode: WorkspaceMode
@@ -20,7 +20,6 @@ export type WorkspaceSidebarProps = {
   toolModules: RegisteredToolModule[]
   workflows: WorkflowDefinition[]
   onCategorySelect(category: NavigationCategory): void
-  onClose(): void
   onCreateAction(): void
   onCreateWorkflow(): void
   onSelectAction(actionId: string): void
@@ -41,7 +40,6 @@ export function WorkspaceSidebar({
   selectedToolId,
   selectedWorkflowId,
   onCategorySelect,
-  onClose,
   onCreateAction,
   onCreateWorkflow,
   onSelectAction,
@@ -91,19 +89,6 @@ export function WorkspaceSidebar({
   return (
     <aside className="workspace-sidebar" aria-label="보조 패널">
       <div className="sidebar-group">
-        <div className="sidebar-heading">
-          <p className="sidebar-label">{getWorkspaceModeLabel(currentMode)}</p>
-          <button
-            aria-label="좌측 패널 닫기"
-            className="sidebar-toggle"
-            type="button"
-            title="패널 닫기"
-            onClick={onClose}
-          >
-            ☰
-          </button>
-        </div>
-
         {currentMode === 'run'
           ? runCategories.map((category) => (
               <button

@@ -1,9 +1,10 @@
 // @see - https://www.electron.build/configuration/configuration
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "YourAppID",
+  "appId": "com.pastelflow.app",
   "asar": true,
-  "productName": "YourAppName",
+  "productName": "Pastel Flow",
+  "icon": "public/pastel-flow.png",
   "directories": {
     "output": "release/${version}"
   },

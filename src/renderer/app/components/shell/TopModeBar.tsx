@@ -24,8 +24,8 @@ export function TopModeBar({
     onClick(): void
   }[] = [
     { id: 'run', icon: '▶', label: '실행', onClick: onRun },
-    { id: 'actions', icon: '+', label: 'Action', onClick: onActions },
-    { id: 'workflows', icon: '✎', label: 'Workflow', onClick: onWorkflows },
+    { id: 'actions', icon: '◆', label: 'Action', onClick: onActions },
+    { id: 'workflows', icon: '▦', label: 'Workflow', onClick: onWorkflows },
     { id: 'tools', icon: '◇', label: '도구', onClick: onTools },
     { id: 'settings', icon: '⚙', label: '설정', onClick: onSettings },
   ]
@@ -42,6 +42,7 @@ export function TopModeBar({
           onClick={mode.onClick}
         >
           <span aria-hidden="true">{mode.icon}</span>
+          <strong>{mode.label}</strong>
         </button>
       ))}
     </nav>

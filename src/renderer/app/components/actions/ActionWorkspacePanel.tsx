@@ -77,6 +77,7 @@ export function ActionWorkspacePanel({
             <CreateTaskPanel
               createForm={createForm}
               currentDevice={currentDevice}
+              isEmbedded
               secrets={secrets}
               onCancel={() => onSelectAction(actions[0]?.id ?? null)}
               onChange={onChange}
@@ -91,9 +92,20 @@ export function ActionWorkspacePanel({
 export type WorkflowActionListProps = {
   actions: ActionDefinition[]
   workflow: WorkflowDefinition | null
+  onAddAction(actionId: string): void
+  onMoveAction(actionRefId: string, direction: 'up' | 'down'): void
+  onRemoveAction(actionRefId: string): void
+  onToggleAction(actionRefId: string): void
 }
 
-export function WorkflowActionList({ actions, workflow }: WorkflowActionListProps) {
+export function WorkflowActionList({
+  actions,
+  onAddAction,
+  onMoveAction,
+  onRemoveAction,
+  onToggleAction,
+  workflow,
+}: WorkflowActionListProps) {
   if (!workflow) {
     return (
       <div className="empty-state-action">
@@ -110,6 +122,24 @@ export function WorkflowActionList({ actions, workflow }: WorkflowActionListProp
 
   return (
     <div className="workflow-action-list">
+      <label>
+        Action 추가
+        <select
+          value=""
+          onChange={(event) => {
+            if (event.target.value) {
+              onAddAction(event.target.value)
+            }
+          }}
+        >
+          <option value="">Action 선택</option>
+          {actions.map((action) => (
+            <option key={action.id} value={action.id}>
+              {action.name}
+            </option>
+          ))}
+        </select>
+      </label>
       {sortedActionRefs.length === 0 ? (
         <p className="empty-state">이 Workflow에는 아직 Action이 없습니다.</p>
       ) : (
@@ -126,14 +156,35 @@ export function WorkflowActionList({ actions, workflow }: WorkflowActionListProp
                 </small>
               </div>
               <label className="toggle-switch">
-                <input checked={actionRef.enabled} readOnly type="checkbox" />
+                <input
+                  checked={actionRef.enabled}
+                  type="checkbox"
+                  onChange={() => onToggleAction(actionRef.id)}
+                />
                 <span />
               </label>
-              <button className="icon-button" disabled type="button">
+              <button
+                className="icon-button"
+                disabled={index === 0}
+                type="button"
+                onClick={() => onMoveAction(actionRef.id, 'up')}
+              >
                 ↑
               </button>
-              <button className="icon-button" disabled type="button">
+              <button
+                className="icon-button"
+                disabled={index === sortedActionRefs.length - 1}
+                type="button"
+                onClick={() => onMoveAction(actionRef.id, 'down')}
+              >
                 ↓
+              </button>
+              <button
+                className="icon-button danger-button"
+                type="button"
+                onClick={() => onRemoveAction(actionRef.id)}
+              >
+                ×
               </button>
             </div>
           )

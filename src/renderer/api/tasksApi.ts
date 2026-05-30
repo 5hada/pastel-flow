@@ -71,8 +71,14 @@ export type ActionsApi = {
 
 export type WorkflowsApi = {
   list(): Promise<WorkflowDefinition[]>
-  run(id: string): Promise<TaskTemplate>
-  stop(id: string): Promise<TaskTemplate>
+  create(input: Partial<WorkflowDefinition>): Promise<WorkflowDefinition>
+  update(
+    id: string,
+    input: Partial<WorkflowDefinition>,
+  ): Promise<WorkflowDefinition>
+  delete(id: string): Promise<void>
+  run(id: string): Promise<TaskTemplate | WorkflowDefinition>
+  stop(id: string): Promise<TaskTemplate | WorkflowDefinition>
 }
 
 export type SettingsApi = {
@@ -97,7 +103,7 @@ export type SyncApi = {
 
 export type ToolsApi = {
   list(): Promise<RegisteredToolModule[]>
-  registerFolder(): Promise<RegisteredToolModule | undefined>
+  registerFolder(): Promise<RegisteredToolModule[] | undefined>
   run(
     toolId: string,
     input: Record<string, unknown>,

@@ -99,6 +99,15 @@ const pastelFlowApi = {
     list() {
       return ipcRenderer.invoke('workflows:list')
     },
+    create(input: unknown) {
+      return ipcRenderer.invoke('workflows:create', input)
+    },
+    update(id: string, input: unknown) {
+      return ipcRenderer.invoke('workflows:update', id, input)
+    },
+    delete(id: string) {
+      return ipcRenderer.invoke('workflows:delete', id)
+    },
     run(id: string) {
       return ipcRenderer.invoke('workflows:run', id)
     },

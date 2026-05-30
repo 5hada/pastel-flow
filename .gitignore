@@ -7,10 +7,26 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+dist-electron/
+dist-ssr/
+release/
+*.tsbuildinfo
+
+# Local environment
+.env
+.env.*
+!.env.example
 *.local
+
+# Caches and reports
+.cache/
+.vite/
+coverage/
 
 # Editor directories and files
 .vscode/*
@@ -24,3 +40,5 @@ dist-ssr
 *.sw?
 # heroui-agents-md
 .heroui-docs/
+dist-electron/main.js
+dist-electron/preload.mjs

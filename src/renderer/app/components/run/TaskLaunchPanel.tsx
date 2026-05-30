@@ -2,17 +2,13 @@ import type { CSSProperties } from 'react'
 import type { TaskListDisplayMode } from '../../../../shared/settings'
 import {
   isRestrictedDevicePolicy,
-  normalizeBrowserTabGroupConfig,
-  type BrowserTabGroupConfig,
-  type TaskTemplate,
+  type WorkflowDefinition,
 } from '../../../../shared/tasks'
 import { TaskListDisplayToggle } from './TaskListDisplayToggle'
 import {
   formatDate,
-  getBrowserKindLabel,
   getTaskScheduleLabel,
   getTaskStatusLabel,
-  getTaskTypeLabel,
 } from '../../utils/viewLabels'
 
 export type TaskLaunchPanelProps = {
@@ -20,20 +16,20 @@ export type TaskLaunchPanelProps = {
   displayMode: TaskListDisplayMode
   gridColumnCount: number
   isLoading: boolean
-  runningTaskId: string | null
-  selectedTaskId: string | null
-  stoppingTaskId: string | null
-  tasks: TaskTemplate[]
+  runningWorkflowId: string | null
+  selectedWorkflowId: string | null
+  stoppingWorkflowId: string | null
+  workflows: WorkflowDefinition[]
   onCreate(): void
   onDisplayModeChange(displayMode: TaskListDisplayMode): Promise<void>
   onGridColumnCountChange(columnCount: number): Promise<void>
-  onRun(taskId: string): Promise<void>
-  onSelect(task: TaskTemplate): void
-  onStop(taskId: string): Promise<void>
+  onRun(workflowId: string): Promise<void>
+  onSelect(workflow: WorkflowDefinition): void
+  onStop(workflowId: string): Promise<void>
 }
 
 export function TaskLaunchPanel({
-  tasks,
+  workflows,
   categoryLabel,
   displayMode,
   gridColumnCount,
@@ -44,9 +40,9 @@ export function TaskLaunchPanel({
   onRun,
   onSelect,
   onStop,
-  runningTaskId,
-  selectedTaskId,
-  stoppingTaskId,
+  runningWorkflowId,
+  selectedWorkflowId,
+  stoppingWorkflowId,
 }: TaskLaunchPanelProps) {
   return (
     <section className="task-section launch-section" aria-label="Workflow 실행">
@@ -56,33 +52,41 @@ export function TaskLaunchPanel({
           <h2>실행할 Workflow</h2>
         </div>
         <div className="section-actions">
+          {displayMode === 'grid' ? (
+            <div className="grid-column-stepper" aria-label="그리드 열 수">
+              <button
+                aria-label="그리드 열 수 줄이기"
+                disabled={gridColumnCount <= 2}
+                type="button"
+                onClick={() =>
+                  void onGridColumnCountChange(Math.max(2, gridColumnCount - 1))
+                }
+              >
+                -
+              </button>
+              <span aria-label={`${gridColumnCount}열`}>{gridColumnCount}</span>
+              <button
+                aria-label="그리드 열 수 늘리기"
+                disabled={gridColumnCount >= 8}
+                type="button"
+                onClick={() =>
+                  void onGridColumnCountChange(Math.min(8, gridColumnCount + 1))
+                }
+              >
+                +
+              </button>
+            </div>
+          ) : null}
           <TaskListDisplayToggle
             value={displayMode}
             onChange={onDisplayModeChange}
           />
-          {displayMode === 'grid' ? (
-            <select
-              aria-label="그리드 열 수"
-              className="compact-select"
-              value={gridColumnCount}
-              onChange={(event) =>
-                onGridColumnCountChange(Number(event.target.value))
-              }
-            >
-              {[2, 3, 4, 5, 6, 7, 8].map((count) => (
-                <option key={count} value={count}>
-                  {count}열
-                </option>
-              ))}
-            </select>
-          ) : null}
-          <span>{tasks.length}개</span>
         </div>
       </div>
 
       {isLoading ? (
         <p className="empty-state">작업을 불러오는 중입니다.</p>
-      ) : tasks.length === 0 ? (
+      ) : workflows.length === 0 ? (
         <div className="empty-state empty-state-action">
           <p>아직 저장된 Workflow가 없습니다.</p>
           <button type="button" onClick={onCreate}>
@@ -100,60 +104,52 @@ export function TaskLaunchPanel({
               : undefined
           }
         >
-          {tasks.map((task) => {
-            const config =
-              task.type === 'browser_tab_group'
-                ? normalizeBrowserTabGroupConfig(
-                    task.config as Partial<BrowserTabGroupConfig>,
-                  )
-                : null
-            const isRunning = runningTaskId === task.id
-            const isStopping = stoppingTaskId === task.id
-            const isSelected = selectedTaskId === task.id
-            const canStop = task.state.status === 'running'
+          {workflows.map((workflow) => {
+            const isRunning = runningWorkflowId === workflow.id
+            const isStopping = stoppingWorkflowId === workflow.id
+            const isSelected = selectedWorkflowId === workflow.id
+            const canStop = workflow.state.status === 'running'
 
             return (
               <article
                 className={`task-row${isSelected ? ' is-selected' : ''}`}
-                key={task.id}
+                key={workflow.id}
               >
                 {displayMode === 'list' ? (
                   <button
                     className="task-select-button"
                     type="button"
-                    onClick={() => onSelect(task)}
+                    onClick={() => onSelect(workflow)}
                   >
-                    <span className="task-row-title">{task.name}</span>
+                    <span className="task-row-title">{workflow.name}</span>
                     <span className="task-row-meta">
-                      {config
-                        ? getBrowserKindLabel(config.browserKind)
-                        : getTaskTypeLabel(task.type)} · Action 1개 · 마지막 실행{' '}
-                      {formatDate(task.state.lastRunAt)} ·{' '}
-                      {getTaskScheduleLabel(task.schedule)}
+                      Action {workflow.actionRefs.length}개 · 마지막 실행{' '}
+                      {formatDate(workflow.state.lastRunAt)} ·{' '}
+                      {getTaskScheduleLabel(workflow.schedule)}
                     </span>
                     <span className="task-row-meta">
-                      {task.state.lastError ??
-                        task.state.lastMessage ??
+                      {workflow.state.lastError ??
+                        workflow.state.lastMessage ??
                         '아직 실행 결과가 없습니다.'}
                     </span>
                   </button>
                 ) : (
                   <button
-                    className={`workflow-grid-button status-${task.state.status}`}
+                    className={`workflow-grid-button status-${workflow.state.status}`}
                     disabled={isRunning || isStopping || canStop}
                     type="button"
-                    onClick={() => void onRun(task.id)}
+                    onClick={() => void onRun(workflow.id)}
                   >
-                    {task.name}
+                    {workflow.name}
                   </button>
                 )}
                 {displayMode === 'list' &&
-                isRestrictedDevicePolicy(task.permissions) ? (
+                isRestrictedDevicePolicy(workflow.permissions) ? (
                   <span className="sensitive-pill">제한됨</span>
                 ) : null}
                 {displayMode === 'list' ? (
-                  <span className={`status-pill status-${task.state.status}`}>
-                  {getTaskStatusLabel(task.state.status)}
+                  <span className={`status-pill status-${workflow.state.status}`}>
+                  {getTaskStatusLabel(workflow.state.status)}
                   </span>
                 ) : null}
                 {displayMode === 'list' ? (
@@ -161,7 +157,7 @@ export function TaskLaunchPanel({
                     type="button"
                     disabled={isRunning || isStopping}
                     onClick={() =>
-                      void (canStop ? onStop(task.id) : onRun(task.id))
+                      void (canStop ? onStop(workflow.id) : onRun(workflow.id))
                     }
                   >
                     {isStopping

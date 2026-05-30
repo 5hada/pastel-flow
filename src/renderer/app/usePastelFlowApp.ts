@@ -13,6 +13,8 @@ import {
   type WorkspaceMode,
 } from './taskFormState'
 
+const sidebarAutoCollapseQuery = '(max-width: 640px)'
+
 export function usePastelFlowApp() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('run')
@@ -59,6 +61,22 @@ export function usePastelFlowApp() {
     void actionWorkflow.loadActionWorkflowData()
     // Bootstrap once; the called loaders own their domain state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(sidebarAutoCollapseQuery)
+
+    function syncSidebarWithCompactWidth(event: MediaQueryListEvent) {
+      setIsSidebarOpen(!event.matches)
+    }
+
+    setIsSidebarOpen(!mediaQuery.matches)
+
+    mediaQuery.addEventListener('change', syncSidebarWithCompactWidth)
+
+    return () => {
+      mediaQuery.removeEventListener('change', syncSidebarWithCompactWidth)
+    }
   }, [])
 
   async function refreshWorkspaceData() {
@@ -137,6 +155,7 @@ export function usePastelFlowApp() {
     isSidebarOpen,
     pruneMessage: sync.pruneMessage,
     runningTaskId: tasks.runningTaskId,
+    runningWorkflowId: actionWorkflow.runningWorkflowId,
     secretForm: secrets.secretForm,
     secretStorageStatus: secrets.secretStorageStatus,
     secrets: secrets.secrets,
@@ -151,6 +170,7 @@ export function usePastelFlowApp() {
     settingsForm: settings.settingsForm,
     settingsSaveState: settings.settingsSaveState,
     stoppingTaskId: tasks.stoppingTaskId,
+    stoppingWorkflowId: actionWorkflow.stoppingWorkflowId,
     syncMessage: sync.syncMessage,
     syncResult: sync.syncResult,
     syncStatus: sync.syncStatus,
@@ -167,6 +187,18 @@ export function usePastelFlowApp() {
     closeSettingsMode: settings.closeSettingsMode,
     handleCreateSecret: secrets.handleCreateSecret,
     handleCreateTask: tasks.handleCreateTask,
+    handleCreateWorkflow: () =>
+      actionWorkflow.createWorkflow({
+        name: settings.appSettings.defaultWorkflowName,
+        permissions: {
+          visibility: 'local_only',
+          execution: 'local_only',
+          allowedDeviceIds: settings.currentDevice.id
+            ? [settings.currentDevice.id]
+            : undefined,
+        },
+      }),
+    handleDeleteWorkflow: actionWorkflow.deleteWorkflow,
     handleCreateToolAction: tools.handleCreateToolAction,
     handleDeleteSecret: secrets.handleDeleteSecret,
     handleDeleteTask: tasks.handleDeleteTask,
@@ -177,12 +209,15 @@ export function usePastelFlowApp() {
     handlePruneTaskRunEvents: sync.handlePruneTaskRunEvents,
     handleRegisterToolModule: tools.handleRegisterToolModule,
     handleRunTask: tasks.handleRunTask,
+    handleRunWorkflow: actionWorkflow.runWorkflow,
     handleRunToolModule: tools.handleRunToolModule,
     handleSaveSettings,
     handleStopTask: tasks.handleStopTask,
+    handleStopWorkflow: actionWorkflow.stopWorkflow,
     handleTaskListDisplayModeChange:
       settings.handleTaskListDisplayModeChange,
     handleUpdateTask: tasks.handleUpdateTask,
+    handleUpdateWorkflow: actionWorkflow.updateWorkflow,
     handleWorkflowGridColumnCountChange:
       settings.handleWorkflowGridColumnCountChange,
     openActionMode,

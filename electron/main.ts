@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, safeStorage } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { createDeviceStore } from './devices/store/deviceStore'
@@ -46,16 +46,24 @@ export const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron')
 export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
+app.setPath('userData', path.join(app.getPath('appData'), 'pastel-flow'))
+app.setName('Pastel Flow')
+app.setAppUserModelId('com.pastelflow.app')
 
 let win: BrowserWindow | null
+const appIconPath = path.join(process.env.VITE_PUBLIC, 'pastel-flow.png')
 
 function createWindow() {
   win = new BrowserWindow({
-    icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+    autoHideMenuBar: true,
+    icon: appIconPath,
+    title: 'Pastel Flow',
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
   })
+  win.setIcon(appIconPath)
+  win.setMenu(null)
 
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
@@ -89,6 +97,8 @@ app.on('activate', () => {
 })
 
 app.whenReady().then(async () => {
+  Menu.setApplicationMenu(null)
+
   const dataDir = app.getPath('userData')
   const appSettingsStore = createAppSettingsStore({
     dataDir,
@@ -169,6 +179,7 @@ app.whenReady().then(async () => {
   const workflowRunner = createWorkflowRunner({
     taskRunner,
     taskStore,
+    toolModuleRunner,
   })
 
   registerAppSettingsIpc(ipcMain, appSettingsStore, deviceStore)

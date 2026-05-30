@@ -1,7 +1,7 @@
 import { ActionWorkspacePanel } from './components/actions/ActionWorkspacePanel'
 import { TaskLaunchPanel } from './components/run/TaskLaunchPanel'
 import { AppSettingsPanel } from './components/settings/AppSettingsPanel'
-import { TopModeBar } from './components/shell/TopModeBar'
+import { AppHeader } from './components/shell/AppHeader'
 import { WorkspaceSidebar } from './components/shell/WorkspaceSidebar'
 import { EditWorkspace } from './components/tasks/EditWorkspace'
 import { ToolsPanel } from './components/tools/ToolsPanel'
@@ -9,7 +9,6 @@ import { usePastelFlowApp } from './usePastelFlowApp'
 import {
   createToolInputDefaults,
   getNavigationCategoryLabel,
-  getWorkspaceModeLabel,
 } from './utils/viewLabels'
 
 function App() {
@@ -24,7 +23,7 @@ function App() {
     isLoading,
     isSidebarOpen,
     pruneMessage,
-    runningTaskId,
+    runningWorkflowId,
     secretForm,
     secretStorageStatus,
     secrets,
@@ -32,13 +31,12 @@ function App() {
     selectedCategory,
     selectedSettingsCategory,
     selectedTask,
-    selectedTaskId,
     selectedToolId,
     selectedWorkflowId,
     settingsErrorMessage,
     settingsForm,
     settingsSaveState,
-    stoppingTaskId,
+    stoppingWorkflowId,
     syncMessage,
     syncResult,
     syncStatus,
@@ -49,12 +47,13 @@ function App() {
     toolModules,
     toolRunResult,
     userDataPath,
-    visibleTasks,
     workflows,
     workspaceMode,
     closeSettingsMode,
     handleCreateSecret,
     handleCreateTask,
+    handleCreateWorkflow,
+    handleDeleteWorkflow,
     handleCreateToolAction,
     handleDeleteSecret,
     handleDeleteTask,
@@ -64,12 +63,13 @@ function App() {
     handleImportSyncSnapshotFile,
     handlePruneTaskRunEvents,
     handleRegisterToolModule,
-    handleRunTask,
+    handleRunWorkflow,
     handleRunToolModule,
     handleSaveSettings,
-    handleStopTask,
+    handleStopWorkflow,
     handleTaskListDisplayModeChange,
     handleUpdateTask,
+    handleUpdateWorkflow,
     handleWorkflowGridColumnCountChange,
     openActionMode,
     openCategory,
@@ -93,41 +93,39 @@ function App() {
     setToolInputValues,
     setToolMessage,
     setToolRunResult,
-    startEditing,
   } = usePastelFlowApp()
 
   return (
     <main className="app-shell">
-      <header className="app-header">
-        <div>
-          <h1>Pastel Flow</h1>
-          <p>{getWorkspaceModeLabel(workspaceMode)}</p>
-        </div>
-        <TopModeBar
-          currentMode={workspaceMode}
-          onActions={openActionMode}
-          onRun={openRunMode}
-          onSettings={openSettingsMode}
-          onTools={openToolsMode}
-          onWorkflows={openWorkflowMode}
-        />
-        <button
-          aria-label="작업 목록 새로고침"
-          className="topbar-button"
-          type="button"
-          disabled={isLoading}
-          title="새로고침"
-          onClick={() => void refreshWorkspaceData()}
-        >
-          {isLoading ? '...' : '↻'}
-        </button>
-      </header>
+      <AppHeader
+        actionCount={actions.length}
+        currentMode={workspaceMode}
+        isLoading={isLoading}
+        toolCount={toolModules.length}
+        workflowCount={workflows.length}
+        onActions={openActionMode}
+        onRefresh={refreshWorkspaceData}
+        onRun={openRunMode}
+        onSettings={openSettingsMode}
+        onTools={openToolsMode}
+        onWorkflows={openWorkflowMode}
+      />
 
       {errorMessage ? <p className="error-message">{errorMessage}</p> : null}
 
       <div className={`app-workspace${isSidebarOpen ? '' : ' is-sidebar-collapsed'}`}>
+        <button
+          aria-label={isSidebarOpen ? '좌측 패널 닫기' : '좌측 패널 열기'}
+          className="sidebar-toggle workspace-sidebar-toggle"
+          type="button"
+          title={isSidebarOpen ? '패널 닫기' : '패널 열기'}
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+        >
+          ☰
+        </button>
+
         {isSidebarOpen ? (
-            <WorkspaceSidebar
+          <WorkspaceSidebar
             actions={actions}
             tasks={tasks}
             toolModules={toolModules}
@@ -139,7 +137,6 @@ function App() {
             selectedToolId={selectedToolId}
             selectedWorkflowId={selectedWorkflowId}
             onCategorySelect={openCategory}
-            onClose={() => setIsSidebarOpen(false)}
             onCreateAction={() => setSelectedActionId(null)}
             onCreateWorkflow={() => {
               setSelectedWorkflowId(null)
@@ -153,43 +150,27 @@ function App() {
               setToolMessage(null)
               setToolInputValues(createToolInputDefaults(tool))
             }}
-              onSelectWorkflow={selectWorkflow}
+            onSelectWorkflow={selectWorkflow}
           />
         ) : null}
 
         <div className="workspace-content">
-          {!isSidebarOpen ? (
-            <button
-              aria-label="좌측 패널 열기"
-              className="sidebar-toggle floating-toggle"
-              type="button"
-              title="패널 열기"
-              onClick={() => setIsSidebarOpen(true)}
-            >
-              ☰
-            </button>
-          ) : null}
-
           {workspaceMode === 'run' ? (
             <TaskLaunchPanel
-              tasks={visibleTasks}
+              workflows={workflows}
               categoryLabel={getNavigationCategoryLabel(selectedCategory)}
               displayMode={appSettings.taskListDisplayMode}
               isLoading={isLoading}
-              runningTaskId={runningTaskId}
-              selectedTaskId={selectedTaskId}
-              stoppingTaskId={stoppingTaskId}
+              runningWorkflowId={runningWorkflowId}
+              selectedWorkflowId={selectedWorkflowId}
+              stoppingWorkflowId={stoppingWorkflowId}
               gridColumnCount={appSettings.workflowGridColumnCount}
               onCreate={openWorkflowMode}
               onDisplayModeChange={handleTaskListDisplayModeChange}
               onGridColumnCountChange={handleWorkflowGridColumnCountChange}
-              onRun={handleRunTask}
-              onStop={handleStopTask}
-              onSelect={(task) => {
-                setSelectedTaskId(task.id)
-                setConfirmDeleteTaskId(null)
-                startEditing(task)
-              }}
+              onRun={handleRunWorkflow}
+              onStop={handleStopWorkflow}
+              onSelect={selectWorkflow}
             />
           ) : null}
 
@@ -217,9 +198,12 @@ function App() {
               selectedWorkflowId={selectedWorkflowId}
               onChange={setEditForm}
               onConfirmDelete={handleDeleteTask}
+              onConfirmDeleteWorkflow={handleDeleteWorkflow}
               onDeleteRequest={setConfirmDeleteTaskId}
               onSelectWorkflow={setSelectedWorkflowId}
               onSubmit={handleUpdateTask}
+              onCreateWorkflow={handleCreateWorkflow}
+              onUpdateWorkflow={handleUpdateWorkflow}
               selectedTask={selectedTask}
               taskRunEvents={taskRunEvents}
               workflows={workflows}
@@ -247,19 +231,19 @@ function App() {
 
           {workspaceMode === 'settings' ? (
             <section className="mode-panel" aria-label="앱 설정">
-            <AppSettingsPanel
-              form={settingsForm}
-              pruneMessage={pruneMessage}
-              onChange={setSettingsForm}
-              onClose={closeSettingsMode}
-              onSubmit={handleSaveSettings}
-              saveState={settingsSaveState}
-              settingsErrorMessage={settingsErrorMessage}
-            secretForm={secretForm}
-            secretStorageStatus={secretStorageStatus}
-            secrets={secrets}
-  currentDevice={currentDevice}
-  userDataPath={userDataPath}
+              <AppSettingsPanel
+                form={settingsForm}
+                pruneMessage={pruneMessage}
+                onChange={setSettingsForm}
+                onClose={closeSettingsMode}
+                onSubmit={handleSaveSettings}
+                saveState={settingsSaveState}
+                settingsErrorMessage={settingsErrorMessage}
+                secretForm={secretForm}
+                secretStorageStatus={secretStorageStatus}
+                secrets={secrets}
+                currentDevice={currentDevice}
+                userDataPath={userDataPath}
                 onCreateSecret={handleCreateSecret}
                 onDeleteSecret={handleDeleteSecret}
                 onSecretFormChange={setSecretForm}

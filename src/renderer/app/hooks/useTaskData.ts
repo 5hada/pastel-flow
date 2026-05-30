@@ -2,8 +2,11 @@ import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import type { CurrentDevice } from '../../../shared/devices'
 import type { AppSettings } from '../../../shared/settings'
 import type { TaskRunEvent } from '../../../shared/taskRunEvents'
-import type { TaskTemplate } from '../../../shared/tasks'
-import type { CreateTaskInput } from '../../api/tasksApi'
+import type {
+  ActionDefinition,
+  TaskTemplate,
+  WorkflowDefinition,
+} from '../../../shared/tasks'
 import {
   createBrowserTaskForm,
   defaultCreateForm,
@@ -126,7 +129,11 @@ export function useTaskData({
     try {
       setIsLoading(true)
       setErrorMessage(null)
-      setTasks(await window.pastelFlow.tasks.list())
+      const [actions, workflows] = await Promise.all([
+        window.pastelFlow.actions.list(),
+        window.pastelFlow.workflows.list(),
+      ])
+      setTasks(createWorkflowTemplates(actions, workflows))
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     } finally {
@@ -134,13 +141,13 @@ export function useTaskData({
     }
   }
 
-  async function loadTaskRunEvents(taskId: string) {
+  async function loadTaskRunEvents(workflowId: string) {
     if (!window.pastelFlow) {
       return
     }
 
     try {
-      setTaskRunEvents(await window.pastelFlow.tasks.listEvents(taskId))
+      setTaskRunEvents(await window.pastelFlow.workflows.listEvents(workflowId))
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     }
@@ -159,19 +166,36 @@ export function useTaskData({
       return
     }
 
-    const input: CreateTaskInput = {
+    const action = {
       name: trimmedName,
-      type: createForm.taskType,
+      type: getActionType(createForm.taskType),
       config: createTaskConfigFromForm(createForm),
-      permissions: createDevicePolicyFromForm(createForm, currentDevice),
-      schedule: createTaskScheduleFromForm(createForm),
     }
+    const permissions = createDevicePolicyFromForm(createForm, currentDevice)
+    const schedule = createTaskScheduleFromForm(createForm)
 
     try {
       setErrorMessage(null)
-      const createdTask = await window.pastelFlow.tasks.create(input)
-      setTasks((currentTasks) => [...currentTasks, createdTask])
-      setSelectedTaskId(createdTask.id)
+      const createdAction = await window.pastelFlow.actions.create(action)
+      const createdWorkflow = await window.pastelFlow.workflows.create({
+        name: trimmedName,
+        permissions,
+        schedule,
+        state: { status: 'idle' },
+        actionRefs: [
+          {
+            id: crypto.randomUUID(),
+            actionId: createdAction.id,
+            order: 0,
+            enabled: true,
+          },
+        ],
+      })
+      setTasks((currentTasks) => [
+        ...currentTasks,
+        createWorkflowTemplate(createdAction, createdWorkflow),
+      ])
+      setSelectedTaskId(createdAction.id)
       setCreateForm(createBrowserTaskForm(appSettings))
       await loadActionWorkflowData()
       setWorkspaceMode('run')
@@ -194,7 +218,7 @@ export function useTaskData({
 
     try {
       setErrorMessage(null)
-      const updatedTask = await window.pastelFlow.tasks.update(selectedTask.id, {
+      const updatedAction = await window.pastelFlow.actions.update(selectedTask.id, {
         name: trimmedName,
         config: createTaskConfigFromForm(
           {
@@ -203,9 +227,31 @@ export function useTaskData({
           },
           selectedTask,
         ),
-        permissions: createDevicePolicyFromForm(editForm, currentDevice),
-        schedule: createTaskScheduleFromForm(editForm),
       })
+      const workflows = await window.pastelFlow.workflows.list()
+      const linkedWorkflow = workflows.find((workflow) =>
+        workflow.actionRefs.some((actionRef) => actionRef.actionId === selectedTask.id),
+      )
+      const updatedWorkflow = linkedWorkflow
+        ? await window.pastelFlow.workflows.update(linkedWorkflow.id, {
+            name: trimmedName,
+            permissions: createDevicePolicyFromForm(editForm, currentDevice),
+            schedule: createTaskScheduleFromForm(editForm),
+          })
+        : undefined
+      const updatedTask = createWorkflowTemplate(
+        updatedAction,
+        updatedWorkflow ?? {
+          id: selectedTask.id,
+          name: trimmedName,
+          actionRefs: [],
+          permissions: selectedTask.permissions,
+          schedule: selectedTask.schedule,
+          state: selectedTask.state,
+          createdAt: selectedTask.createdAt,
+          updatedAt: updatedAction.updatedAt,
+        },
+      )
       await loadActionWorkflowData()
       setTasks((currentTasks) =>
         currentTasks.map((task) =>
@@ -227,7 +273,7 @@ export function useTaskData({
 
     try {
       setErrorMessage(null)
-      await window.pastelFlow.tasks.delete(taskId)
+      await window.pastelFlow.actions.delete(taskId)
       setTasks((currentTasks) =>
         currentTasks.filter((task) => task.id !== taskId),
       )
@@ -252,7 +298,21 @@ export function useTaskData({
       setRunningTaskId(taskId)
       setSelectedTaskId(taskId)
       setErrorMessage(null)
-      const updatedTask = await window.pastelFlow.tasks.run(taskId)
+      const workflows = await window.pastelFlow.workflows.list()
+      const workflow = workflows.find((currentWorkflow) =>
+        currentWorkflow.actionRefs.some((actionRef) => actionRef.actionId === taskId),
+      )
+      if (!workflow) {
+        throw new Error('Action이 연결된 Workflow를 찾지 못했습니다.')
+      }
+      const updatedWorkflow = await window.pastelFlow.workflows.run(workflow.id)
+      const action = await window.pastelFlow.actions
+        .list()
+        .then((actions) => actions.find((currentAction) => currentAction.id === taskId))
+      if (!action) {
+        throw new Error('Action을 찾지 못했습니다.')
+      }
+      const updatedTask = createWorkflowTemplate(action, updatedWorkflow)
       setTasks((currentTasks) =>
         currentTasks.map((task) =>
           task.id === updatedTask.id ? updatedTask : task,
@@ -262,7 +322,7 @@ export function useTaskData({
       if (updatedTask.state.status === 'failed') {
         setErrorMessage(updatedTask.state.lastError ?? '작업 실행에 실패했습니다.')
       }
-      await loadTaskRunEvents(taskId)
+      await loadTaskRunEvents(workflow.id)
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     } finally {
@@ -279,13 +339,27 @@ export function useTaskData({
       setStoppingTaskId(taskId)
       setSelectedTaskId(taskId)
       setErrorMessage(null)
-      const updatedTask = await window.pastelFlow.tasks.stop(taskId)
+      const workflows = await window.pastelFlow.workflows.list()
+      const workflow = workflows.find((currentWorkflow) =>
+        currentWorkflow.actionRefs.some((actionRef) => actionRef.actionId === taskId),
+      )
+      if (!workflow) {
+        throw new Error('Action이 연결된 Workflow를 찾지 못했습니다.')
+      }
+      const updatedWorkflow = await window.pastelFlow.workflows.stop(workflow.id)
+      const action = await window.pastelFlow.actions
+        .list()
+        .then((actions) => actions.find((currentAction) => currentAction.id === taskId))
+      if (!action) {
+        throw new Error('Action을 찾지 못했습니다.')
+      }
+      const updatedTask = createWorkflowTemplate(action, updatedWorkflow)
       setTasks((currentTasks) =>
         currentTasks.map((task) =>
           task.id === updatedTask.id ? updatedTask : task,
         ),
       )
-      await loadTaskRunEvents(taskId)
+      await loadTaskRunEvents(workflow.id)
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     } finally {
@@ -317,5 +391,74 @@ export function useTaskData({
     setEditForm,
     setSelectedTaskId,
     startEditing,
+  }
+}
+
+function createWorkflowTemplates(
+  actions: ActionDefinition[],
+  workflows: WorkflowDefinition[],
+): TaskTemplate[] {
+  const actionMap = new Map(actions.map((action) => [action.id, action]))
+
+  return workflows.flatMap((workflow) => {
+    const firstActionRef = [...workflow.actionRefs].sort(
+      (left, right) => left.order - right.order,
+    )[0]
+    const action = firstActionRef ? actionMap.get(firstActionRef.actionId) : null
+
+    return action && getTaskType(action.type)
+      ? [createWorkflowTemplate(action, workflow)]
+      : []
+  })
+}
+
+function createWorkflowTemplate(
+  action: ActionDefinition,
+  workflow: WorkflowDefinition,
+): TaskTemplate {
+  return {
+    id: action.id,
+    name: action.name,
+    type: getTaskType(action.type) ?? 'crawler',
+    config: action.config,
+    permissions: workflow.permissions,
+    schedule: workflow.schedule,
+    state: workflow.state,
+    createdAt: action.createdAt,
+    updatedAt: action.updatedAt,
+  }
+}
+
+function getActionType(taskType: TaskTemplate['type']): ActionDefinition['type'] {
+  switch (taskType) {
+    case 'browser_tab_group':
+      return 'browser_action'
+    case 'crawler':
+      return 'crawler_action'
+    case 'discord_bot':
+      return 'discord_dry_run_action'
+    case 'notion_sync':
+      return 'notion_dry_run_action'
+    case 'trading_bot':
+      return 'trading_dry_run_action'
+  }
+}
+
+function getTaskType(
+  actionType: ActionDefinition['type'],
+): TaskTemplate['type'] | null {
+  switch (actionType) {
+    case 'browser_action':
+      return 'browser_tab_group'
+    case 'crawler_action':
+      return 'crawler'
+    case 'discord_dry_run_action':
+      return 'discord_bot'
+    case 'notion_dry_run_action':
+      return 'notion_sync'
+    case 'trading_dry_run_action':
+      return 'trading_bot'
+    case 'tool_action':
+      return null
   }
 }

@@ -67,6 +67,14 @@ export type TasksApi = {
 
 export type ActionsApi = {
   list(): Promise<ActionDefinition[]>
+  create<TConfig = unknown>(
+    input: Omit<ActionDefinition<TConfig>, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<ActionDefinition<TConfig>>
+  update<TConfig = unknown>(
+    id: string,
+    input: Partial<ActionDefinition<TConfig>>,
+  ): Promise<ActionDefinition<TConfig>>
+  delete(id: string): Promise<void>
 }
 
 export type WorkflowsApi = {
@@ -77,8 +85,9 @@ export type WorkflowsApi = {
     input: Partial<WorkflowDefinition>,
   ): Promise<WorkflowDefinition>
   delete(id: string): Promise<void>
-  run(id: string): Promise<TaskTemplate | WorkflowDefinition>
-  stop(id: string): Promise<TaskTemplate | WorkflowDefinition>
+  run(id: string): Promise<WorkflowDefinition>
+  stop(id: string): Promise<WorkflowDefinition>
+  listEvents(workflowId?: string): Promise<TaskRunEvent[]>
 }
 
 export type SettingsApi = {

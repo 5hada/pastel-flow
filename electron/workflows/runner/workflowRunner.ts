@@ -1,26 +1,38 @@
+import { randomUUID } from 'node:crypto'
 import type {
   ActionDefinition,
+  TaskState,
   TaskTemplate,
   WorkflowDefinition,
 } from '../../../src/shared/tasks'
-import type { TaskRunner } from '../../tasks/runner/taskRunner'
+import type { AppSettingsStore } from '../../settings/store/appSettingsStore'
+import type { TaskAdapterRegistry } from '../../tasks/adapters/taskAdapterRegistry'
+import type { TaskRunEventStore } from '../../tasks/store/taskRunEventStore'
 import type { TaskStore } from '../../tasks/store/taskStore'
 import type { ToolModuleRunner } from '../../tools/runner/toolModuleRunner'
 
 export type WorkflowRunner = {
   getWorkflow(id: string): Promise<WorkflowDefinition>
-  runWorkflow(id: string): Promise<TaskTemplate | WorkflowDefinition>
-  stopWorkflow(id: string): Promise<TaskTemplate | WorkflowDefinition>
+  runWorkflow(id: string): Promise<WorkflowDefinition>
+  stopWorkflow(id: string): Promise<WorkflowDefinition>
 }
 
 export type WorkflowRunnerOptions = {
   taskStore: TaskStore
-  taskRunner: TaskRunner
+  adapterRegistry: TaskAdapterRegistry
+  appSettingsStore: AppSettingsStore
   toolModuleRunner: ToolModuleRunner
+  taskRunEventStore: TaskRunEventStore
+  dataDir: string
+  deviceId: string
 }
 
 export function createWorkflowRunner({
-  taskRunner,
+  adapterRegistry,
+  appSettingsStore,
+  dataDir,
+  deviceId,
+  taskRunEventStore,
   taskStore,
   toolModuleRunner,
 }: WorkflowRunnerOptions): WorkflowRunner {
@@ -36,7 +48,7 @@ export function createWorkflowRunner({
     return workflow
   }
 
-  function getRunnableLegacyTaskId(workflow: WorkflowDefinition): string {
+  function getRunnableActionRefs(workflow: WorkflowDefinition) {
     const enabledActions = workflow.actionRefs
       .filter((actionRef) => actionRef.enabled)
       .sort((left, right) => left.order - right.order)
@@ -45,39 +57,46 @@ export function createWorkflowRunner({
       throw new Error('실행 가능한 Action이 없는 Workflow입니다.')
     }
 
-    if (!workflow.legacyTaskId) {
-      throw new Error(
-        '아직 legacy task에 연결되지 않은 Workflow 실행은 지원하지 않습니다.',
-      )
-    }
-
-    return workflow.legacyTaskId
+    return enabledActions
   }
 
   return {
     getWorkflow,
     async runWorkflow(id) {
       const workflow = await getWorkflow(id)
-      if (!workflow.legacyTaskId) {
-        return runActionWorkflow(workflow, await taskStore.listActions(), {
-          taskStore,
-          toolModuleRunner,
-        })
-      }
-      return taskRunner.runTask(getRunnableLegacyTaskId(workflow))
+      getRunnableActionRefs(workflow)
+      return runActionWorkflow(workflow, await taskStore.listActions(), {
+        adapterRegistry,
+        dataDir,
+        deviceId,
+        appSettingsStore,
+        taskRunEventStore,
+        taskStore,
+        toolModuleRunner,
+      })
     },
     async stopWorkflow(id) {
       const workflow = await getWorkflow(id)
-      if (!workflow.legacyTaskId) {
-        return taskStore.updateWorkflow(workflow.id, {
-          state: {
-            ...workflow.state,
-            status: 'idle',
-            lastMessage: 'Workflow 중지를 요청했습니다.',
-          },
-        })
+      const actions = await taskStore.listActions()
+      const actionMap = new Map(actions.map((action) => [action.id, action]))
+
+      for (const actionRef of getRunnableActionRefs(workflow)) {
+        const action = actionMap.get(actionRef.actionId)
+        if (!action || action.type === 'tool_action') {
+          continue
+        }
+
+        const adapter = adapterRegistry.getAdapter(action.type)
+        await adapter.stop?.(action.id)
       }
-      return taskRunner.stopTask(getRunnableLegacyTaskId(workflow))
+
+      return taskStore.updateWorkflow(workflow.id, {
+        state: {
+          ...workflow.state,
+          status: 'idle',
+          lastMessage: 'Workflow 중지를 요청했습니다.',
+        },
+      })
     },
   }
 }
@@ -86,6 +105,11 @@ async function runActionWorkflow(
   workflow: WorkflowDefinition,
   actions: ActionDefinition[],
   context: {
+    adapterRegistry: TaskAdapterRegistry
+    appSettingsStore: AppSettingsStore
+    dataDir: string
+    deviceId: string
+    taskRunEventStore: TaskRunEventStore
     taskStore: TaskStore
     toolModuleRunner: ToolModuleRunner
   },
@@ -105,6 +129,12 @@ async function runActionWorkflow(
       lastError: undefined,
     },
   })
+  await context.taskRunEventStore.appendEvent({
+    workflowId: workflow.id,
+    deviceId: context.deviceId,
+    status: 'running',
+    message: 'Workflow 실행을 시작했습니다.',
+  })
 
   try {
     for (const actionRef of enabledActionRefs) {
@@ -114,9 +144,47 @@ async function runActionWorkflow(
       }
 
       if (action.type !== 'tool_action') {
-        throw new Error(
-          `순수 Workflow runner는 아직 ${action.type} 실행을 지원하지 않습니다.`,
-        )
+        const adapter = context.adapterRegistry.getAdapter(action.type)
+        const actionRunId = randomUUID()
+        await adapter.validateConfig(action.config)
+        const appSettingsSnapshot = await context.appSettingsStore.getSnapshot()
+        const result = await adapter.run({
+          task: createRuntimeTask(action, workflow),
+          deviceId: context.deviceId,
+          dataDir: context.dataDir,
+          appSettings: appSettingsSnapshot.settings,
+          async updateConfig(config) {
+            await context.taskStore.updateAction(action.id, { config })
+          },
+          async updateState(state) {
+            const currentWorkflow = await context.taskStore
+              .listWorkflows()
+              .then((workflows) =>
+                workflows.find(
+                  (current) => current.id === workflow.id,
+                ),
+              )
+            await context.taskStore.updateWorkflow(workflow.id, {
+              state: {
+                ...(currentWorkflow?.state ?? workflow.state),
+                ...(state as Partial<TaskState>),
+              },
+            })
+          },
+        })
+        const resultState = result.state as TaskState
+        outputScope = {
+          ...outputScope,
+          [actionRef.id]: resultState,
+        }
+        await context.taskRunEventStore.appendEvent({
+          workflowId: workflow.id,
+          actionRunId,
+          deviceId: context.deviceId,
+          status: resultState.status,
+          message: result.message ?? `${action.name} Action 실행을 처리했습니다.`,
+        })
+        continue
       }
 
       const config = action.config as {
@@ -135,23 +203,80 @@ async function runActionWorkflow(
         ...outputScope,
         [actionRef.id]: result.output,
       }
+      await context.taskRunEventStore.appendEvent({
+        workflowId: workflow.id,
+        actionRunId: actionRef.id,
+        deviceId: context.deviceId,
+        status: 'idle',
+        message: `${action.name} Tool Action 실행을 완료했습니다.`,
+      })
     }
 
-    return context.taskStore.updateWorkflow(workflow.id, {
+    const completedWorkflow = await context.taskStore.updateWorkflow(workflow.id, {
       state: {
         status: 'idle',
         lastRunAt: new Date().toISOString(),
         lastMessage: `${enabledActionRefs.length}개 Action 실행을 완료했습니다.`,
       },
     })
+    await context.taskRunEventStore.appendEvent({
+      workflowId: workflow.id,
+      deviceId: context.deviceId,
+      status: 'idle',
+      message: completedWorkflow.state.lastMessage,
+    })
+
+    return completedWorkflow
   } catch (error) {
-    return context.taskStore.updateWorkflow(workflow.id, {
+    const failedWorkflow = await context.taskStore.updateWorkflow(workflow.id, {
       state: {
         status: 'failed',
         lastRunAt: new Date().toISOString(),
         lastError: getErrorMessage(error),
       },
     })
+    await context.taskRunEventStore.appendEvent({
+      workflowId: workflow.id,
+      deviceId: context.deviceId,
+      status: 'failed',
+      message: failedWorkflow.state.lastError,
+    })
+
+    return failedWorkflow
+  }
+}
+
+function createRuntimeTask(
+  action: ActionDefinition,
+  workflow: WorkflowDefinition,
+): TaskTemplate {
+  return {
+    id: action.id,
+    name: action.name,
+    type: getRuntimeTaskType(action),
+    config: action.config,
+    state: workflow.state,
+    permissions: workflow.permissions,
+    schedule: workflow.schedule,
+    createdAt: action.createdAt,
+    updatedAt: action.updatedAt,
+  }
+}
+
+function getRuntimeTaskType(action: ActionDefinition): TaskTemplate['type'] {
+  switch (action.type) {
+    case 'browser_action':
+      return 'browser_tab_group'
+    case 'crawler_action':
+      return 'crawler'
+    case 'discord_dry_run_action':
+      return 'discord_bot'
+    case 'notion_dry_run_action':
+      return 'notion_sync'
+    case 'trading_dry_run_action':
+      return 'trading_bot'
+    case 'tool_action':
+      throw new Error('tool_action은 Task 호환 런타임 타입이 없습니다.')
   }
 }
 

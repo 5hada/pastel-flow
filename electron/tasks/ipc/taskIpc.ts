@@ -1,14 +1,11 @@
 import type { IpcMain } from 'electron'
 import {
-  canExecuteTaskOnDevice,
   canExecuteWorkflowOnDevice,
-  canViewTaskOnDevice,
   canViewWorkflowOnDevice,
   createLocalOnlyDevicePolicy,
 } from '../../../src/shared/tasks'
 import type { DeviceStore } from '../../devices/store/deviceStore'
 import type { AppSettingsStore } from '../../settings/store/appSettingsStore'
-import type { TaskRunner } from '../runner/taskRunner'
 import type { TaskRunEventStore } from '../store/taskRunEventStore'
 import type { TaskStore } from '../store/taskStore'
 import type { WorkflowRunner } from '../../workflows/runner/workflowRunner'
@@ -16,29 +13,51 @@ import type { WorkflowRunner } from '../../workflows/runner/workflowRunner'
 export function registerTaskIpc(
   ipcMain: IpcMain,
   taskStore: TaskStore,
-  taskRunner: TaskRunner,
   workflowRunner: WorkflowRunner,
   taskRunEventStore: TaskRunEventStore,
   appSettingsStore: AppSettingsStore,
   deviceStore: DeviceStore,
 ): void {
-  ipcMain.handle('tasks:list', async () => {
-    const [tasks, currentDevice, appSettingsSnapshot] = await Promise.all([
-      taskStore.listTasks(),
+  async function listWorkflowEvents(workflowId?: string) {
+    const [workflows, currentDevice, appSettingsSnapshot] = await Promise.all([
+      taskStore.listWorkflows(),
       deviceStore.getCurrentDevice(),
       appSettingsStore.getSnapshot(),
     ])
-
-    return tasks.filter((task) =>
-      canViewTaskOnDevice(
-        task,
-        currentDevice,
-        appSettingsSnapshot.settings.linkedDevices,
-      ),
+    const visibleWorkflowIds = new Set(
+      workflows
+        .filter((workflow) =>
+          canViewWorkflowOnDevice(
+            workflow,
+            currentDevice,
+            appSettingsSnapshot.settings.linkedDevices,
+          ),
+        )
+        .map((workflow) => workflow.id),
     )
-  })
+
+    if (workflowId && !visibleWorkflowIds.has(workflowId)) {
+      return []
+    }
+
+    const events = await taskRunEventStore.listEvents(workflowId)
+    return events.filter(
+      (event) => event.workflowId && visibleWorkflowIds.has(event.workflowId),
+    )
+  }
+
+  ipcMain.handle('tasks:list', async () => [])
   ipcMain.handle('actions:list', async () => {
     return taskStore.listActions()
+  })
+  ipcMain.handle('actions:create', async (_event, input) => {
+    return taskStore.createAction(input)
+  })
+  ipcMain.handle('actions:update', async (_event, id, input) => {
+    return taskStore.updateAction(id, input)
+  })
+  ipcMain.handle('actions:delete', async (_event, id) => {
+    return taskStore.deleteAction(id)
   })
   ipcMain.handle('workflows:list', async () => {
     const [workflows, currentDevice, appSettingsSnapshot] = await Promise.all([
@@ -138,114 +157,11 @@ export function registerTaskIpc(
 
     return workflowRunner.stopWorkflow(id)
   })
-  ipcMain.handle('tasks:list-events', async (_event, taskId?: string) => {
-    const [tasks, currentDevice, appSettingsSnapshot] = await Promise.all([
-      taskStore.listTasks(),
-      deviceStore.getCurrentDevice(),
-      appSettingsStore.getSnapshot(),
-    ])
-    const visibleTaskIds = new Set(
-      tasks
-        .filter((task) =>
-          canViewTaskOnDevice(
-            task,
-            currentDevice,
-            appSettingsSnapshot.settings.linkedDevices,
-          ),
-        )
-        .map((task) => task.id),
-    )
-
-    if (taskId && !visibleTaskIds.has(taskId)) {
-      return []
-    }
-
-    const events = await taskRunEventStore.listEvents(taskId)
-    return events.filter((event) => visibleTaskIds.has(event.taskId))
-  })
+  ipcMain.handle('workflows:list-events', (_event, workflowId?: string) =>
+    listWorkflowEvents(workflowId),
+  )
+  ipcMain.handle('tasks:list-events', (_event, workflowId?: string) =>
+    listWorkflowEvents(workflowId),
+  )
   ipcMain.handle('tasks:prune-events', () => taskRunEventStore.pruneEvents())
-  ipcMain.handle('tasks:create', async (_event, input) => {
-    const currentDevice = await deviceStore.getCurrentDevice()
-
-    return taskStore.createTask({
-      ...input,
-      permissions: input.permissions ?? createLocalOnlyDevicePolicy(currentDevice),
-    })
-  })
-  ipcMain.handle('tasks:update', async (_event, id, input) => {
-    const [task, currentDevice, appSettingsSnapshot] = await Promise.all([
-      taskStore.getTask(id),
-      deviceStore.getCurrentDevice(),
-      appSettingsStore.getSnapshot(),
-    ])
-
-    if (
-      !canExecuteTaskOnDevice(
-        task,
-        currentDevice,
-        appSettingsSnapshot.settings.linkedDevices,
-      )
-    ) {
-      throw new Error('이 기기에서는 해당 작업을 수정할 수 없습니다.')
-    }
-
-    return taskStore.updateTask(id, input)
-  })
-  ipcMain.handle('tasks:delete', async (_event, id) => {
-    const [task, currentDevice, appSettingsSnapshot] = await Promise.all([
-      taskStore.getTask(id),
-      deviceStore.getCurrentDevice(),
-      appSettingsStore.getSnapshot(),
-    ])
-
-    if (
-      !canExecuteTaskOnDevice(
-        task,
-        currentDevice,
-        appSettingsSnapshot.settings.linkedDevices,
-      )
-    ) {
-      throw new Error('이 기기에서는 해당 작업을 삭제할 수 없습니다.')
-    }
-
-    return taskStore.deleteTask(id)
-  })
-  ipcMain.handle('tasks:run', async (_event, id) => {
-    const [task, currentDevice, appSettingsSnapshot] = await Promise.all([
-      taskStore.getTask(id),
-      deviceStore.getCurrentDevice(),
-      appSettingsStore.getSnapshot(),
-    ])
-
-    if (
-      !canExecuteTaskOnDevice(
-        task,
-        currentDevice,
-        appSettingsSnapshot.settings.linkedDevices,
-      )
-    ) {
-      throw new Error('이 기기에서는 해당 작업을 실행할 수 없습니다.')
-    }
-
-    return taskRunner.runTask(id)
-  })
-  ipcMain.handle('tasks:stop', async (_event, id) => {
-    const [task, currentDevice, appSettingsSnapshot] = await Promise.all([
-      taskStore.getTask(id),
-      deviceStore.getCurrentDevice(),
-      appSettingsStore.getSnapshot(),
-    ])
-
-    if (
-      !canExecuteTaskOnDevice(
-        task,
-        currentDevice,
-        appSettingsSnapshot.settings.linkedDevices,
-      )
-    ) {
-      throw new Error('이 기기에서는 해당 작업을 중지할 수 없습니다.')
-    }
-
-    return taskRunner.stopTask(id)
-  })
 }

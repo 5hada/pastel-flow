@@ -13,7 +13,7 @@ export type ActionType =
   | 'trading_dry_run_action'
   | 'tool_action'
 
-export type TaskStatus = 'idle' | 'running' | 'failed'
+export type ActionRunStatus = 'idle' | 'running' | 'failed'
 
 export type BrowserKind = 'chrome' | 'edge' | 'chromium'
 
@@ -89,8 +89,8 @@ export type DevicePolicy = {
   secretRefs?: SecretRef[]
 }
 
-export type TaskState = {
-  status: TaskStatus
+export type WorkflowState = {
+  status: ActionRunStatus
   lastRunAt?: string
   lastError?: string
   localProfilePath?: string
@@ -98,13 +98,13 @@ export type TaskState = {
   lastMessage?: string
 }
 
-export type TaskScheduleMode = 'interval' | 'daily' | 'weekly'
+export type WorkflowScheduleMode = 'interval' | 'daily' | 'weekly'
 
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6
 
-export type TaskSchedule = {
+export type WorkflowSchedule = {
   enabled: boolean
-  mode: TaskScheduleMode
+  mode: WorkflowScheduleMode
   intervalMinutes: number
   timeOfDay?: string
   daysOfWeek?: DayOfWeek[]
@@ -128,7 +128,6 @@ export type ActionDefinition<TConfig = unknown> = {
   secretRefs?: SecretRef[]
   inputSchema?: ActionIOField[]
   outputSchema?: ActionIOField[]
-  legacyTaskId?: string
   createdAt: string
   updatedAt: string
 }
@@ -141,10 +140,6 @@ export type WorkflowActionRef = {
   enabled: boolean
 }
 
-export type WorkflowState = TaskState
-
-export type WorkflowSchedule = TaskSchedule
-
 export type WorkflowDefinition = {
   id: string
   name: string
@@ -152,7 +147,6 @@ export type WorkflowDefinition = {
   permissions: DevicePolicy
   schedule?: WorkflowSchedule
   state: WorkflowState
-  legacyTaskId?: string
   createdAt: string
   updatedAt: string
 }
@@ -203,3 +197,8 @@ export type TaskTemplate<TConfig = unknown, TState = TaskState> = {
 }
 
 export type BrowserTabGroupTask = TaskTemplate<BrowserTabGroupConfig, TaskState>
+
+export type TaskStatus = ActionRunStatus
+export type TaskState = WorkflowState
+export type TaskScheduleMode = WorkflowScheduleMode
+export type TaskSchedule = WorkflowSchedule

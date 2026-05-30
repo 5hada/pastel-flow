@@ -1520,7 +1520,6 @@ function createActionFromLegacyTask(task) {
     type: getActionTypeForLegacyTaskType(task.type),
     config: task.config,
     secretRefs: task.permissions.secretRefs,
-    legacyTaskId: task.id,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt
   };
@@ -1541,7 +1540,6 @@ function createWorkflowFromLegacyTask(task) {
     permissions: normalizeDevicePolicy(task.permissions),
     schedule: normalizeTaskSchedule(task.schedule),
     state: task.state,
-    legacyTaskId: task.id,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt
   };
@@ -1638,18 +1636,12 @@ function isBrowserTabGroupColor(value) {
 function isDeviceExecutionPolicy(value) {
   return value === "anywhere" || value === "trusted_only" || value === "specific_devices" || value === "local_only";
 }
-function canViewTaskOnDevice(task, currentDevice, linkedDevices) {
-  return canViewPolicyOnDevice(task.permissions, currentDevice, linkedDevices);
-}
 function canViewWorkflowOnDevice(workflow, currentDevice, linkedDevices) {
   return canViewPolicyOnDevice(
     workflow.permissions,
     currentDevice,
     linkedDevices
   );
-}
-function canExecuteTaskOnDevice(task, currentDevice, linkedDevices) {
-  return canExecutePolicyOnDevice(task.permissions, currentDevice, linkedDevices);
 }
 function canExecuteWorkflowOnDevice(workflow, currentDevice, linkedDevices) {
   return canExecutePolicyOnDevice(
@@ -2512,6 +2504,7 @@ function createTaskAdapterRegistry(adapters) {
   const adaptersByType = /* @__PURE__ */ new Map();
   for (const adapter of adapters) {
     adaptersByType.set(adapter.type, adapter);
+    adaptersByType.set(getActionType(adapter.type), adapter);
   }
   return {
     getAdapter(type) {
@@ -2523,23 +2516,56 @@ function createTaskAdapterRegistry(adapters) {
     }
   };
 }
-function registerTaskIpc(ipcMain2, taskStore, taskRunner, workflowRunner, taskRunEventStore, appSettingsStore, deviceStore) {
-  ipcMain2.handle("tasks:list", async () => {
-    const [tasks, currentDevice, appSettingsSnapshot] = await Promise.all([
-      taskStore.listTasks(),
+function getActionType(taskType) {
+  switch (taskType) {
+    case "browser_tab_group":
+      return "browser_action";
+    case "crawler":
+      return "crawler_action";
+    case "discord_bot":
+      return "discord_dry_run_action";
+    case "notion_sync":
+      return "notion_dry_run_action";
+    case "trading_bot":
+      return "trading_dry_run_action";
+  }
+}
+function registerTaskIpc(ipcMain2, taskStore, workflowRunner, taskRunEventStore, appSettingsStore, deviceStore) {
+  async function listWorkflowEvents(workflowId) {
+    const [workflows, currentDevice, appSettingsSnapshot] = await Promise.all([
+      taskStore.listWorkflows(),
       deviceStore.getCurrentDevice(),
       appSettingsStore.getSnapshot()
     ]);
-    return tasks.filter(
-      (task) => canViewTaskOnDevice(
-        task,
-        currentDevice,
-        appSettingsSnapshot.settings.linkedDevices
-      )
+    const visibleWorkflowIds = new Set(
+      workflows.filter(
+        (workflow) => canViewWorkflowOnDevice(
+          workflow,
+          currentDevice,
+          appSettingsSnapshot.settings.linkedDevices
+        )
+      ).map((workflow) => workflow.id)
     );
-  });
+    if (workflowId && !visibleWorkflowIds.has(workflowId)) {
+      return [];
+    }
+    const events = await taskRunEventStore.listEvents(workflowId);
+    return events.filter(
+      (event) => event.workflowId && visibleWorkflowIds.has(event.workflowId)
+    );
+  }
+  ipcMain2.handle("tasks:list", async () => []);
   ipcMain2.handle("actions:list", async () => {
     return taskStore.listActions();
+  });
+  ipcMain2.handle("actions:create", async (_event, input) => {
+    return taskStore.createAction(input);
+  });
+  ipcMain2.handle("actions:update", async (_event, id, input) => {
+    return taskStore.updateAction(id, input);
+  });
+  ipcMain2.handle("actions:delete", async (_event, id) => {
+    return taskStore.deleteAction(id);
   });
   ipcMain2.handle("workflows:list", async () => {
     const [workflows, currentDevice, appSettingsSnapshot] = await Promise.all([
@@ -2622,265 +2648,15 @@ function registerTaskIpc(ipcMain2, taskStore, taskRunner, workflowRunner, taskRu
     }
     return workflowRunner.stopWorkflow(id);
   });
-  ipcMain2.handle("tasks:list-events", async (_event, taskId) => {
-    const [tasks, currentDevice, appSettingsSnapshot] = await Promise.all([
-      taskStore.listTasks(),
-      deviceStore.getCurrentDevice(),
-      appSettingsStore.getSnapshot()
-    ]);
-    const visibleTaskIds = new Set(
-      tasks.filter(
-        (task) => canViewTaskOnDevice(
-          task,
-          currentDevice,
-          appSettingsSnapshot.settings.linkedDevices
-        )
-      ).map((task) => task.id)
-    );
-    if (taskId && !visibleTaskIds.has(taskId)) {
-      return [];
-    }
-    const events = await taskRunEventStore.listEvents(taskId);
-    return events.filter((event) => visibleTaskIds.has(event.taskId));
-  });
+  ipcMain2.handle(
+    "workflows:list-events",
+    (_event, workflowId) => listWorkflowEvents(workflowId)
+  );
+  ipcMain2.handle(
+    "tasks:list-events",
+    (_event, workflowId) => listWorkflowEvents(workflowId)
+  );
   ipcMain2.handle("tasks:prune-events", () => taskRunEventStore.pruneEvents());
-  ipcMain2.handle("tasks:create", async (_event, input) => {
-    const currentDevice = await deviceStore.getCurrentDevice();
-    return taskStore.createTask({
-      ...input,
-      permissions: input.permissions ?? createLocalOnlyDevicePolicy(currentDevice)
-    });
-  });
-  ipcMain2.handle("tasks:update", async (_event, id, input) => {
-    const [task, currentDevice, appSettingsSnapshot] = await Promise.all([
-      taskStore.getTask(id),
-      deviceStore.getCurrentDevice(),
-      appSettingsStore.getSnapshot()
-    ]);
-    if (!canExecuteTaskOnDevice(
-      task,
-      currentDevice,
-      appSettingsSnapshot.settings.linkedDevices
-    )) {
-      throw new Error("이 기기에서는 해당 작업을 수정할 수 없습니다.");
-    }
-    return taskStore.updateTask(id, input);
-  });
-  ipcMain2.handle("tasks:delete", async (_event, id) => {
-    const [task, currentDevice, appSettingsSnapshot] = await Promise.all([
-      taskStore.getTask(id),
-      deviceStore.getCurrentDevice(),
-      appSettingsStore.getSnapshot()
-    ]);
-    if (!canExecuteTaskOnDevice(
-      task,
-      currentDevice,
-      appSettingsSnapshot.settings.linkedDevices
-    )) {
-      throw new Error("이 기기에서는 해당 작업을 삭제할 수 없습니다.");
-    }
-    return taskStore.deleteTask(id);
-  });
-  ipcMain2.handle("tasks:run", async (_event, id) => {
-    const [task, currentDevice, appSettingsSnapshot] = await Promise.all([
-      taskStore.getTask(id),
-      deviceStore.getCurrentDevice(),
-      appSettingsStore.getSnapshot()
-    ]);
-    if (!canExecuteTaskOnDevice(
-      task,
-      currentDevice,
-      appSettingsSnapshot.settings.linkedDevices
-    )) {
-      throw new Error("이 기기에서는 해당 작업을 실행할 수 없습니다.");
-    }
-    return taskRunner.runTask(id);
-  });
-  ipcMain2.handle("tasks:stop", async (_event, id) => {
-    const [task, currentDevice, appSettingsSnapshot] = await Promise.all([
-      taskStore.getTask(id),
-      deviceStore.getCurrentDevice(),
-      appSettingsStore.getSnapshot()
-    ]);
-    if (!canExecuteTaskOnDevice(
-      task,
-      currentDevice,
-      appSettingsSnapshot.settings.linkedDevices
-    )) {
-      throw new Error("이 기기에서는 해당 작업을 중지할 수 없습니다.");
-    }
-    return taskRunner.stopTask(id);
-  });
-}
-function createTaskRunner({
-  taskStore,
-  taskRunEventStore,
-  appSettingsStore,
-  adapterRegistry,
-  dataDir,
-  deviceId,
-  onTaskUpdated
-}) {
-  return {
-    async runTask(id) {
-      const task = await taskStore.getTask(id);
-      const adapter = adapterRegistry.getAdapter(task.type);
-      const workflowId = getLegacyWorkflowId(task.id);
-      const actionRunId = randomUUID();
-      let resolveRunStateSaved = () => void 0;
-      const runStateSaved = new Promise((resolve) => {
-        resolveRunStateSaved = resolve;
-      });
-      try {
-        await taskRunEventStore.appendEvent({
-          taskId: task.id,
-          workflowId,
-          actionRunId,
-          legacyTaskId: task.id,
-          deviceId,
-          status: "running",
-          message: "작업 실행을 시작했습니다."
-        });
-        await adapter.validateConfig(task.config);
-        const appSettingsSnapshot = await appSettingsStore.getSnapshot();
-        const result = await adapter.run({
-          task,
-          deviceId,
-          dataDir,
-          appSettings: appSettingsSnapshot.settings,
-          async updateConfig(config) {
-            await runStateSaved;
-            const updatedTask2 = await taskStore.updateTask(task.id, {
-              config
-            });
-            await taskRunEventStore.appendEvent({
-              taskId: task.id,
-              workflowId,
-              actionRunId,
-              legacyTaskId: task.id,
-              deviceId,
-              status: updatedTask2.state.status,
-              message: "브라우저 탭 변경사항을 템플릿에 반영했습니다."
-            });
-            onTaskUpdated == null ? void 0 : onTaskUpdated(updatedTask2);
-          },
-          async updateState(state) {
-            await runStateSaved;
-            const currentTask = await taskStore.getTask(task.id);
-            const updatedTask2 = await taskStore.updateTask(task.id, {
-              state: {
-                ...currentTask.state,
-                ...state
-              }
-            });
-            await taskRunEventStore.appendEvent({
-              taskId: task.id,
-              workflowId,
-              actionRunId,
-              legacyTaskId: task.id,
-              deviceId,
-              status: updatedTask2.state.status,
-              message: updatedTask2.state.lastError ?? "작업 상태가 변경되었습니다."
-            });
-            onTaskUpdated == null ? void 0 : onTaskUpdated(updatedTask2);
-          }
-        });
-        const resultState = result.state;
-        const updatedTask = await taskStore.updateTask(task.id, {
-          state: {
-            ...task.state,
-            ...resultState
-          }
-        });
-        await taskRunEventStore.appendEvent({
-          taskId: task.id,
-          workflowId,
-          actionRunId,
-          legacyTaskId: task.id,
-          deviceId,
-          status: updatedTask.state.status,
-          message: result.message ?? "작업 실행 요청을 처리했습니다."
-        });
-        resolveRunStateSaved();
-        onTaskUpdated == null ? void 0 : onTaskUpdated(updatedTask);
-        return updatedTask;
-      } catch (error) {
-        const message = getErrorMessage$1(error);
-        const updatedTask = await taskStore.updateTask(task.id, {
-          state: {
-            ...task.state,
-            status: "failed",
-            lastError: message
-          }
-        });
-        await taskRunEventStore.appendEvent({
-          taskId: task.id,
-          workflowId,
-          actionRunId,
-          legacyTaskId: task.id,
-          deviceId,
-          status: "failed",
-          message
-        });
-        resolveRunStateSaved();
-        onTaskUpdated == null ? void 0 : onTaskUpdated(updatedTask);
-        return updatedTask;
-      }
-    },
-    async stopTask(id) {
-      const task = await taskStore.getTask(id);
-      const adapter = adapterRegistry.getAdapter(task.type);
-      const workflowId = getLegacyWorkflowId(task.id);
-      if (!adapter.stop) {
-        throw new Error("이 작업 타입은 중지를 지원하지 않습니다.");
-      }
-      try {
-        await adapter.stop(task.id);
-        const updatedTask = await taskStore.updateTask(task.id, {
-          state: {
-            ...task.state,
-            status: "idle",
-            lastError: void 0
-          }
-        });
-        await taskRunEventStore.appendEvent({
-          taskId: task.id,
-          workflowId,
-          legacyTaskId: task.id,
-          deviceId,
-          status: "idle",
-          message: "작업 중지를 요청했습니다."
-        });
-        onTaskUpdated == null ? void 0 : onTaskUpdated(updatedTask);
-        return updatedTask;
-      } catch (error) {
-        const message = getErrorMessage$1(error);
-        const updatedTask = await taskStore.updateTask(task.id, {
-          state: {
-            ...task.state,
-            status: "failed",
-            lastError: message
-          }
-        });
-        await taskRunEventStore.appendEvent({
-          taskId: task.id,
-          workflowId,
-          legacyTaskId: task.id,
-          deviceId,
-          status: "failed",
-          message
-        });
-        onTaskUpdated == null ? void 0 : onTaskUpdated(updatedTask);
-        return updatedTask;
-      }
-    }
-  };
-}
-function getErrorMessage$1(error) {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "알 수 없는 실행 오류가 발생했습니다.";
 }
 function createTaskScheduler({
   appSettingsStore,
@@ -2915,10 +2691,7 @@ function createTaskScheduler({
         if (Number.isNaN(nextRunAt.getTime()) || nextRunAt > now) {
           continue;
         }
-        if (!workflow.legacyTaskId) {
-          continue;
-        }
-        await taskStore.updateTask(workflow.legacyTaskId, {
+        await taskStore.updateWorkflow(workflow.id, {
           schedule: {
             ...schedule,
             lastTriggeredAt: now.toISOString(),
@@ -3005,9 +2778,9 @@ function createTaskRunEventStore({
     );
   }
   return {
-    async listEvents(taskId, options) {
+    async listEvents(workflowId, options) {
       const eventFile = await readEventFile();
-      return eventFile.events.filter((event) => !taskId || event.taskId === taskId).sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, (options == null ? void 0 : options.limit) ?? 50);
+      return eventFile.events.filter((event) => !workflowId || event.workflowId === workflowId).sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, (options == null ? void 0 : options.limit) ?? 50);
     },
     async appendEvent(input) {
       const event = {
@@ -3095,8 +2868,15 @@ function createTaskStore({ dataDir }) {
       return task;
     },
     async listTasks() {
-      const taskFile = await readTaskFile();
-      return taskFile.tasks;
+      return [];
+    },
+    async getAction(id) {
+      const taskFile = ensureLegacyWorkflowData(await readTaskFile());
+      const action = taskFile.actions.find((currentAction) => currentAction.id === id);
+      if (!action) {
+        throw new Error(`Action not found: ${id}`);
+      }
+      return action;
     },
     async listActions() {
       const taskFile = await readTaskFile();
@@ -3126,6 +2906,45 @@ function createTaskStore({ dataDir }) {
       });
       return action;
     },
+    async updateAction(id, input) {
+      var _a;
+      const taskFile = ensureLegacyWorkflowData(await readTaskFile());
+      const actionIndex = taskFile.actions.findIndex(
+        (action) => action.id === id
+      );
+      if (actionIndex === -1) {
+        throw new Error(`Action not found: ${id}`);
+      }
+      const currentAction = taskFile.actions[actionIndex];
+      const updatedAction = {
+        ...currentAction,
+        ...input,
+        name: ((_a = input.name) == null ? void 0 : _a.trim()) ?? currentAction.name,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      const actions = [...taskFile.actions];
+      actions[actionIndex] = updatedAction;
+      await writeTaskFile({
+        tasks: [],
+        actions,
+        workflows: taskFile.workflows
+      });
+      return updatedAction;
+    },
+    async deleteAction(id) {
+      const taskFile = ensureLegacyWorkflowData(await readTaskFile());
+      await writeTaskFile({
+        tasks: [],
+        actions: taskFile.actions.filter((action) => action.id !== id),
+        workflows: taskFile.workflows.map((workflow) => ({
+          ...workflow,
+          actionRefs: workflow.actionRefs.filter(
+            (actionRef) => actionRef.actionId !== id
+          ),
+          updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+        }))
+      });
+    },
     async createWorkflow(input) {
       const now = (/* @__PURE__ */ new Date()).toISOString();
       const workflow = {
@@ -3142,7 +2961,8 @@ function createTaskStore({ dataDir }) {
       };
       const taskFile = ensureLegacyWorkflowData(await readTaskFile());
       await writeTaskFile({
-        ...taskFile,
+        tasks: [],
+        actions: taskFile.actions,
         workflows: [...taskFile.workflows, workflow]
       });
       return workflow;
@@ -3182,20 +3002,9 @@ function createTaskStore({ dataDir }) {
       if (!workflow) {
         throw new Error(`Workflow not found: ${id}`);
       }
-      if (workflow.legacyTaskId) {
-        await writeTaskFile({
-          tasks: taskFile.tasks.filter((task) => task.id !== workflow.legacyTaskId),
-          actions: taskFile.actions.filter(
-            (action) => action.legacyTaskId !== workflow.legacyTaskId && action.id !== getLegacyActionId(workflow.legacyTaskId)
-          ),
-          workflows: taskFile.workflows.filter(
-            (currentWorkflow) => currentWorkflow.legacyTaskId !== workflow.legacyTaskId && currentWorkflow.id !== getLegacyWorkflowId(workflow.legacyTaskId)
-          )
-        });
-        return;
-      }
       await writeTaskFile({
-        ...taskFile,
+        tasks: [],
+        actions: taskFile.actions,
         workflows: taskFile.workflows.filter(
           (currentWorkflow) => currentWorkflow.id !== id
         )
@@ -3282,12 +3091,12 @@ function createTaskStore({ dataDir }) {
     async deleteTask(id) {
       const taskFile = await readTaskFile();
       await writeTaskFile({
-        tasks: taskFile.tasks.filter((task) => task.id !== id),
-        actions: taskFile.actions.filter(
-          (action) => action.legacyTaskId !== id && action.id !== getLegacyActionId(id)
+        tasks: [],
+        actions: ensureLegacyWorkflowData(taskFile).actions.filter(
+          (action) => action.id !== getLegacyActionId(id)
         ),
-        workflows: taskFile.workflows.filter(
-          (workflow) => workflow.legacyTaskId !== id && workflow.id !== getLegacyWorkflowId(id)
+        workflows: ensureLegacyWorkflowData(taskFile).workflows.filter(
+          (workflow) => workflow.id !== getLegacyWorkflowId(id)
         )
       });
     }
@@ -3301,13 +3110,13 @@ function ensureLegacyWorkflowData(taskFile) {
     taskFile.tasks.map((task) => getLegacyWorkflowId(task.id))
   );
   const nonLegacyActions = taskFile.actions.filter(
-    (action) => !legacyActionIds.has(action.id) && !action.legacyTaskId
+    (action) => !legacyActionIds.has(action.id)
   );
   const nonLegacyWorkflows = taskFile.workflows.filter(
-    (workflow) => !legacyWorkflowIds.has(workflow.id) && !workflow.legacyTaskId
+    (workflow) => !legacyWorkflowIds.has(workflow.id)
   );
   return {
-    tasks: taskFile.tasks,
+    tasks: [],
     actions: [
       ...nonLegacyActions,
       ...taskFile.tasks.map((task) => createActionFromLegacyTask(task))
@@ -3354,7 +3163,11 @@ function isNodeError(error) {
   return error instanceof Error && "code" in error;
 }
 function createWorkflowRunner({
-  taskRunner,
+  adapterRegistry,
+  appSettingsStore,
+  dataDir,
+  deviceId,
+  taskRunEventStore,
   taskStore,
   toolModuleRunner
 }) {
@@ -3367,42 +3180,48 @@ function createWorkflowRunner({
     }
     return workflow;
   }
-  function getRunnableLegacyTaskId(workflow) {
+  function getRunnableActionRefs(workflow) {
     const enabledActions = workflow.actionRefs.filter((actionRef) => actionRef.enabled).sort((left, right) => left.order - right.order);
     if (enabledActions.length === 0) {
       throw new Error("실행 가능한 Action이 없는 Workflow입니다.");
     }
-    if (!workflow.legacyTaskId) {
-      throw new Error(
-        "아직 legacy task에 연결되지 않은 Workflow 실행은 지원하지 않습니다."
-      );
-    }
-    return workflow.legacyTaskId;
+    return enabledActions;
   }
   return {
     getWorkflow,
     async runWorkflow(id) {
       const workflow = await getWorkflow(id);
-      if (!workflow.legacyTaskId) {
-        return runActionWorkflow(workflow, await taskStore.listActions(), {
-          taskStore,
-          toolModuleRunner
-        });
-      }
-      return taskRunner.runTask(getRunnableLegacyTaskId(workflow));
+      getRunnableActionRefs(workflow);
+      return runActionWorkflow(workflow, await taskStore.listActions(), {
+        adapterRegistry,
+        dataDir,
+        deviceId,
+        appSettingsStore,
+        taskRunEventStore,
+        taskStore,
+        toolModuleRunner
+      });
     },
     async stopWorkflow(id) {
+      var _a;
       const workflow = await getWorkflow(id);
-      if (!workflow.legacyTaskId) {
-        return taskStore.updateWorkflow(workflow.id, {
-          state: {
-            ...workflow.state,
-            status: "idle",
-            lastMessage: "Workflow 중지를 요청했습니다."
-          }
-        });
+      const actions = await taskStore.listActions();
+      const actionMap = new Map(actions.map((action) => [action.id, action]));
+      for (const actionRef of getRunnableActionRefs(workflow)) {
+        const action = actionMap.get(actionRef.actionId);
+        if (!action || action.type === "tool_action") {
+          continue;
+        }
+        const adapter = adapterRegistry.getAdapter(action.type);
+        await ((_a = adapter.stop) == null ? void 0 : _a.call(adapter, action.id));
       }
-      return taskRunner.stopTask(getRunnableLegacyTaskId(workflow));
+      return taskStore.updateWorkflow(workflow.id, {
+        state: {
+          ...workflow.state,
+          status: "idle",
+          lastMessage: "Workflow 중지를 요청했습니다."
+        }
+      });
     }
   };
 }
@@ -3419,6 +3238,12 @@ async function runActionWorkflow(workflow, actions, context) {
       lastError: void 0
     }
   });
+  await context.taskRunEventStore.appendEvent({
+    workflowId: workflow.id,
+    deviceId: context.deviceId,
+    status: "running",
+    message: "Workflow 실행을 시작했습니다."
+  });
   try {
     for (const actionRef of enabledActionRefs) {
       const action = actionMap.get(actionRef.actionId);
@@ -3426,9 +3251,45 @@ async function runActionWorkflow(workflow, actions, context) {
         throw new Error(`Action을 찾을 수 없습니다: ${actionRef.actionId}`);
       }
       if (action.type !== "tool_action") {
-        throw new Error(
-          `순수 Workflow runner는 아직 ${action.type} 실행을 지원하지 않습니다.`
-        );
+        const adapter = context.adapterRegistry.getAdapter(action.type);
+        const actionRunId = randomUUID();
+        await adapter.validateConfig(action.config);
+        const appSettingsSnapshot = await context.appSettingsStore.getSnapshot();
+        const result2 = await adapter.run({
+          task: createRuntimeTask(action, workflow),
+          deviceId: context.deviceId,
+          dataDir: context.dataDir,
+          appSettings: appSettingsSnapshot.settings,
+          async updateConfig(config2) {
+            await context.taskStore.updateAction(action.id, { config: config2 });
+          },
+          async updateState(state) {
+            const currentWorkflow = await context.taskStore.listWorkflows().then(
+              (workflows) => workflows.find(
+                (current) => current.id === workflow.id
+              )
+            );
+            await context.taskStore.updateWorkflow(workflow.id, {
+              state: {
+                ...(currentWorkflow == null ? void 0 : currentWorkflow.state) ?? workflow.state,
+                ...state
+              }
+            });
+          }
+        });
+        const resultState = result2.state;
+        outputScope = {
+          ...outputScope,
+          [actionRef.id]: resultState
+        };
+        await context.taskRunEventStore.appendEvent({
+          workflowId: workflow.id,
+          actionRunId,
+          deviceId: context.deviceId,
+          status: resultState.status,
+          message: result2.message ?? `${action.name} Action 실행을 처리했습니다.`
+        });
+        continue;
       }
       const config = action.config;
       if (!config.toolId) {
@@ -3442,22 +3303,72 @@ async function runActionWorkflow(workflow, actions, context) {
         ...outputScope,
         [actionRef.id]: result.output
       };
+      await context.taskRunEventStore.appendEvent({
+        workflowId: workflow.id,
+        actionRunId: actionRef.id,
+        deviceId: context.deviceId,
+        status: "idle",
+        message: `${action.name} Tool Action 실행을 완료했습니다.`
+      });
     }
-    return context.taskStore.updateWorkflow(workflow.id, {
+    const completedWorkflow = await context.taskStore.updateWorkflow(workflow.id, {
       state: {
         status: "idle",
         lastRunAt: (/* @__PURE__ */ new Date()).toISOString(),
         lastMessage: `${enabledActionRefs.length}개 Action 실행을 완료했습니다.`
       }
     });
+    await context.taskRunEventStore.appendEvent({
+      workflowId: workflow.id,
+      deviceId: context.deviceId,
+      status: "idle",
+      message: completedWorkflow.state.lastMessage
+    });
+    return completedWorkflow;
   } catch (error) {
-    return context.taskStore.updateWorkflow(workflow.id, {
+    const failedWorkflow = await context.taskStore.updateWorkflow(workflow.id, {
       state: {
         status: "failed",
         lastRunAt: (/* @__PURE__ */ new Date()).toISOString(),
         lastError: getErrorMessage(error)
       }
     });
+    await context.taskRunEventStore.appendEvent({
+      workflowId: workflow.id,
+      deviceId: context.deviceId,
+      status: "failed",
+      message: failedWorkflow.state.lastError
+    });
+    return failedWorkflow;
+  }
+}
+function createRuntimeTask(action, workflow) {
+  return {
+    id: action.id,
+    name: action.name,
+    type: getRuntimeTaskType(action),
+    config: action.config,
+    state: workflow.state,
+    permissions: workflow.permissions,
+    schedule: workflow.schedule,
+    createdAt: action.createdAt,
+    updatedAt: action.updatedAt
+  };
+}
+function getRuntimeTaskType(action) {
+  switch (action.type) {
+    case "browser_action":
+      return "browser_tab_group";
+    case "crawler_action":
+      return "crawler";
+    case "discord_dry_run_action":
+      return "discord_bot";
+    case "notion_dry_run_action":
+      return "notion_sync";
+    case "trading_dry_run_action":
+      return "trading_bot";
+    case "tool_action":
+      throw new Error("tool_action은 Task 호환 런타임 타입이 없습니다.");
   }
 }
 function resolveInputMapping(inputMapping, outputScope) {
@@ -3564,32 +3475,12 @@ app.whenReady().then(async () => {
     taskRunEventStore,
     taskStore
   });
-  const taskRunner = createTaskRunner({
-    taskStore,
-    taskRunEventStore,
-    appSettingsStore,
+  const workflowRunner = createWorkflowRunner({
     adapterRegistry,
+    appSettingsStore,
     dataDir,
     deviceId: currentDevice.id,
-    async onTaskUpdated(task) {
-      const [currentDevice2, appSettingsSnapshot] = await Promise.all([
-        deviceStore.getCurrentDevice(),
-        appSettingsStore.getSnapshot()
-      ]);
-      if (!canViewTaskOnDevice(
-        task,
-        currentDevice2,
-        appSettingsSnapshot.settings.linkedDevices
-      )) {
-        return;
-      }
-      for (const browserWindow of BrowserWindow.getAllWindows()) {
-        browserWindow.webContents.send("tasks:changed", task);
-      }
-    }
-  });
-  const workflowRunner = createWorkflowRunner({
-    taskRunner,
+    taskRunEventStore,
     taskStore,
     toolModuleRunner
   });
@@ -3605,7 +3496,6 @@ app.whenReady().then(async () => {
   registerTaskIpc(
     ipcMain,
     taskStore,
-    taskRunner,
     workflowRunner,
     taskRunEventStore,
     appSettingsStore,

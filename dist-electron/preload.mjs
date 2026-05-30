@@ -90,6 +90,15 @@ const pastelFlowApi = {
   actions: {
     list() {
       return electron.ipcRenderer.invoke("actions:list");
+    },
+    create(input) {
+      return electron.ipcRenderer.invoke("actions:create", input);
+    },
+    update(id, input) {
+      return electron.ipcRenderer.invoke("actions:update", id, input);
+    },
+    delete(id) {
+      return electron.ipcRenderer.invoke("actions:delete", id);
     }
   },
   workflows: {
@@ -110,6 +119,9 @@ const pastelFlowApi = {
     },
     stop(id) {
       return electron.ipcRenderer.invoke("workflows:stop", id);
+    },
+    listEvents(workflowId) {
+      return electron.ipcRenderer.invoke("workflows:list-events", workflowId);
     }
   }
 };

@@ -66,11 +66,7 @@ export function createTaskScheduler({
           continue
         }
 
-        if (!workflow.legacyTaskId) {
-          continue
-        }
-
-        await taskStore.updateTask(workflow.legacyTaskId, {
+        await taskStore.updateWorkflow(workflow.id, {
           schedule: {
             ...schedule,
             lastTriggeredAt: now.toISOString(),

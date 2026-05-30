@@ -2,8 +2,8 @@ export type TaskRunEventStatus = 'running' | 'idle' | 'failed'
 
 export type TaskRunEvent = {
   id: string
-  taskId: string
-  workflowId?: string
+  taskId?: string
+  workflowId: string
   actionRunId?: string
   legacyTaskId?: string
   deviceId: string
@@ -13,8 +13,8 @@ export type TaskRunEvent = {
 }
 
 export type CreateTaskRunEventInput = {
-  taskId: string
-  workflowId?: string
+  taskId?: string
+  workflowId: string
   actionRunId?: string
   legacyTaskId?: string
   deviceId: string

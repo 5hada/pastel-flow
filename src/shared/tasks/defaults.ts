@@ -223,7 +223,6 @@ export function createActionFromLegacyTask(
     type: getActionTypeForLegacyTaskType(task.type),
     config: task.config,
     secretRefs: task.permissions.secretRefs,
-    legacyTaskId: task.id,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
   }
@@ -248,7 +247,6 @@ export function createWorkflowFromLegacyTask(
     permissions: normalizeDevicePolicy(task.permissions),
     schedule: normalizeTaskSchedule(task.schedule),
     state: task.state,
-    legacyTaskId: task.id,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
   }

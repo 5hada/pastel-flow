@@ -20,12 +20,10 @@ import {
 } from './tasks/adapters/dryRunAdapters'
 import { createTaskAdapterRegistry } from './tasks/adapters/taskAdapterRegistry'
 import { registerTaskIpc } from './tasks/ipc/taskIpc'
-import { createTaskRunner } from './tasks/runner/taskRunner'
 import { createTaskScheduler } from './tasks/scheduler/taskScheduler'
 import { createTaskRunEventStore } from './tasks/store/taskRunEventStore'
 import { createTaskStore } from './tasks/store/taskStore'
 import { createWorkflowRunner } from './workflows/runner/workflowRunner'
-import { canViewTaskOnDevice } from '../src/shared/tasks'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -148,36 +146,12 @@ app.whenReady().then(async () => {
     taskRunEventStore,
     taskStore,
   })
-  const taskRunner = createTaskRunner({
-    taskStore,
-    taskRunEventStore,
-    appSettingsStore,
+  const workflowRunner = createWorkflowRunner({
     adapterRegistry,
+    appSettingsStore,
     dataDir,
     deviceId: currentDevice.id,
-    async onTaskUpdated(task) {
-      const [currentDevice, appSettingsSnapshot] = await Promise.all([
-        deviceStore.getCurrentDevice(),
-        appSettingsStore.getSnapshot(),
-      ])
-
-      if (
-        !canViewTaskOnDevice(
-          task,
-          currentDevice,
-          appSettingsSnapshot.settings.linkedDevices,
-        )
-      ) {
-        return
-      }
-
-      for (const browserWindow of BrowserWindow.getAllWindows()) {
-        browserWindow.webContents.send('tasks:changed', task)
-      }
-    },
-  })
-  const workflowRunner = createWorkflowRunner({
-    taskRunner,
+    taskRunEventStore,
     taskStore,
     toolModuleRunner,
   })
@@ -194,7 +168,6 @@ app.whenReady().then(async () => {
   registerTaskIpc(
     ipcMain,
     taskStore,
-    taskRunner,
     workflowRunner,
     taskRunEventStore,
     appSettingsStore,

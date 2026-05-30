@@ -128,19 +128,15 @@ export function useActionWorkflowData(
       setSelectedWorkflowId(workflowId)
       setErrorMessage(null)
       const result = await window.pastelFlow.workflows.run(workflowId)
-      if ('actionRefs' in result) {
-        setWorkflows((currentWorkflows) =>
-          currentWorkflows.map((workflow) =>
-            workflow.id === result.id ? result : workflow,
-          ),
+      setWorkflows((currentWorkflows) =>
+        currentWorkflows.map((workflow) =>
+          workflow.id === result.id ? result : workflow,
+        ),
+      )
+      if (result.state.status === 'failed') {
+        setErrorMessage(
+          result.state.lastError ?? 'Workflow 실행에 실패했습니다.',
         )
-        if (result.state.status === 'failed') {
-          setErrorMessage(
-            result.state.lastError ?? 'Workflow 실행에 실패했습니다.',
-          )
-        }
-      } else {
-        await loadActionWorkflowData()
       }
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
@@ -159,15 +155,11 @@ export function useActionWorkflowData(
       setSelectedWorkflowId(workflowId)
       setErrorMessage(null)
       const result = await window.pastelFlow.workflows.stop(workflowId)
-      if ('actionRefs' in result) {
-        setWorkflows((currentWorkflows) =>
-          currentWorkflows.map((workflow) =>
-            workflow.id === result.id ? result : workflow,
-          ),
-        )
-      } else {
-        await loadActionWorkflowData()
-      }
+      setWorkflows((currentWorkflows) =>
+        currentWorkflows.map((workflow) =>
+          workflow.id === result.id ? result : workflow,
+        ),
+      )
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     } finally {

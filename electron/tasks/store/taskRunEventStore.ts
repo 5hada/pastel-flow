@@ -7,7 +7,7 @@ import type {
 } from '../../../src/shared/taskRunEvents'
 
 export type TaskRunEventStore = {
-  listEvents(taskId?: string, options?: ListTaskRunEventsOptions): Promise<TaskRunEvent[]>
+  listEvents(workflowId?: string, options?: ListTaskRunEventsOptions): Promise<TaskRunEvent[]>
   appendEvent(input: CreateTaskRunEventInput): Promise<TaskRunEvent>
   importEvents(events: TaskRunEvent[]): Promise<number>
   pruneEvents(): Promise<number>
@@ -59,10 +59,10 @@ export function createTaskRunEventStore({
   }
 
   return {
-    async listEvents(taskId, options) {
+    async listEvents(workflowId, options) {
       const eventFile = await readEventFile()
       return eventFile.events
-        .filter((event) => !taskId || event.taskId === taskId)
+        .filter((event) => !workflowId || event.workflowId === workflowId)
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
         .slice(0, options?.limit ?? 50)
     },

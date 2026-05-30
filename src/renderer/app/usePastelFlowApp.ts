@@ -110,8 +110,11 @@ export function usePastelFlowApp() {
   function selectWorkflow(workflow: WorkflowDefinition) {
     actionWorkflow.setSelectedWorkflowId(workflow.id)
 
-    const linkedTask = workflow.legacyTaskId
-      ? tasks.tasks.find((task) => task.id === workflow.legacyTaskId)
+    const firstActionRef = [...workflow.actionRefs].sort(
+      (left, right) => left.order - right.order,
+    )[0]
+    const linkedTask = firstActionRef
+      ? tasks.tasks.find((task) => task.id === firstActionRef.actionId)
       : null
 
     if (linkedTask) {

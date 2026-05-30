@@ -2421,7 +2421,7 @@ function createTaskRunner({
         onTaskUpdated == null ? void 0 : onTaskUpdated(updatedTask);
         return updatedTask;
       } catch (error) {
-        const message = getErrorMessage(error);
+        const message = getErrorMessage$1(error);
         const updatedTask = await taskStore.updateTask(task.id, {
           state: {
             ...task.state,
@@ -2470,7 +2470,7 @@ function createTaskRunner({
         onTaskUpdated == null ? void 0 : onTaskUpdated(updatedTask);
         return updatedTask;
       } catch (error) {
-        const message = getErrorMessage(error);
+        const message = getErrorMessage$1(error);
         const updatedTask = await taskStore.updateTask(task.id, {
           state: {
             ...task.state,
@@ -2492,7 +2492,7 @@ function createTaskRunner({
     }
   };
 }
-function getErrorMessage(error) {
+function getErrorMessage$1(error) {
   if (error instanceof Error) {
     return error.message;
   }

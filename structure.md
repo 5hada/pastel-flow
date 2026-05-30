@@ -107,6 +107,14 @@ src/
     app/
       PastelFlowApp.tsx           Pastel Flow renderer 상태, IPC 호출, 화면 모드 orchestration
       taskFormState.ts            작업/설정/Secret 폼 상태 타입, 기본값, 초기 snapshot
+      usePastelFlowApp.ts         기능별 hook을 조립하고 화면 모드 전환/초기 bootstrap만 담당
+      hooks/
+        useActionWorkflowData.ts  Action/Workflow 목록 조회와 선택 상태
+        useAppSettingsData.ts     앱 설정 snapshot, 저장, 테마 적용, 목록 표시 설정 변경
+        useSecretsData.ts         Secret 목록/status/form과 생성/삭제 handler
+        useSyncData.ts            mock sync export/import, 실행 이벤트 prune handler
+        useTaskData.ts            legacy task 목록, 선택, 생성/수정/삭제/실행/중지, 실행 이벤트
+        useToolModulesData.ts     Tool Module 등록/목록/실행/Action 생성 handler
       components/
         shell/
           TopModeBar.tsx          상단 모드 전환 컨트롤

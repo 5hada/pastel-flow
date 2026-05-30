@@ -168,6 +168,47 @@ export function createTaskScheduleFromForm(
   }
 }
 
+export function createTaskEditForm(task: TaskTemplate): BrowserTaskFormState {
+  const permissions = normalizeDevicePolicy(task.permissions)
+  const browserConfig =
+    task.type === 'browser_tab_group'
+      ? normalizeBrowserTabGroupConfig(
+          task.config as Partial<BrowserTabGroupConfig>,
+        )
+      : createDefaultBrowserTabGroupConfig('')
+  const crawlerConfig = normalizeCrawlerConfig(task.config)
+  const discordConfig = task.config as Partial<DiscordBotConfig>
+  const notionConfig = task.config as Partial<NotionSyncConfig>
+  const tradingConfig = task.config as Partial<TradingBotConfig>
+
+  return {
+    taskType: task.type,
+    name: task.name,
+    browserKind: browserConfig.browserKind,
+    runMode: browserConfig.runMode,
+    profileSource: browserConfig.profileSource,
+    existingProfilePath: browserConfig.existingProfilePath ?? '',
+    initialUrls: browserConfig.initialUrls.join('\n'),
+    dynamicTemplateUpdates: browserConfig.dynamicTemplateUpdates,
+    crawlerUrls: crawlerConfig.urls.join('\n'),
+    crawlerMaxBytes: crawlerConfig.maxBytes,
+    discordCommandPrefix: discordConfig.commandPrefix ?? '!',
+    notionDatabaseId: notionConfig.databaseId ?? '',
+    tradingExchange: tradingConfig.exchange ?? '',
+    tradingSymbol: tradingConfig.symbol ?? '',
+    scheduleEnabled: task.schedule?.enabled ?? false,
+    scheduleMode: task.schedule?.mode ?? 'interval',
+    scheduleIntervalMinutes: task.schedule?.intervalMinutes ?? 60,
+    scheduleTimeOfDay: task.schedule?.timeOfDay ?? '09:00',
+    scheduleDaysOfWeek: task.schedule?.daysOfWeek?.join('\n') ?? '1\n2\n3\n4\n5',
+    visibility: permissions.visibility,
+    execution: permissions.execution,
+    allowedDeviceIds: permissions.allowedDeviceIds?.join('\n') ?? '',
+    secretRefIds:
+      permissions.secretRefs?.map((secretRef) => secretRef.id).join('\n') ?? '',
+  }
+}
+
 function getInitialScheduleRunAt(schedule: TaskSchedule): string {
   const now = new Date()
 

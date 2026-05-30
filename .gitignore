@@ -42,3 +42,4 @@ coverage/
 .heroui-docs/
 dist-electron/main.js
 dist-electron/preload.mjs
+/dist-electron

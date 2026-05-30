@@ -19,7 +19,12 @@ export type SyncImportResult = {
   linkedDevicesMerged: number
 }
 
+export type SyncMode = 'mock_file'
+
 export type SyncStatus = {
+  mode: SyncMode
+  serverDbSyncEnabled: false
+  message: string
   lastExportedAt?: string
   exportPath: string
 }

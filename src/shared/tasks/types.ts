@@ -16,6 +16,8 @@ export type BrowserRunMode =
   | 'extension_controlled'
   | 'default_browser_deeplink'
 
+export type BrowserProfileSource = 'task_profile' | 'existing_profile'
+
 export type BrowserTabGroupColor =
   | 'grey'
   | 'blue'
@@ -108,6 +110,8 @@ export type BrowserTabGroupConfig = {
   browserKind: BrowserKind
   restorePolicy: RestorePolicy
   runMode: BrowserRunMode
+  profileSource: BrowserProfileSource
+  existingProfilePath?: string
   dynamicTemplateUpdates: boolean
   tabGroupSnapshot?: BrowserTabGroupStateSnapshot
 }

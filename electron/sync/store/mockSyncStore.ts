@@ -41,6 +41,10 @@ export function createMockSyncStore({
   return {
     async getStatus() {
       return {
+        mode: 'mock_file',
+        serverDbSyncEnabled: false,
+        message:
+          '실제 서버 DB 연동은 현재 구현 범위에서 제외되어 있으며 로컬 mock 파일 sync만 사용합니다.',
         exportPath,
         lastExportedAt: await getLastExportedAt(exportPath),
       }

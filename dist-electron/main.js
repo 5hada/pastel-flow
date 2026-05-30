@@ -410,6 +410,9 @@ function createMockSyncStore({
   return {
     async getStatus() {
       return {
+        mode: "mock_file",
+        serverDbSyncEnabled: false,
+        message: "실제 서버 DB 연동은 현재 구현 범위에서 제외되어 있으며 로컬 mock 파일 sync만 사용합니다.",
         exportPath,
         lastExportedAt: await getLastExportedAt(exportPath)
       };
@@ -595,6 +598,8 @@ function normalizeBrowserTabGroupConfig(config) {
     browserKind: isBrowserKind(config.browserKind) ? config.browserKind : "chrome",
     restorePolicy: isRestorePolicy(config.restorePolicy) ? config.restorePolicy : "browser_profile",
     runMode: isBrowserRunMode(config.runMode) ? config.runMode : defaultBrowserRunMode,
+    profileSource: isBrowserProfileSource(config.profileSource) ? config.profileSource : "task_profile",
+    existingProfilePath: typeof config.existingProfilePath === "string" && config.existingProfilePath.trim() ? config.existingProfilePath.trim() : void 0,
     dynamicTemplateUpdates: typeof config.dynamicTemplateUpdates === "boolean" ? config.dynamicTemplateUpdates : defaultDynamicTemplateUpdates,
     tabGroupSnapshot: normalizeBrowserTabGroupStateSnapshot(
       config.tabGroupSnapshot
@@ -661,6 +666,9 @@ function isTaskScheduleMode(value) {
 }
 function isDeviceVisibilityPolicy(value) {
   return value === "all_devices" || value === "trusted_devices" || value === "specific_devices" || value === "local_only";
+}
+function isBrowserProfileSource(value) {
+  return value === "task_profile" || value === "existing_profile";
 }
 function normalizeBrowserTabGroupStateSnapshot(snapshot) {
   if (!snapshot || typeof snapshot !== "object") {
@@ -937,6 +945,12 @@ const browserTabGroupAdapter = {
     if (!normalizedConfig.profileId.trim()) {
       throw new Error("Browser tab group tasks require a profileId.");
     }
+    if (normalizedConfig.runMode !== "extension_controlled" && normalizedConfig.profileSource === "existing_profile") {
+      throw new Error("기존 브라우저 프로필은 확장 프로그램 제어 실행에서만 사용할 수 있습니다.");
+    }
+    if (normalizedConfig.profileSource === "existing_profile" && !normalizedConfig.existingProfilePath) {
+      throw new Error("기존 브라우저 프로필 경로를 입력해야 합니다.");
+    }
   },
   async run({ appSettings, dataDir, task, updateConfig, updateState }) {
     const config = normalizeBrowserTabGroupConfig(task.config);
@@ -952,11 +966,7 @@ const browserTabGroupAdapter = {
         message: "기본 브라우저로 초기 URL을 열었습니다."
       };
     }
-    const localProfilePath = path.join(
-      dataDir,
-      "browser-profiles",
-      config.profileId
-    );
+    const localProfilePath = getBrowserProfilePath(dataDir, config);
     await mkdir(localProfilePath, { recursive: true });
     const browserExecutable = await findBrowserExecutable(
       config.browserKind,
@@ -1023,6 +1033,12 @@ const browserTabGroupAdapter = {
     runningBrowserProcesses.delete(taskId);
   }
 };
+function getBrowserProfilePath(dataDir, config) {
+  if (config.runMode === "extension_controlled" && config.profileSource === "existing_profile" && config.existingProfilePath) {
+    return config.existingProfilePath;
+  }
+  return path.join(dataDir, "browser-profiles", config.profileId);
+}
 const extensionManifest = {
   manifest_version: 3,
   name: "Pastel Flow Tab Group Bridge",
@@ -1364,6 +1380,10 @@ const crawlerAdapter = {
   },
   async run({ dataDir, task }) {
     const config = normalizeCrawlerConfig(task.config);
+    const invalidUrl = config.urls.find((url) => !isHttpUrl(url));
+    if (invalidUrl) {
+      throw new Error(`Crawler URL 형식이 올바르지 않습니다: ${invalidUrl}`);
+    }
     const outputDirectory = path.join(dataDir, "crawler-results");
     const outputPath = path.join(
       outputDirectory,
@@ -1372,6 +1392,11 @@ const crawlerAdapter = {
     const results = await Promise.all(
       config.urls.map((url) => fetchCrawlerUrl(url, config.maxBytes))
     );
+    const capturedCount = results.filter(
+      (result) => result.status === "captured"
+    ).length;
+    const failedCount = results.length - capturedCount;
+    const message = failedCount > 0 ? `${capturedCount}개 URL 수집 성공, ${failedCount}개 실패했습니다.` : `${capturedCount}개 URL을 수집했습니다.`;
     await mkdir(outputDirectory, { recursive: true });
     await writeFile(
       outputPath,
@@ -1379,6 +1404,8 @@ const crawlerAdapter = {
         {
           taskId: task.id,
           capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          capturedCount,
+          failedCount,
           results
         },
         null,
@@ -1390,13 +1417,13 @@ const crawlerAdapter = {
     return {
       state: {
         ...task.state,
-        status: results.some((result) => result.status === "failed") ? "failed" : "idle",
+        status: failedCount > 0 ? "failed" : "idle",
         lastRunAt: (/* @__PURE__ */ new Date()).toISOString(),
-        lastError: results.some((result) => result.status === "failed") ? "일부 URL 수집에 실패했습니다." : void 0,
-        lastMessage: `${results.length}개 URL을 수집했습니다.`,
+        lastError: failedCount > 0 ? "일부 URL 수집에 실패했습니다." : void 0,
+        lastMessage: message,
         outputPath
       },
-      message: `${results.length}개 URL을 수집했습니다.`
+      message
     };
   }
 };
@@ -1434,6 +1461,14 @@ function getTitle(html) {
 function stripHtml(html) {
   return html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
+function isHttpUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 const discordBotAdapter = {
   type: "discord_bot",
   validateConfig(config) {
@@ -1441,10 +1476,13 @@ const discordBotAdapter = {
       throw new Error("Discord bot adapter는 현재 dry-run 실행만 지원합니다.");
     }
   },
-  async run({ task }) {
+  async run({ dataDir, task }) {
     return createDryRunResult(
+      dataDir,
+      task,
       task.state,
-      `Discord bot dry-run을 완료했습니다. prefix=${task.config.commandPrefix ?? "없음"}`
+      `Discord bot dry-run을 완료했습니다. prefix=${task.config.commandPrefix ?? "없음"}`,
+      "Discord API 연결과 메시지 전송은 실행하지 않았습니다."
     );
   }
 };
@@ -1455,10 +1493,13 @@ const notionSyncAdapter = {
       throw new Error("Notion sync adapter는 현재 dry-run 실행만 지원합니다.");
     }
   },
-  async run({ task }) {
+  async run({ dataDir, task }) {
     return createDryRunResult(
+      dataDir,
+      task,
       task.state,
-      `Notion sync dry-run을 완료했습니다. database=${task.config.databaseId ?? "없음"}`
+      `Notion sync dry-run을 완료했습니다. database=${task.config.databaseId ?? "없음"}`,
+      "Notion API 연결과 페이지/DB 변경은 실행하지 않았습니다."
     );
   }
 };
@@ -1466,27 +1507,65 @@ const tradingBotAdapter = {
   type: "trading_bot",
   validateConfig(config) {
     if (config.dryRun !== true) {
-      throw new Error("Trading bot adapter는 dry-run=false 실행을 거부합니다.");
+      throw new Error(
+        "Trading bot adapter는 뼈대만 제공하며 실제 자동매매 실행을 지원하지 않습니다."
+      );
     }
   },
-  async run({ task }) {
+  async run({ dataDir, task }) {
     return createDryRunResult(
+      dataDir,
+      task,
       task.state,
-      `Trading bot dry-run을 완료했습니다. ${task.config.exchange ?? "exchange 없음"} ${task.config.symbol ?? "symbol 없음"}`
+      `Trading bot skeleton dry-run을 완료했습니다. 실제 주문은 실행하지 않았습니다. ${task.config.exchange ?? "exchange 없음"} ${task.config.symbol ?? "symbol 없음"}`,
+      "자동매매, 실거래 주문, 거래소 API 주문 실행은 구현 범위에서 제외되어 있습니다."
     );
   }
 };
-function createDryRunResult(state, message) {
+async function createDryRunResult(dataDir, task, state, message, skippedAction) {
+  const outputPath = await writeDryRunArtifact(dataDir, task, message, skippedAction);
   return {
     state: {
       ...state,
       status: "idle",
       lastRunAt: (/* @__PURE__ */ new Date()).toISOString(),
       lastError: void 0,
-      lastMessage: message
+      lastMessage: message,
+      outputPath
     },
     message
   };
+}
+async function writeDryRunArtifact(dataDir, task, message, skippedAction) {
+  var _a, _b;
+  const outputDirectory = path.join(dataDir, "dry-run-results");
+  const outputPath = path.join(
+    outputDirectory,
+    `${task.type}-${task.id}-${(/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-")}.json`
+  );
+  await mkdir(outputDirectory, { recursive: true });
+  await writeFile(
+    outputPath,
+    `${JSON.stringify(
+      {
+        taskId: task.id,
+        taskName: task.name,
+        taskType: task.type,
+        capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        dryRun: true,
+        skippedAction,
+        message,
+        config: task.config,
+        secretRefCount: ((_a = task.permissions.secretRefs) == null ? void 0 : _a.length) ?? 0,
+        secretRefIds: ((_b = task.permissions.secretRefs) == null ? void 0 : _b.map((secretRef) => secretRef.id)) ?? []
+      },
+      null,
+      2
+    )}
+`,
+    "utf8"
+  );
+  return outputPath;
 }
 function createTaskAdapterRegistry(adapters) {
   const adaptersByType = /* @__PURE__ */ new Map();

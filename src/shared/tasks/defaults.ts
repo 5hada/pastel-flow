@@ -6,6 +6,7 @@ import type {
   BrowserTabGroupStateSnapshot,
   BrowserTabSnapshot,
   BrowserRunMode,
+  BrowserProfileSource,
   DevicePolicy,
   DeviceExecutionPolicy,
   DeviceVisibilityPolicy,
@@ -44,6 +45,7 @@ export function createDefaultBrowserTabGroupConfig(
     browserKind: 'chrome',
     restorePolicy: 'browser_profile',
     runMode: defaultBrowserRunMode,
+    profileSource: 'task_profile',
     dynamicTemplateUpdates: defaultDynamicTemplateUpdates,
   }
 }
@@ -63,6 +65,14 @@ export function normalizeBrowserTabGroupConfig(
     runMode: isBrowserRunMode(config.runMode)
       ? config.runMode
       : defaultBrowserRunMode,
+    profileSource: isBrowserProfileSource(config.profileSource)
+      ? config.profileSource
+      : 'task_profile',
+    existingProfilePath:
+      typeof config.existingProfilePath === 'string' &&
+      config.existingProfilePath.trim()
+        ? config.existingProfilePath.trim()
+        : undefined,
     dynamicTemplateUpdates:
       typeof config.dynamicTemplateUpdates === 'boolean'
         ? config.dynamicTemplateUpdates
@@ -236,6 +246,12 @@ function isDeviceVisibilityPolicy(
     value === 'specific_devices' ||
     value === 'local_only'
   )
+}
+
+function isBrowserProfileSource(
+  value: unknown,
+): value is BrowserProfileSource {
+  return value === 'task_profile' || value === 'existing_profile'
 }
 
 function normalizeBrowserTabGroupStateSnapshot(

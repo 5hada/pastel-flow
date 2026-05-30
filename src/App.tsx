@@ -20,32 +20,45 @@ import {
   normalizeDevicePolicy,
   normalizeBrowserTabGroupConfig,
   type BrowserKind,
+  type BrowserProfileSource,
   type BrowserRunMode,
   type BrowserTabGroupConfig,
-  type BrowserTabGroupTask,
+  type CrawlerConfig,
   type DeviceExecutionPolicy,
   type DevicePolicy,
   type DeviceVisibilityPolicy,
+  type DiscordBotConfig,
+  type NotionSyncConfig,
   type SecretRef,
   type TaskScheduleMode,
   type TaskSchedule,
   type TaskState,
   type TaskTemplate,
   type TaskType,
+  type TradingBotConfig,
 } from './shared/tasks'
 import type { LocalSecretMetadata } from './shared/secrets'
 import type { SecretStorageStatus } from './shared/secrets'
 import type { SyncImportResult, SyncStatus } from './shared/sync'
 import type { TaskRunEvent, TaskRunEventStatus } from './shared/taskRunEvents'
-import type { CreateBrowserTabGroupTaskInput } from './renderer/api/tasksApi'
+import type { CreateTaskInput } from './renderer/api/tasksApi'
 import './App.css'
 
 type BrowserTaskFormState = {
+  taskType: TaskType
   name: string
   browserKind: BrowserKind
   runMode: BrowserRunMode
+  profileSource: BrowserProfileSource
+  existingProfilePath: string
   initialUrls: string
   dynamicTemplateUpdates: boolean
+  crawlerUrls: string
+  crawlerMaxBytes: number
+  discordCommandPrefix: string
+  notionDatabaseId: string
+  tradingExchange: string
+  tradingSymbol: string
   scheduleEnabled: boolean
   scheduleMode: TaskScheduleMode
   scheduleIntervalMinutes: number
@@ -83,10 +96,19 @@ const defaultSettingsForm: AppSettings = {
 function createBrowserTaskForm(settings: AppSettings): BrowserTaskFormState {
   return {
     name: settings.defaultTaskName,
+    taskType: 'browser_tab_group',
     browserKind: settings.defaultBrowserKind,
     runMode: 'dedicated_profile',
+    profileSource: 'task_profile',
+    existingProfilePath: '',
     initialUrls: '',
     dynamicTemplateUpdates: false,
+    crawlerUrls: '',
+    crawlerMaxBytes: 50000,
+    discordCommandPrefix: '!',
+    notionDatabaseId: '',
+    tradingExchange: '',
+    tradingSymbol: '',
     scheduleEnabled: false,
     scheduleMode: 'interval',
     scheduleIntervalMinutes: 60,
@@ -109,11 +131,20 @@ const initialSettingsSnapshot = {
 }
 
 const defaultEditForm: BrowserTaskFormState = {
+  taskType: 'browser_tab_group',
   name: defaultAppSettings.defaultTaskName,
   browserKind: defaultAppSettings.defaultBrowserKind,
   runMode: 'dedicated_profile',
+  profileSource: 'task_profile',
+  existingProfilePath: '',
   initialUrls: '',
   dynamicTemplateUpdates: false,
+  crawlerUrls: '',
+  crawlerMaxBytes: 50000,
+  discordCommandPrefix: '!',
+  notionDatabaseId: '',
+  tradingExchange: '',
+  tradingSymbol: '',
   scheduleEnabled: false,
   scheduleMode: 'interval',
   scheduleIntervalMinutes: 60,
@@ -138,8 +169,20 @@ const defaultSecretStorageStatus: SecretStorageStatus = {
 }
 
 const defaultSyncStatus: SyncStatus = {
+  mode: 'mock_file',
+  serverDbSyncEnabled: false,
+  message:
+    '실제 서버 DB 연동은 현재 구현 범위에서 제외되어 있으며 로컬 mock 파일 sync만 사용합니다.',
   exportPath: '',
 }
+
+const taskTypeOptions: TaskType[] = [
+  'browser_tab_group',
+  'crawler',
+  'discord_bot',
+  'notion_sync',
+  'trading_bot',
+]
 
 function App() {
   const [tasks, setTasks] = useState<TaskTemplate[]>([])
@@ -351,18 +394,10 @@ function App() {
       return
     }
 
-    const profileId = `browser-${crypto.randomUUID()}`
-    const config = {
-      ...createDefaultBrowserTabGroupConfig(profileId),
-      browserKind: createForm.browserKind,
-      runMode: createForm.runMode,
-      initialUrls: parseInitialUrls(createForm.initialUrls),
-      dynamicTemplateUpdates: createForm.dynamicTemplateUpdates,
-    }
-    const input: CreateBrowserTabGroupTaskInput = {
+    const input: CreateTaskInput = {
       name: trimmedName,
-      type: 'browser_tab_group',
-      config,
+      type: createForm.taskType,
+      config: createTaskConfigFromForm(createForm),
       permissions: createDevicePolicyFromForm(createForm, currentDevice),
       schedule: createTaskScheduleFromForm(createForm),
     }
@@ -394,8 +429,8 @@ function App() {
   }
 
   function openEditMode() {
-    if (selectedTask?.type === 'browser_tab_group') {
-      startEditing(selectedTask as BrowserTabGroupTask)
+    if (selectedTask) {
+      startEditing(selectedTask)
     }
     setWorkspaceMode('edit')
   }
@@ -451,16 +486,35 @@ function App() {
     }
   }
 
-  function startEditing(task: BrowserTabGroupTask) {
-    const config = normalizeBrowserTabGroupConfig(task.config)
+  function startEditing(task: TaskTemplate) {
     const permissions = normalizeDevicePolicy(task.permissions)
+    const browserConfig =
+      task.type === 'browser_tab_group'
+        ? normalizeBrowserTabGroupConfig(
+            task.config as Partial<BrowserTabGroupConfig>,
+          )
+        : createDefaultBrowserTabGroupConfig('')
+    const crawlerConfig = normalizeCrawlerConfig(task.config)
+    const discordConfig = task.config as Partial<DiscordBotConfig>
+    const notionConfig = task.config as Partial<NotionSyncConfig>
+    const tradingConfig = task.config as Partial<TradingBotConfig>
+
     setConfirmDeleteTaskId(null)
     setEditForm({
+      taskType: task.type,
       name: task.name,
-      browserKind: config.browserKind,
-      runMode: config.runMode,
-      initialUrls: config.initialUrls.join('\n'),
-      dynamicTemplateUpdates: config.dynamicTemplateUpdates,
+      browserKind: browserConfig.browserKind,
+      runMode: browserConfig.runMode,
+      profileSource: browserConfig.profileSource,
+      existingProfilePath: browserConfig.existingProfilePath ?? '',
+      initialUrls: browserConfig.initialUrls.join('\n'),
+      dynamicTemplateUpdates: browserConfig.dynamicTemplateUpdates,
+      crawlerUrls: crawlerConfig.urls.join('\n'),
+      crawlerMaxBytes: crawlerConfig.maxBytes,
+      discordCommandPrefix: discordConfig.commandPrefix ?? '!',
+      notionDatabaseId: notionConfig.databaseId ?? '',
+      tradingExchange: tradingConfig.exchange ?? '',
+      tradingSymbol: tradingConfig.symbol ?? '',
       scheduleEnabled: task.schedule?.enabled ?? false,
       scheduleMode: task.schedule?.mode ?? 'interval',
       scheduleIntervalMinutes: task.schedule?.intervalMinutes ?? 60,
@@ -522,27 +576,17 @@ function App() {
       return
     }
 
-    if (selectedTask.type !== 'browser_tab_group') {
-      setErrorMessage('브라우저 탭 그룹 작업만 이 화면에서 수정할 수 있습니다.')
-      return
-    }
-
-    const currentConfig = normalizeBrowserTabGroupConfig(
-      selectedTask.config as Partial<BrowserTabGroupConfig>,
-    )
-    const config: BrowserTabGroupConfig = {
-      ...currentConfig,
-      browserKind: editForm.browserKind,
-      runMode: editForm.runMode,
-      initialUrls: parseInitialUrls(editForm.initialUrls),
-      dynamicTemplateUpdates: editForm.dynamicTemplateUpdates,
-    }
-
     try {
       setErrorMessage(null)
       const updatedTask = await window.pastelFlow.tasks.update(selectedTask.id, {
         name: trimmedName,
-        config,
+        config: createTaskConfigFromForm(
+          {
+            ...editForm,
+            taskType: selectedTask.type,
+          },
+          selectedTask,
+        ),
         permissions: createDevicePolicyFromForm(editForm, currentDevice),
         schedule: createTaskScheduleFromForm(editForm),
       })
@@ -574,8 +618,8 @@ function App() {
       setConfirmDeleteTaskId(null)
       if (!nextTask) {
         setWorkspaceMode('run')
-      } else if (nextTask.type === 'browser_tab_group') {
-        startEditing(nextTask as BrowserTabGroupTask)
+      } else {
+        startEditing(nextTask)
       }
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
@@ -798,9 +842,7 @@ function App() {
             onSelectSettingsCategory={setSelectedSettingsCategory}
               onSelectTask={(task) => {
                 setSelectedTaskId(task.id)
-                if (task.type === 'browser_tab_group') {
-                  startEditing(task as BrowserTabGroupTask)
-                }
+                startEditing(task)
               }}
           />
         ) : null}
@@ -834,9 +876,7 @@ function App() {
               onSelect={(task) => {
                 setSelectedTaskId(task.id)
                 setConfirmDeleteTaskId(null)
-                if (task.type === 'browser_tab_group') {
-                  startEditing(task as BrowserTabGroupTask)
-                }
+                startEditing(task)
               }}
             />
           ) : null}
@@ -1136,6 +1176,11 @@ function ToolsPanel({
           </div>
         </div>
         <dl className="detail-list">
+          <DetailItem label="Sync mode" value={getSyncModeLabel(syncStatus.mode)} />
+          <DetailItem
+            label="Server DB"
+            value={syncStatus.serverDbSyncEnabled ? '사용' : '미사용'}
+          />
           <DetailItem
             label="내보내기 파일"
             value={syncStatus.exportPath || '아직 없음'}
@@ -1145,6 +1190,9 @@ function ToolsPanel({
             value={formatDate(syncStatus.lastExportedAt)}
           />
         </dl>
+        {syncStatus.message ? (
+          <p className="muted-text">{syncStatus.message}</p>
+        ) : null}
         <div className="form-actions">
           <button type="button" onClick={() => void onExportSyncSnapshot()}>
             내보내기
@@ -1384,6 +1432,24 @@ function CreateTaskPanel({
       <form className="task-form" onSubmit={onSubmit}>
         <div className="form-grid">
           <label>
+            작업 타입
+            <select
+              value={createForm.taskType}
+              onChange={(event) =>
+                onChange({
+                  ...createForm,
+                  taskType: event.target.value as TaskType,
+                })
+              }
+            >
+              {taskTypeOptions.map((taskType) => (
+                <option key={taskType} value={taskType}>
+                  {getTaskTypeLabel(taskType)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
             이름
             <input
               value={createForm.name}
@@ -1396,66 +1462,8 @@ function CreateTaskPanel({
               placeholder="예: 리서치 세션"
             />
           </label>
-          <label>
-            브라우저
-            <select
-              value={createForm.browserKind}
-              onChange={(event) =>
-                onChange({
-                  ...createForm,
-                  browserKind: event.target.value as BrowserKind,
-                })
-              }
-            >
-              <option value="chrome">Chrome</option>
-              <option value="edge">Edge</option>
-              <option value="chromium">Chromium</option>
-            </select>
-          </label>
-          <label>
-            실행 방식
-            <select
-              value={createForm.runMode}
-              onChange={(event) =>
-                onChange({
-                  ...createForm,
-                  runMode: event.target.value as BrowserRunMode,
-                })
-              }
-            >
-              <option value="dedicated_profile">전용 프로필</option>
-              <option value="extension_controlled">확장 프로그램 제어</option>
-              <option value="default_browser_deeplink">기본 브라우저 연결</option>
-            </select>
-          </label>
         </div>
-        <label>
-          초기 URL
-          <textarea
-            value={createForm.initialUrls}
-            onChange={(event) =>
-              onChange({
-                ...createForm,
-                initialUrls: event.target.value,
-              })
-            }
-            placeholder="한 줄에 하나씩 입력"
-            rows={5}
-          />
-        </label>
-        <label className="inline-check">
-          <input
-            checked={createForm.dynamicTemplateUpdates}
-            type="checkbox"
-            onChange={(event) =>
-              onChange({
-                ...createForm,
-                dynamicTemplateUpdates: event.target.checked,
-              })
-            }
-          />
-          실행 후 열린 탭 URL을 템플릿에 반영
-        </label>
+        <TaskTypeConfigFields form={createForm} onChange={onChange} />
         <ScheduleFields form={createForm} onChange={onChange} />
         <PolicyFields
           currentDevice={currentDevice}
@@ -1527,22 +1535,25 @@ function EditWorkspace({
   return (
     <section aria-label="기존 작업 수정">
       <section className="mode-panel" aria-label="선택한 작업 수정">
-        {config ? (
-          <TaskEditPanel
-            currentDevice={currentDevice}
-            editForm={editForm}
-            onChange={onChange}
-            onSubmit={onSubmit}
-            secrets={secrets}
-          />
-        ) : null}
+        <TaskEditPanel
+          currentDevice={currentDevice}
+          editForm={editForm}
+          onChange={onChange}
+          onSubmit={onSubmit}
+          secrets={secrets}
+        />
 
         <dl className="detail-list">
           <DetailItem label="작업 타입" value={getTaskTypeLabel(selectedTask.type)} />
+          <DetailItem label="설정 요약" value={getTaskConfigSummary(selectedTask)} />
           {config ? (
             <>
               <DetailItem label="브라우저" value={getBrowserKindLabel(config.browserKind)} />
               <DetailItem label="실행 방식" value={getBrowserRunModeLabel(config.runMode)} />
+              <DetailItem
+                label="프로필 소스"
+                value={getBrowserProfileSourceLabel(config.profileSource)}
+              />
               <DetailItem
                 label="동적 업데이트"
                 value={config.dynamicTemplateUpdates ? '사용' : '사용 안 함'}
@@ -1557,6 +1568,10 @@ function EditWorkspace({
           <DetailItem label="예약" value={getTaskScheduleLabel(selectedTask.schedule)} />
           <DetailItem label="상태" value={getTaskStatusLabel(selectedTask.state.status)} />
           <DetailItem label="마지막 실행" value={formatDate(selectedTask.state.lastRunAt)} />
+          <DetailItem
+            label="마지막 메시지"
+            value={selectedTask.state.lastMessage ?? '아직 없음'}
+          />
           <DetailItem
             label="출력 경로"
             value={
@@ -2040,64 +2055,7 @@ function TaskEditPanel({
             }
           />
         </label>
-        <label>
-          브라우저
-          <select
-            value={editForm.browserKind}
-            onChange={(event) =>
-              onChange({
-                ...editForm,
-                browserKind: event.target.value as BrowserKind,
-              })
-            }
-          >
-            <option value="chrome">Chrome</option>
-            <option value="edge">Edge</option>
-            <option value="chromium">Chromium</option>
-          </select>
-        </label>
-        <label>
-          실행 방식
-          <select
-            value={editForm.runMode}
-            onChange={(event) =>
-              onChange({
-                ...editForm,
-                runMode: event.target.value as BrowserRunMode,
-              })
-            }
-          >
-            <option value="dedicated_profile">전용 프로필</option>
-            <option value="extension_controlled">확장 프로그램 제어</option>
-            <option value="default_browser_deeplink">기본 브라우저 연결</option>
-          </select>
-        </label>
-        <label>
-          초기 URL
-          <textarea
-            value={editForm.initialUrls}
-            onChange={(event) =>
-              onChange({
-                ...editForm,
-                initialUrls: event.target.value,
-              })
-            }
-            rows={5}
-          />
-        </label>
-        <label className="inline-check">
-          <input
-            checked={editForm.dynamicTemplateUpdates}
-            type="checkbox"
-            onChange={(event) =>
-              onChange({
-                ...editForm,
-                dynamicTemplateUpdates: event.target.checked,
-              })
-            }
-          />
-          실행 후 열린 탭 URL을 템플릿에 반영
-        </label>
+        <TaskTypeConfigFields form={editForm} onChange={onChange} />
         <ScheduleFields form={editForm} onChange={onChange} />
         <PolicyFields
           currentDevice={currentDevice}
@@ -2147,6 +2105,75 @@ function parseDaysOfWeek(value: string): TaskSchedule['daysOfWeek'] {
   return days.length > 0
     ? ([...new Set(days)] as TaskSchedule['daysOfWeek'])
     : undefined
+}
+
+function createTaskConfigFromForm(
+  form: BrowserTaskFormState,
+  existingTask?: TaskTemplate,
+):
+  | BrowserTabGroupConfig
+  | CrawlerConfig
+  | DiscordBotConfig
+  | NotionSyncConfig
+  | TradingBotConfig {
+  switch (form.taskType) {
+    case 'browser_tab_group': {
+      const currentConfig =
+        existingTask?.type === 'browser_tab_group'
+          ? normalizeBrowserTabGroupConfig(
+              existingTask.config as Partial<BrowserTabGroupConfig>,
+            )
+          : createDefaultBrowserTabGroupConfig(`browser-${crypto.randomUUID()}`)
+      return {
+        ...currentConfig,
+        browserKind: form.browserKind,
+        runMode: form.runMode,
+        profileSource: form.profileSource,
+        existingProfilePath: form.existingProfilePath.trim() || undefined,
+        initialUrls: parseInitialUrls(form.initialUrls),
+        dynamicTemplateUpdates: form.dynamicTemplateUpdates,
+      }
+    }
+    case 'crawler':
+      return {
+        urls: parseInitialUrls(form.crawlerUrls),
+        maxBytes: normalizeCrawlerMaxBytes(form.crawlerMaxBytes),
+      }
+    case 'discord_bot':
+      return {
+        dryRun: true,
+        commandPrefix: form.discordCommandPrefix.trim() || undefined,
+      }
+    case 'notion_sync':
+      return {
+        dryRun: true,
+        databaseId: form.notionDatabaseId.trim() || undefined,
+      }
+    case 'trading_bot':
+      return {
+        dryRun: true,
+        exchange: form.tradingExchange.trim() || undefined,
+        symbol: form.tradingSymbol.trim() || undefined,
+      }
+  }
+}
+
+function normalizeCrawlerConfig(config: unknown): CrawlerConfig {
+  const candidate = config as Partial<CrawlerConfig>
+  return {
+    urls: Array.isArray(candidate?.urls)
+      ? candidate.urls
+          .map((url) => (typeof url === 'string' ? url.trim() : ''))
+          .filter(Boolean)
+      : [],
+    maxBytes: normalizeCrawlerMaxBytes(candidate?.maxBytes),
+  }
+}
+
+function normalizeCrawlerMaxBytes(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.min(Math.max(Math.round(value), 1024), 500000)
+    : 50000
 }
 
 function createDevicePolicyFromForm(
@@ -2213,6 +2240,226 @@ function createTaskScheduleFromForm(
 type ScheduleFieldsProps = {
   form: BrowserTaskFormState
   onChange(value: BrowserTaskFormState): void
+}
+
+function TaskTypeConfigFields({ form, onChange }: ScheduleFieldsProps) {
+  switch (form.taskType) {
+    case 'browser_tab_group':
+      return <BrowserConfigFields form={form} onChange={onChange} />
+    case 'crawler':
+      return <CrawlerConfigFields form={form} onChange={onChange} />
+    case 'discord_bot':
+      return <DiscordBotConfigFields form={form} onChange={onChange} />
+    case 'notion_sync':
+      return <NotionSyncConfigFields form={form} onChange={onChange} />
+    case 'trading_bot':
+      return <TradingBotConfigFields form={form} onChange={onChange} />
+  }
+}
+
+function BrowserConfigFields({ form, onChange }: ScheduleFieldsProps) {
+  return (
+    <>
+      <div className="form-grid">
+        <label>
+          브라우저
+          <select
+            value={form.browserKind}
+            onChange={(event) =>
+              onChange({
+                ...form,
+                browserKind: event.target.value as BrowserKind,
+              })
+            }
+          >
+            <option value="chrome">Chrome</option>
+            <option value="edge">Edge</option>
+            <option value="chromium">Chromium</option>
+          </select>
+        </label>
+        <label>
+          실행 방식
+          <select
+            value={form.runMode}
+            onChange={(event) =>
+              onChange({
+                ...form,
+                runMode: event.target.value as BrowserRunMode,
+              })
+            }
+          >
+            <option value="dedicated_profile">전용 프로필</option>
+            <option value="extension_controlled">확장 프로그램 제어</option>
+            <option value="default_browser_deeplink">기본 브라우저 연결</option>
+          </select>
+        </label>
+        {form.runMode === 'extension_controlled' ? (
+          <label>
+            프로필 소스
+            <select
+              value={form.profileSource}
+              onChange={(event) =>
+                onChange({
+                  ...form,
+                  profileSource: event.target.value as BrowserProfileSource,
+                })
+              }
+            >
+              <option value="task_profile">작업 전용 프로필</option>
+              <option value="existing_profile">기존 브라우저 프로필</option>
+            </select>
+          </label>
+        ) : null}
+      </div>
+      {form.runMode === 'extension_controlled' &&
+      form.profileSource === 'existing_profile' ? (
+        <label>
+          기존 프로필 경로
+          <input
+            value={form.existingProfilePath}
+            onChange={(event) =>
+              onChange({
+                ...form,
+                existingProfilePath: event.target.value,
+              })
+            }
+          />
+        </label>
+      ) : null}
+      <label>
+        초기 URL
+        <textarea
+          value={form.initialUrls}
+          onChange={(event) =>
+            onChange({
+              ...form,
+              initialUrls: event.target.value,
+            })
+          }
+          placeholder="한 줄에 하나씩 입력"
+          rows={5}
+        />
+      </label>
+      <label className="inline-check">
+        <input
+          checked={form.dynamicTemplateUpdates}
+          type="checkbox"
+          onChange={(event) =>
+            onChange({
+              ...form,
+              dynamicTemplateUpdates: event.target.checked,
+            })
+          }
+        />
+        실행 후 열린 탭 URL을 템플릿에 반영
+      </label>
+    </>
+  )
+}
+
+function CrawlerConfigFields({ form, onChange }: ScheduleFieldsProps) {
+  return (
+    <>
+      <label>
+        수집 URL
+        <textarea
+          value={form.crawlerUrls}
+          onChange={(event) =>
+            onChange({
+              ...form,
+              crawlerUrls: event.target.value,
+            })
+          }
+          placeholder="한 줄에 하나씩 입력"
+          rows={5}
+        />
+      </label>
+      <label>
+        URL당 최대 bytes
+        <input
+          max={500000}
+          min={1024}
+          type="number"
+          value={form.crawlerMaxBytes}
+          onChange={(event) =>
+            onChange({
+              ...form,
+              crawlerMaxBytes: Number(event.target.value),
+            })
+          }
+        />
+      </label>
+    </>
+  )
+}
+
+function DiscordBotConfigFields({ form, onChange }: ScheduleFieldsProps) {
+  return (
+    <label>
+      명령 prefix
+      <input
+        value={form.discordCommandPrefix}
+        onChange={(event) =>
+          onChange({
+            ...form,
+            discordCommandPrefix: event.target.value,
+          })
+        }
+      />
+    </label>
+  )
+}
+
+function NotionSyncConfigFields({ form, onChange }: ScheduleFieldsProps) {
+  return (
+    <label>
+      Database ID
+      <input
+        value={form.notionDatabaseId}
+        onChange={(event) =>
+          onChange({
+            ...form,
+            notionDatabaseId: event.target.value,
+          })
+        }
+      />
+    </label>
+  )
+}
+
+function TradingBotConfigFields({ form, onChange }: ScheduleFieldsProps) {
+  return (
+    <fieldset className="settings-fieldset">
+      <legend>자동매매 skeleton</legend>
+      <p className="muted-text">실제 주문 실행 없이 dry-run 뼈대만 저장합니다.</p>
+      <div className="form-grid">
+        <label>
+          Exchange
+          <input
+            value={form.tradingExchange}
+            onChange={(event) =>
+              onChange({
+                ...form,
+                tradingExchange: event.target.value,
+              })
+            }
+          />
+        </label>
+        <label>
+          Symbol
+          <input
+            value={form.tradingSymbol}
+            onChange={(event) =>
+              onChange({
+                ...form,
+                tradingSymbol: event.target.value,
+              })
+            }
+          />
+        </label>
+      </div>
+    </fieldset>
+  )
 }
 
 function ScheduleFields({ form, onChange }: ScheduleFieldsProps) {
@@ -2605,6 +2852,44 @@ function getTaskTypeLabel(taskType: TaskType): string {
   }
 }
 
+function getTaskConfigSummary(task: TaskTemplate): string {
+  switch (task.type) {
+    case 'browser_tab_group': {
+      const config = normalizeBrowserTabGroupConfig(
+        task.config as Partial<BrowserTabGroupConfig>,
+      )
+      return `${getBrowserKindLabel(config.browserKind)} · ${getBrowserRunModeLabel(
+        config.runMode,
+      )} · URL ${config.initialUrls.length}개`
+    }
+    case 'crawler': {
+      const config = normalizeCrawlerConfig(task.config)
+      return `URL ${config.urls.length}개 · 최대 ${config.maxBytes} bytes`
+    }
+    case 'discord_bot': {
+      const config = task.config as Partial<DiscordBotConfig>
+      return `dry-run · prefix ${config.commandPrefix ?? '!'}`
+    }
+    case 'notion_sync': {
+      const config = task.config as Partial<NotionSyncConfig>
+      return `dry-run · database ${config.databaseId || '미지정'}`
+    }
+    case 'trading_bot': {
+      const config = task.config as Partial<TradingBotConfig>
+      return `skeleton dry-run · 실제 주문 없음 · ${config.exchange || 'exchange 미지정'} / ${
+        config.symbol || 'symbol 미지정'
+      }`
+    }
+  }
+}
+
+function getSyncModeLabel(mode: SyncStatus['mode']): string {
+  switch (mode) {
+    case 'mock_file':
+      return '로컬 mock 파일'
+  }
+}
+
 function getNavigationCategoryLabel(category: NavigationCategory): string {
   switch (category) {
     case 'all':
@@ -2665,6 +2950,17 @@ function getBrowserKindLabel(browserKind: BrowserKind): string {
       return 'Edge'
     case 'chromium':
       return 'Chromium'
+  }
+}
+
+function getBrowserProfileSourceLabel(
+  profileSource: BrowserProfileSource,
+): string {
+  switch (profileSource) {
+    case 'task_profile':
+      return '작업 전용 프로필'
+    case 'existing_profile':
+      return '기존 브라우저 프로필'
   }
 }
 

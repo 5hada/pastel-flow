@@ -2,322 +2,266 @@
 
 ## 1. 프로젝트 비전
 
-Pastel Flow는 반복적으로 사용하는 작업 환경을 템플릿으로 저장하고 실행하는 로컬 우선 데스크톱 앱이다.
+Pastel Flow는 반복되는 작업 환경을 로컬 우선 방식으로 정의, 실행, 보존하는 데스크톱 자동화 앱이다.
 
-초기 목표는 브라우저 탭 그룹을 작업 템플릿으로 저장하고, 템플릿 실행 시 해당 브라우저 환경을 다시 여는 것이다. 이후 Discord bot, crawler, Notion sync, trading bot 같은 작업을 같은 구조 안에서 확장한다.
+앞으로의 제품 기준은 단일 작업 템플릿이 아니라 **Action 기반 Workflow 실행 플랫폼**이다. 사용자는 실행 가능한 최소 단위인 Action을 만들고, 하나 이상의 Action을 Workflow로 묶어 실행한다. 실행 페이지는 Workflow 런처가 되며, 개별 Action은 Workflow를 구성하는 재사용 가능한 블록으로 다룬다.
 
-최종적으로는 여러 기기에서 동일한 작업 설정을 불러오되, 기기별 권한과 민감 정보 정책을 적용해 특정 작업이나 secret이 허용된 기기에서만 보이거나 실행되도록 만든다.
-
-이 프로젝트의 정체성은 단순 자동화 도구가 아니라, **작업 템플릿의 설정, 실행 상태, 권한, 동기화를 관리하는 플랫폼**이다.
+기존 브라우저 탭 그룹, crawler, Discord/Notion/trading dry-run 작업은 이후 각각 단일 Action을 포함한 Workflow로 마이그레이션한다. 서버 DB, 계정 backend, 원격 transport는 아직 구현하지 않고, 로컬 저장과 mock sync 범위 안에서 설계를 유지한다.
 
 ## 2. 핵심 원칙
 
-- **로컬 우선**: 첫 버전은 로컬 저장소를 기준으로 동작한다. 서버 DB 동기화는 이후 단계에서 추가한다.
-- **상태 보존**: 작업 실행 중 사용자가 변경한 상태는 다음 실행에서 가능한 한 유지한다.
-- **기기별 권한**: 민감한 작업은 신뢰된 기기에서만 열람하거나 실행할 수 있도록 설계한다.
-- **secret 분리**: API key, token, 거래소 key, 로그인 세션 같은 민감 정보는 일반 작업 설정과 분리한다.
-- **확장 가능한 작업 구조**: 작업 타입별 실행 로직은 코어에 직접 누적하지 않고 adapter 구조로 추가한다.
-- **Electron 역할 분리**: main process는 로컬 리소스, 파일 시스템, 외부 프로세스 실행을 담당하고, React renderer는 작업 관리 UI를 담당한다.
+- **로컬 우선**: 첫 실행 모델은 로컬 저장소를 기준으로 동작한다. 원격 서버 DB 연동은 현재 구현 범위에서 제외한다.
+- **Workflow 중심 실행**: 사용자가 실행 페이지에서 보는 대상은 항상 Workflow이다. Action은 Workflow 내부의 실행 단위로만 직접 실행 흐름에 참여한다.
+- **Action 재사용성**: 브라우저 열기, crawler 실행, tool module 실행, dry-run 호출 같은 기능은 독립 Action으로 정의하고 여러 Workflow에서 재사용할 수 있게 한다.
+- **상태와 로그의 기준 통일**: 예약 실행, 실행 상태, 실행 이벤트, 권한 정책은 Workflow를 중심으로 관리하고, 필요할 때 Action 단위 상세를 함께 기록한다.
+- **secret 분리**: API key, token, 거래소 key, 로그인 세션 같은 민감 정보는 Action config나 Workflow config에 직접 저장하지 않고 secret 참조로 연결한다.
+- **명시적 권한**: 기기 권한, secret 참조, tool module permission은 실행 전에 확인 가능한 형태로 노출한다.
+- **도구 모듈 표준화**: 도구는 `tool-schema.md` 규격을 따르는 독립 모듈로 업로드, 검증, 등록, 실행한다.
+- **Electron 역할 분리**: main process는 로컬 리소스, 파일 시스템, 외부 프로세스와 실행 엔진을 담당하고, React renderer는 Workflow/Action/설정 UI를 담당한다.
 
-## 3. MVP 1: 브라우저 탭 그룹 템플릿
+## 3. 제품 구조
 
-첫 번째 MVP는 브라우저 탭 그룹 작업을 만드는 데 집중한다.
+### 3.1 Action
 
-사용자는 작업 템플릿을 만들고, 템플릿에 브라우저 탭 그룹 설정을 저장한다. 템플릿을 실행하면 Pastel Flow가 해당 작업 전용 브라우저 프로필을 열고, 사용자는 그 안에서 탭을 추가하거나 닫거나 로그인 상태를 변경할 수 있다. 브라우저를 종료한 뒤 다시 같은 템플릿을 실행하면 이전 세션이 유지되어야 한다.
+Action은 실행 가능한 최소 단위이다.
 
-템플릿의 동적 업데이트를 켠 경우 Pastel Flow는 브라우저 실행 중 열린 탭 URL 목록을 주기적으로 캡처하고, 브라우저 종료 시 마지막 URL 목록을 템플릿의 `initialUrls`에 반영한다. 전용 프로필 방식에서는 브라우저의 실제 탭 그룹 이름, 색, 그룹 관계를 안정적으로 읽을 수 없으므로 MVP의 동적 업데이트 범위는 URL 목록으로 제한한다. 탭 그룹 메타데이터 동기화는 향후 `extension_controlled` 실행 방식에서 구현한다.
+Action 예시:
 
-초기 구현 방식은 **템플릿별 전용 브라우저 프로필 실행**으로 고정한다.
+- 브라우저 프로필 또는 기본 브라우저로 URL 열기
+- 브라우저 탭 그룹 snapshot 갱신
+- crawler로 URL 목록 수집
+- Discord/Notion/trading dry-run 실행
+- 업로드된 tool module 실행
 
-- 각 브라우저 작업 템플릿은 고유한 `profileId`를 가진다.
-- Electron main process는 해당 `profileId`에 대응하는 사용자 데이터 디렉터리로 Chrome, Edge, Chromium 계열 브라우저를 실행한다.
-- 탭, 세션, 로그인 상태 등 브라우저가 자체적으로 보존하는 데이터는 해당 프로필 디렉터리에 남긴다.
-- MVP에서는 기존 사용자의 기본 브라우저 프로필을 직접 조작하지 않는다.
-- 브라우저 확장 프로그램 방식은 이후 고급 기능으로 검토한다.
+Action은 타입, config, secret 참조, 입력 정의, 출력 정의, 실행 가능 여부, 상태 요약을 가진다. Action 자체는 재사용 가능한 정의이며, 실제 실행은 Workflow 안에서 수행한다.
 
-전용 프로필 방식은 작업별 격리와 구현 단순성이 장점이지만, 로그인 측면에서는 한계가 있다. 같은 서비스라도 작업마다 다시 로그인해야 할 수 있고, SSO, 2FA, 보안 알림이 반복될 수 있다. 따라서 브라우저 작업 config에는 실행 방식을 나타내는 `runMode`를 포함한다. MVP 기본값은 `dedicated_profile`이며, 이후 확장 프로그램 기반 제어가 가능해지면 `extension_controlled` 실행 방식을 같은 작업 모델 안에 추가한다.
+### 3.2 Workflow
 
-## 4. 아키텍처 방향
+Workflow는 하나 이상의 Action을 순서 또는 조건 기반으로 묶은 실행 단위이다.
 
-현재 프로젝트는 `Electron + React + TypeScript + Vite` 기반이다. 이 구조를 유지하면서 역할을 다음처럼 나눈다.
+Workflow는 다음 책임을 가진다.
 
-### Renderer
+- 실행 페이지에 표시되는 런처 항목
+- Action 목록과 실행 순서 관리
+- Action 간 입력/출력 연결
+- Workflow 단위 예약 실행
+- Workflow 단위 visibility/execution policy
+- Workflow 단위 실행 상태와 최근 실행 이벤트 표시
 
-React renderer는 사용자 인터페이스를 담당한다.
+기존 단일 작업은 모두 “Action 1개를 가진 Workflow”로 이전한다.
 
-- 작업 템플릿 목록 표시
-- 작업 생성, 수정, 삭제 UI
-- 작업 실행 버튼
-- 작업 상태와 최근 실행 로그 표시
-- 기기 권한과 민감 작업 표시 정책 UI
+### 3.3 Tool Module
 
-### Main Process
+Tool Module은 `tool-schema.md`를 따르는 독립형 도구 패키지이다.
 
-Electron main process는 로컬 시스템과 맞닿은 작업을 담당한다.
+도구 페이지는 더 이상 mock sync나 실행 이벤트 정리 화면이 아니다. 도구 페이지의 책임은 다음으로 제한한다.
 
-- 작업 템플릿 저장소 접근
-- 브라우저 프로필 디렉터리 관리
-- 외부 브라우저 프로세스 실행
-- 작업 실행 상태 기록
-- secret 저장소 접근
-- 향후 백그라운드 작업 adapter 실행
+- tool module 업로드
+- `manifest.json`, `logic.js`, inputs, outputs, permissions 검증
+- 등록된 도구 목록 관리
+- inputs 정의 기반 자동 실행 UI 제공
+- tool module 단독 실행
+- Workflow에 `tool_action`으로 추가
 
-### Storage
+`view.html`과 `style.css`는 선택 사항이다. 기본 실행 UI는 manifest inputs 정의로 자동 생성한다. 도구가 요청한 permission은 manifest에 선언된 항목만 허용하며, 실행 전 사용자에게 표시한다.
 
-초기 저장소는 로컬 우선으로 설계한다.
+### 3.4 Settings
 
-후보는 SQLite 또는 앱 데이터 디렉터리의 구조화된 파일 저장소이다. MVP에서는 구현 속도를 고려해 단순한 로컬 저장 방식으로 시작할 수 있지만, 데이터 모델은 이후 SQLite와 서버 DB 동기화로 옮겨갈 수 있게 유지한다.
+설정 페이지는 앱 운영과 데이터 관리 기능을 담당한다.
 
-서버 DB 동기화는 후속 단계에서 추가한다. 동기화 대상은 일반 작업 설정과 비민감 상태를 우선으로 하며, secret과 로그인 세션은 기본적으로 로컬 전용으로 다룬다.
+기존 도구 페이지에 있던 다음 항목은 설정 페이지의 카테고리로 이동한다.
 
-## 5. 데이터 모델 초안
+- 동기화
+- 실행 이벤트
+- 데이터 관리
 
-아래 타입은 초기 구현 기준을 맞추기 위한 개념 모델이다. 실제 코드 추가 시 TypeScript 타입 또는 schema로 옮긴다.
+설정 페이지의 주요 카테고리는 다음을 기준으로 한다.
+
+- 일반: 테마, 기본 브라우저, 새 항목 기본값
+- 브라우저: 브라우저 실행 파일 경로, 브라우저 실행 정책
+- 기기/권한: 현재 기기, 연동 기기, visibility/execution policy 기본값
+- Secret: safeStorage 상태, secret 생성/삭제, 참조 현황
+- 동기화: mock export/import, 서버 DB sync 비활성 상태 표시
+- 실행 이벤트: 보존 개수, 검색/필터 기본값, 이벤트 정리
+- 데이터 관리: userData 위치, snapshot, 백업/복구 후보 기능
+
+## 4. 주요 데이터 모델 방향
+
+아래 모델은 구현 방향을 맞추기 위한 개념 모델이다. 실제 타입과 schema는 구현 시 `src/shared` 기준으로 구체화한다.
 
 ```ts
-type TaskType =
-  | 'browser_tab_group'
-  | 'discord_bot'
-  | 'crawler'
-  | 'notion_sync'
-  | 'trading_bot';
+type ActionType =
+  | 'browser_action'
+  | 'crawler_action'
+  | 'discord_dry_run_action'
+  | 'notion_dry_run_action'
+  | 'trading_dry_run_action'
+  | 'tool_action';
 
-type TaskTemplate<TConfig = unknown, TState = unknown> = {
+type ActionDefinition<TConfig = unknown> = {
   id: string;
   name: string;
-  type: TaskType;
+  type: ActionType;
   config: TConfig;
-  state: TState;
-  permissions: DevicePolicy;
-  schedule?: TaskSchedule;
+  secretRefs?: SecretRef[];
+  inputSchema?: ActionIOField[];
+  outputSchema?: ActionIOField[];
   createdAt: string;
   updatedAt: string;
 };
 
-type BrowserTabGroupConfig = {
-  profileId: string;
-  initialUrls: string[];
-  browserKind: 'chrome' | 'edge' | 'chromium';
-  restorePolicy: 'browser_profile' | 'initial_urls_only';
-  runMode: 'dedicated_profile' | 'extension_controlled' | 'default_browser_deeplink';
-  dynamicTemplateUpdates: boolean;
-  tabGroupSnapshot?: BrowserTabGroupStateSnapshot;
-};
-
-type TaskState = {
-  status: 'idle' | 'running' | 'failed';
-  lastRunAt?: string;
-  lastError?: string;
-  localProfilePath?: string;
-};
-
-type DevicePolicy = {
-  visibility: 'all_devices' | 'trusted_devices' | 'specific_devices' | 'local_only';
-  execution: 'anywhere' | 'trusted_only' | 'specific_devices' | 'local_only';
-  allowedDeviceIds?: string[];
-  secretRefs?: SecretRef[];
-};
-
-type SecretRef = {
+type WorkflowDefinition = {
   id: string;
-  scope: 'local_device' | 'trusted_devices';
-  description?: string;
+  name: string;
+  actionRefs: WorkflowActionRef[];
+  permissions: DevicePolicy;
+  schedule?: WorkflowSchedule;
+  state: WorkflowState;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type WorkflowActionRef = {
+  id: string;
+  actionId: string;
+  order: number;
+  inputMapping?: Record<string, string>;
+  enabled: boolean;
 };
 ```
 
-## 6. 작업 Adapter 구조
+마이그레이션 기준:
 
-브라우저 탭 그룹 외의 작업은 `TaskAdapter` 구조로 확장한다.
+- 기존 `TaskTemplate` 데이터는 v1 legacy 데이터로 취급한다.
+- 앱 시작 또는 명시적 마이그레이션 단계에서 각 legacy task를 Action 1개와 Workflow 1개로 변환한다.
+- 기존 task 실행 이벤트는 가능한 경우 workflow/action 참조로 연결한다.
+- 연결할 수 없는 과거 이벤트는 legacy event로 유지한다.
+- mock sync는 새 Workflow/Action 모델을 대상으로 확장하되, 실제 서버 DB sync는 계속 제외한다.
 
-코어 앱은 작업 템플릿 저장, 실행 요청, 권한 확인, 로그 기록, 상태 업데이트를 담당한다. 각 작업 타입의 실제 실행 방식은 adapter가 담당한다.
+## 5. 화면 구조 방향
 
-```ts
-type TaskAdapter<TConfig = unknown, TState = unknown> = {
-  type: TaskType;
-  validateConfig(config: TConfig): Promise<void> | void;
-  run(context: TaskRunContext<TConfig, TState>): Promise<TaskRunResult<TState>>;
-  stop?(taskId: string): Promise<void>;
-  getState?(taskId: string): Promise<TState>;
-};
+### 실행 페이지
 
-type TaskRunContext<TConfig, TState> = {
-  task: TaskTemplate<TConfig, TState>;
-  deviceId: string;
-  dataDir: string;
-  appSettings: AppSettings;
-  updateState(state: Partial<TState>): Promise<void>;
-};
+- Workflow만 표시한다.
+- Workflow 카드/행에는 이름, 상태, 마지막 실행 시간, 예약 상태, 제한/secret 배지, 실행 버튼을 표시한다.
+- 개별 Action은 실행 페이지에 직접 노출하지 않는다.
 
-type TaskRunResult<TState> = {
-  state: TState;
-  message?: string;
-};
-```
+### Action 생성/관리
 
-초기에는 `browser_tab_group` adapter만 구현한다. 이후 Discord bot, crawler, Notion sync, trading bot은 같은 인터페이스를 따르는 adapter로 추가한다.
+- Action 생성은 타입 선택 후 타입별 설정 폼을 보여준다.
+- 브라우저, crawler, dry-run, tool module 실행은 각각 Action 타입으로 정의한다.
+- Action 설정 화면에서는 config, secret 참조, 입력/출력 요약, 실행 가능 여부를 다룬다.
 
-## 7. 현재 구현 상태
+### Workflow 작성
 
-이 섹션은 다음 구현자가 현재 코드 상태를 빠르게 파악하기 위한 기준이다.
+- Workflow 작성 화면에서는 Action 추가, 순서 조정, enabled 토글, 입력 연결, 예약, 권한을 설정한다.
+- 단일 Action Workflow도 기본 형태로 지원한다.
+- Workflow 저장 후 실행 페이지에 런처 항목으로 표시한다.
 
-### 완료
+### 도구 페이지
 
-- `src/shared/tasks`에 작업 템플릿 타입, 브라우저 탭 그룹 config, 기본 상태, 기본 권한 정책을 정의했다.
-- 브라우저 탭 그룹 config에 `runMode`를 추가해 전용 프로필 방식과 향후 확장 프로그램 기반 실행을 구분할 수 있게 했다.
-- `electron/tasks/store/taskStore.ts`에 `tasks.json` 기반 로컬 저장소를 구현했다.
-- `electron/tasks/ipc/taskIpc.ts`에 작업 CRUD IPC 핸들러를 분리했다.
-- `electron/preload.ts`에서 renderer가 사용할 `window.pastelFlow.tasks` API를 노출했다.
-- `src/App.tsx`를 Pastel Flow 최소 UI로 교체해 브라우저 탭 그룹 생성과 목록 표시를 지원한다.
-- 브라우저 탭 그룹의 이름, 브라우저 종류, 실행 방식, 초기 URL을 UI에서 생성/수정할 수 있게 했다.
-- 저장된 브라우저 탭 그룹을 UI에서 삭제할 수 있게 했다.
-- 작업 실행 IPC, preload API, adapter registry, task runner를 추가했다.
-- `dedicated_profile` 실행 방식에서 전용 브라우저 프로필 디렉터리를 생성하고 브라우저 프로세스를 실행한다.
-- Chrome, Edge, Chromium 실행 파일 자동 탐색과 앱 설정 기반 수동 경로 지정을 지원한다.
-- 브라우저 실행 성공, 실패, 종료 이후 상태를 `tasks.json`에 저장한다.
-- 앱 재시작 후 작업 설정과 실행 상태가 유지되는 것을 직접 실행으로 확인했다.
-- `extension_controlled` 실행 방식에서 전용 프로필에 Pastel Flow companion extension을 로드하고, 실행 종료 시 열린 탭 URL과 탭 그룹 이름, 색, 접힘 상태, 그룹-탭 관계를 템플릿에 저장한다.
+- `tool-schema.md` 규격 도구 모듈 업로드와 검증을 담당한다.
+- 등록된 도구를 단독 실행하거나 Workflow의 `tool_action`으로 추가할 수 있게 한다.
+- mock sync, 실행 이벤트 정리, 로그 보존 설정은 표시하지 않는다.
 
-### 부분 완료
+### 설정 페이지
 
-- `default_browser_deeplink` 실행 방식은 모델에만 있고 아직 실행되지 않는다.
+- 동기화, 실행 이벤트, 데이터 관리를 설정 카테고리로 제공한다.
+- mock sync import/export와 실행 이벤트 정리 기능은 설정 페이지에서 수행한다.
+- 서버 DB sync는 비활성 상태와 향후 설계 대상으로만 표시한다.
 
-### 미완료
+## 6. 구현 로드맵
 
-- 서버 DB sync용 export/import 또는 mock sync adapter.
+### Phase 1: 계획서와 UI 문서 정렬
 
-### 현재 단계 완료 기준
+- `plan.md`를 Action/Workflow 기준의 실행용 로드맵으로 유지한다.
+- `ui-features.md`와 `ui-detail-design.md`를 Workflow 실행 페이지, Action 관리, Workflow 작성, Tool Module, Settings 구조에 맞게 개정한다.
+- `structure.md`는 실제 코드 전환이 시작될 때 Action/Workflow 기준으로 업데이트한다.
 
-- 앱에서 브라우저 탭 그룹 템플릿을 생성할 수 있다.
-- 생성된 템플릿이 Electron `userData` 경로의 `tasks.json`에 저장된다.
-- 앱 재시작 후에도 저장된 템플릿 목록을 다시 불러올 수 있다.
+### Phase 2: 데이터 모델 전환
 
-## 8. 로드맵
+- `ActionDefinition`, `WorkflowDefinition`, Workflow state, Workflow schedule 타입을 추가한다.
+- 기존 `TaskTemplate`은 legacy 타입으로 분리한다.
+- legacy task를 Action/Workflow로 변환하는 마이그레이션 로직을 작성한다.
+- 실행 이벤트 저장 모델에 workflowId, actionRunId, legacyTaskId를 구분해 기록할 수 있게 한다.
 
-### Phase 1: Local MVP
+### Phase 3: 실행 엔진 전환
 
-- [x] 기본 앱 레이아웃을 Pastel Flow 전용 UI로 교체한다.
-- [x] 작업 템플릿 타입과 기본값을 정의한다.
-- [x] 브라우저 작업 실행 방식 `runMode`를 모델에 반영한다.
-- [x] `tasks.json` 기반 로컬 저장소를 만든다.
-- [x] 작업 목록 조회와 브라우저 탭 그룹 생성 UI를 만든다.
-- [x] 작업 수정과 삭제 UI를 만든다.
-- [x] 브라우저 종류 선택과 초기 URL 입력 UI를 만든다.
-- [x] 작업 실행 IPC와 preload API를 추가한다.
-- [x] adapter registry와 task runner를 추가한다.
-- [x] `browser_tab_group` adapter에서 전용 프로필 디렉터리를 준비한다.
-- [x] 실행 상태, 마지막 실행 시간, 오류, 로컬 프로필 경로를 저장한다.
-- [x] Chrome, Edge, Chromium 실행 파일 탐색과 오류 처리를 구현한다.
-- [x] 템플릿 실행 시 지정 브라우저를 전용 프로필로 실행한다.
-- [x] `initialUrls`가 있으면 브라우저 실행 인자로 전달한다.
-- [x] 브라우저 실행 실패 시 사용자가 이해할 수 있는 오류 메시지를 저장한다.
-- [x] 실행된 브라우저 종료 이후 상태 표기 정책을 구현한다.
-- [x] 앱 재시작 후 작업 설정과 실행 상태가 유지되는지 검증한다.
-- [x] 브라우저 실행 파일 수동 지정 설정을 구현한다.
-- [x] 실행 상태 변경을 renderer에 실시간으로 알려주는 이벤트 흐름을 구현한다.
-- [x] 기기 식별자를 생성하고 로컬에 저장한다.
-- [x] 연동 기기별 허용 수준 설정을 추가한다.
-- [x] 허용되지 않은 작업이 renderer에 표시되지 않도록 main process에서 목록을 필터링한다.
-- [x] 작업 실행, 수정, 삭제 전에 execution policy를 확인한다.
-- [x] 작업별 visibility/execution policy를 편집하는 UI를 추가한다.
-- [x] 민감 작업과 일반 작업을 구분할 최소 UI 표시를 추가한다.
-- [x] secret 참조 모델과 로컬 secret 저장소 초안을 구현한다.
-- [x] Secret 값을 Electron `safeStorage`로 암호화해 저장한다.
-- [x] Secret 삭제 시 작업의 `secretRefs`를 정리한다.
-- [x] 연동 기기 동기화 모델과 서버 DB schema 초안을 작성한다.
-- [x] 기존 평문 `secrets.json` 데이터를 암호화 형식으로 마이그레이션한다.
-- [x] 작업별 실행 로그를 표준화하고 UI에 최근 실행 이벤트를 표시한다.
-- [x] 브라우저 실행 후 열린 탭 URL 변경사항을 템플릿에 반영하는 동적 업데이트 토글을 추가한다.
-- [x] Secret 생성 실패 시 `safeStorage` 사용 가능 여부와 backend를 UI에 표시한다.
-- [x] 실행 이벤트에 검색/상태 필터와 보존 개수 설정을 추가한다.
-- [x] 확장 프로그램 기반 실행에서 실제 탭 그룹 이름, 색, 그룹 관계를 템플릿에 반영한다.
-- [x] 서버 DB sync 전 단계의 mock export/import adapter를 구현한다.
-- [x] 실행 이벤트 정리 기능과 sync export 이벤트 범위 설정을 추가한다.
-- [x] `default_browser_deeplink` 실행 방식에서 초기 URL을 기본 브라우저로 여는 최소 실행 경로를 구현한다.
-- [x] 실행 중인 브라우저 작업의 stop 요청 흐름을 adapter, runner, IPC, UI에 추가한다.
-- [x] 작업별 interval 기반 예약 실행 최소 모델과 main process scheduler를 구현한다.
-- [x] mock sync conflict resolution을 task config/policy 필드 단위로 세분화한다.
-- [x] sync snapshot 외부 JSON 파일 선택 import/export UI를 추가한다.
-- [x] 예약 실행을 interval, daily, weekly wall-clock 방식으로 확장한다.
-- [x] crawler adapter를 추가해 URL 수집 결과를 로컬 JSON 파일로 저장한다.
-- [x] Discord bot, Notion sync, trading bot dry-run adapter를 추가해 runner/scheduler 경로에 연결한다.
-- [x] 작업 목록과 실행 UI가 브라우저 외 작업 타입도 표시하고 실행할 수 있게 확장한다.
+- 기존 task runner/adapter 실행 흐름을 Workflow runner 중심으로 전환한다.
+- 각 Action 타입별 실행 handler를 등록하는 구조를 만든다.
+- Workflow runner는 Action 순서, enabled 상태, input mapping, 실패 중단 정책을 처리한다.
+- 예약 실행은 Workflow 단위로 실행한다.
+- stop/restart는 Workflow 단위 요청으로 받고, 가능한 Action handler에 위임한다.
 
-다음 구현 우선순위:
+### Phase 4: UI 전환
 
-1. 브라우저 외 작업 타입을 생성/수정할 수 있는 타입별 설정 UI를 추가한다.
-2. Discord/Notion의 실제 API 실행을 secret 참조 해석과 함께 구현한다.
-3. 서버 DB sync 실제 transport와 계정/기기 등록 흐름을 구현한다.
+- 실행 페이지를 Workflow 런처로 변경한다.
+- 새 작업 생성 흐름을 Action 생성과 Workflow 작성으로 분리한다.
+- 기존 작업 목록/수정 UI는 legacy task UI가 아니라 Action/Workflow UI로 대체한다.
+- Workflow 상세 화면에 개요, Action 목록, 실행 기록, 권한, 예약, 출력 요약을 표시한다.
 
-### Phase 2: 권한과 Secret 기반
+### Phase 5: Tool Module 시스템
 
-- 기기 식별자를 생성하고 로컬에 저장한다.
-- 작업 템플릿에 visibility와 execution policy를 추가한다.
-- secret을 일반 config와 분리한다.
-- 민감 작업과 일반 작업을 UI에서 구분한다.
-- MVP에서는 실제 다중 기기 동기화 없이 로컬 정책 시뮬레이션부터 시작한다.
+- 도구 업로드 위치와 등록 저장소를 정의한다.
+- 업로드된 폴더에서 `manifest.json`과 `logic.js`를 검증한다.
+- `tool-schema.md`의 input/output/permission 규칙을 검증하는 loader를 만든다.
+- tool module을 단독 실행할 수 있는 main process 실행 경로와 renderer UI를 만든다.
+- tool module을 Workflow의 `tool_action`으로 추가할 수 있게 한다.
 
-### Phase 3: DB Sync
+### Phase 6: 설정 페이지 재배치
 
-- 계정과 기기 등록 개념을 도입한다.
-- 서버 DB에 작업 템플릿 설정을 동기화한다.
-- 기기별 권한 정책을 서버에서 내려받는다.
-- secret과 브라우저 세션은 기본적으로 로컬 전용으로 유지한다.
-- 필요한 경우 trusted device 간 암호화된 secret sync를 별도 기능으로 검토한다.
+- 도구 페이지에 있는 sync/export/import, 실행 이벤트 정리, 로그 보존 관련 UI를 설정 페이지로 이동한다.
+- 설정 카테고리에 동기화, 실행 이벤트, 데이터 관리를 추가한다.
+- 도구 페이지는 tool module 기능만 남긴다.
 
-### Phase 4: Adapter 확장
+### Phase 7: 안정화와 검증
 
-- Discord bot adapter를 추가한다.
-- crawler adapter를 추가한다.
-- Notion sync adapter를 추가한다.
-- trading bot adapter는 높은 위험도를 고려해 별도의 권한, 로그, 확인 절차를 둔다.
-- adapter별 실행 로그와 오류 표시를 표준화한다.
+- legacy task 마이그레이션 fixture 테스트를 추가한다.
+- Workflow runner의 Action 순서 실행, 실패 처리, disabled Action skip, input mapping을 테스트한다.
+- Tool Module manifest 검증과 permission 표시를 테스트한다.
+- mock sync가 Workflow/Action 모델을 export/import하는지 확인한다.
+- `npx tsc --noEmit`, `npm run lint`를 기본 정적 검증으로 유지한다.
 
-### Phase 5: 자동화와 운영성
+## 7. 명시적 제외 범위
 
-- 예약 실행을 지원한다.
-- 장기 실행 작업의 stop/restart를 지원한다.
-- 작업별 로그 검색과 필터를 추가한다.
-- export/import를 지원한다.
-- 플러그인 또는 외부 adapter 배포 구조를 검토한다.
-
-## 9. 개발 우선순위
-
-우선순위가 높은 작업:
-
-1. 템플릿 기반 작업 모델 확정
-2. 브라우저 탭 그룹 전용 프로필 실행
-3. 로컬 저장소
-4. 작업 목록과 실행 UI
-5. 실행 상태와 오류 기록
-6. 기기 권한과 secret 모델의 최소 설계 반영
-
-초기에는 하지 않을 작업:
-
-- 서버 DB 동기화 전체 구현
-- 기본 브라우저 프로필 직접 조작
-- 자동매매 실거래 실행
-- 외부 플러그인 설치 시스템
+- 실제 서버 DB, 원격 transport, 계정 backend 구현
+- secret 값의 원격 동기화
+- 기본 브라우저 프로필 자동 탐색 또는 강제 조작
+- trading bot의 실거래 주문 실행
+- 검증되지 않은 tool module의 권한 우회 실행
 - 복잡한 조직/팀 권한 모델
+- 외부 플러그인 마켓플레이스 배포 시스템
 
-## 10. 검증 기준
+## 8. 검증 기준
 
-MVP 1은 다음 조건을 만족하면 성공으로 본다.
+다음 질문에 문서와 구현 방향이 명확히 답해야 한다.
 
-- 사용자가 브라우저 탭 그룹 템플릿을 생성할 수 있다.
-- 템플릿 실행 시 독립된 브라우저 프로필이 열린다.
-- 사용자가 브라우저 안에서 탭을 변경한 뒤 종료해도 다음 실행에서 상태가 유지된다.
-- 작업 목록에서 마지막 실행 시간과 기본 상태를 확인할 수 있다.
-- 작업 설정과 실행 상태가 앱 재시작 후에도 유지된다.
-- 이후 adapter 타입이 추가되어도 기존 브라우저 작업 모델을 크게 바꾸지 않아도 된다.
+- 실행 페이지에 무엇이 표시되는가: Workflow만 표시한다.
+- Action과 Workflow의 차이는 무엇인가: Action은 최소 실행 단위이고 Workflow는 실행 가능한 묶음이다.
+- 기존 Task는 어떻게 이전되는가: 단일 Action을 가진 Workflow로 마이그레이션한다.
+- 도구 페이지와 설정 페이지의 책임은 어떻게 나뉘는가: 도구 페이지는 tool module, 설정 페이지는 sync/event/data management를 담당한다.
+- `tool-schema.md`는 어디에 적용되는가: Tool Module 업로드, 검증, 실행, Workflow `tool_action` 등록 기준으로 적용한다.
+- 다음 구현 우선순위는 무엇인가: 데이터 모델 전환, 실행 엔진 전환, UI 전환, Tool Module 시스템, 설정 페이지 재배치 순서이다.
 
-## 11. 현재 결정 사항
+문서만 변경한 경우 필수 테스트는 없다. 구현 변경 시에는 최소한 다음을 실행한다.
+
+```bash
+npx tsc --noEmit
+npm run lint
+```
+
+## 9. 현재 결정 사항
 
 - 문서는 한국어로 유지한다.
 - 앱 이름은 `Pastel Flow`를 사용한다.
-- 첫 MVP는 브라우저 탭 그룹 실행과 상태 유지에 집중한다.
-- 초기 저장 방식은 로컬 우선이다.
-- 브라우저 탭 그룹은 템플릿별 전용 프로필 방식으로 구현한다.
-- 전용 프로필의 로그인 반복 한계를 인정하고, 향후 `extension_controlled` 실행 방식으로 확장 가능하게 유지한다.
-- 기기별 권한, secret 암호화, 서버 DB 동기화는 설계에 포함하되 MVP에서는 후순위로 둔다.
-- 확장 기능은 `TaskAdapter` 방식으로 추가한다.
+- 앞으로의 실행 단위는 Workflow이다.
+- Action은 Workflow를 구성하는 재사용 가능한 최소 실행 단위이다.
+- 기존 Task/Adapter 구조는 legacy로 취급하고 Action/Workflow 구조로 호환 마이그레이션한다.
+- 브라우저, crawler, Discord/Notion/trading dry-run은 Action 타입으로 재정의한다.
+- 실행 페이지는 Workflow만 표시한다.
+- 새 작업 생성은 Action 생성과 Workflow 작성으로 분리한다.
+- 도구 페이지는 `tool-schema.md` 규격 도구 모듈 업로드, 검증, 관리, 실행을 담당한다.
+- 동기화, 실행 이벤트, 데이터 관리는 설정 페이지의 카테고리로 이동한다.
+- 서버 DB sync 실제 구현은 제외하고 mock sync만 유지한다.
+- trading bot은 dry-run skeleton만 유지하며 실제 자동매매는 구현하지 않는다.
 - 에이전트 구현 검증 시 dev 서버 응답 확인과 UI 직접 확인은 수행하지 않는다. 필요한 검증은 `npx tsc --noEmit`, `npm run lint` 같은 정적 명령 중심으로 진행한다.

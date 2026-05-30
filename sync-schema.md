@@ -1,6 +1,6 @@
 # Pastel Flow 동기화 스키마 초안
 
-이 문서는 서버 DB 동기화를 추가할 때의 데이터 경계를 정리한다. 현재 구현은 로컬 우선이며, 이 스키마는 후속 서버 구현의 기준 초안이다.
+이 문서는 서버 DB 동기화를 추가할 때의 데이터 경계를 정리한다. 현재 구현은 로컬 우선이며, 이 스키마는 후속 서버 구현의 기준 초안이다. 실제 서버 DB 연동, transport, 계정 backend 구현은 현재 진행하지 않는다.
 
 ## 동기화 원칙
 
@@ -8,6 +8,7 @@
 - Secret 값, 브라우저 프로필, 로그인 세션은 기본적으로 로컬 전용이다.
 - 기기별 허용 수준과 작업별 visibility/execution policy는 서버에 저장해 각 기기가 동일한 정책 판단을 할 수 있게 한다.
 - 서버는 secret 값을 알지 않는다. 작업은 `secretRefs`만 저장하고, 각 기기는 로컬 secret 저장소에서 같은 ID를 가진 secret을 찾는다.
+- 현재 앱 구현은 이 원칙을 실제 서버에 연결하지 않고 `syncExport.json` 기반 mock 파일 export/import로만 검증한다.
 
 ## 테이블 초안
 
@@ -87,7 +88,7 @@ syncExport.json    -> 서버 DB sync 전 단계의 mock export snapshot
 
 ## Mock sync export/import
 
-서버 구현 전에는 Electron `userData/syncExport.json`을 mock sync snapshot으로 사용한다. 내보내기 대상은 서버 DB에 올라갈 수 있는 데이터만 포함한다.
+서버 구현 전에는 Electron `userData/syncExport.json`을 mock sync snapshot으로 사용한다. 현재 구현 범위도 이 mock 파일 방식까지이며, 실제 서버 DB 연결은 만들지 않는다. 내보내기 대상은 서버 DB에 올라갈 수 있는 데이터만 포함한다.
 
 ```text
 schemaVersion      1

@@ -14,6 +14,12 @@ export const crawlerAdapter: TaskAdapter<CrawlerConfig, TaskState> = {
   },
   async run({ dataDir, task }) {
     const config = normalizeCrawlerConfig(task.config)
+    const invalidUrl = config.urls.find((url) => !isHttpUrl(url))
+
+    if (invalidUrl) {
+      throw new Error(`Crawler URL 형식이 올바르지 않습니다: ${invalidUrl}`)
+    }
+
     const outputDirectory = path.join(dataDir, 'crawler-results')
     const outputPath = path.join(
       outputDirectory,
@@ -22,6 +28,14 @@ export const crawlerAdapter: TaskAdapter<CrawlerConfig, TaskState> = {
     const results = await Promise.all(
       config.urls.map((url) => fetchCrawlerUrl(url, config.maxBytes)),
     )
+    const capturedCount = results.filter(
+      (result) => result.status === 'captured',
+    ).length
+    const failedCount = results.length - capturedCount
+    const message =
+      failedCount > 0
+        ? `${capturedCount}개 URL 수집 성공, ${failedCount}개 실패했습니다.`
+        : `${capturedCount}개 URL을 수집했습니다.`
 
     await mkdir(outputDirectory, { recursive: true })
     await writeFile(
@@ -30,6 +44,8 @@ export const crawlerAdapter: TaskAdapter<CrawlerConfig, TaskState> = {
         {
           taskId: task.id,
           capturedAt: new Date().toISOString(),
+          capturedCount,
+          failedCount,
           results,
         },
         null,
@@ -41,18 +57,14 @@ export const crawlerAdapter: TaskAdapter<CrawlerConfig, TaskState> = {
     return {
       state: {
         ...task.state,
-        status: results.some((result) => result.status === 'failed')
-          ? 'failed'
-          : 'idle',
+        status: failedCount > 0 ? 'failed' : 'idle',
         lastRunAt: new Date().toISOString(),
         lastError:
-          results.some((result) => result.status === 'failed')
-            ? '일부 URL 수집에 실패했습니다.'
-            : undefined,
-        lastMessage: `${results.length}개 URL을 수집했습니다.`,
+          failedCount > 0 ? '일부 URL 수집에 실패했습니다.' : undefined,
+        lastMessage: message,
         outputPath,
       },
-      message: `${results.length}개 URL을 수집했습니다.`,
+      message,
     }
   },
 }
@@ -117,4 +129,13 @@ function stripHtml(html: string): string {
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
 }

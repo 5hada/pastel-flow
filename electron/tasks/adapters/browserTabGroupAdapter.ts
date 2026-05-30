@@ -25,6 +25,20 @@ export const browserTabGroupAdapter: TaskAdapter<
     if (!normalizedConfig.profileId.trim()) {
       throw new Error('Browser tab group tasks require a profileId.')
     }
+
+    if (
+      normalizedConfig.runMode !== 'extension_controlled' &&
+      normalizedConfig.profileSource === 'existing_profile'
+    ) {
+      throw new Error('기존 브라우저 프로필은 확장 프로그램 제어 실행에서만 사용할 수 있습니다.')
+    }
+
+    if (
+      normalizedConfig.profileSource === 'existing_profile' &&
+      !normalizedConfig.existingProfilePath
+    ) {
+      throw new Error('기존 브라우저 프로필 경로를 입력해야 합니다.')
+    }
   },
   async run({ appSettings, dataDir, task, updateConfig, updateState }) {
     const config = normalizeBrowserTabGroupConfig(task.config)
@@ -43,11 +57,7 @@ export const browserTabGroupAdapter: TaskAdapter<
       }
     }
 
-    const localProfilePath = path.join(
-      dataDir,
-      'browser-profiles',
-      config.profileId,
-    )
+    const localProfilePath = getBrowserProfilePath(dataDir, config)
 
     await mkdir(localProfilePath, { recursive: true })
     const browserExecutable = await findBrowserExecutable(
@@ -133,6 +143,21 @@ export const browserTabGroupAdapter: TaskAdapter<
     browserProcess.kill()
     runningBrowserProcesses.delete(taskId)
   },
+}
+
+function getBrowserProfilePath(
+  dataDir: string,
+  config: BrowserTabGroupConfig,
+): string {
+  if (
+    config.runMode === 'extension_controlled' &&
+    config.profileSource === 'existing_profile' &&
+    config.existingProfilePath
+  ) {
+    return config.existingProfilePath
+  }
+
+  return path.join(dataDir, 'browser-profiles', config.profileId)
 }
 
 type DevToolsTarget = {

@@ -82,12 +82,12 @@ export function createToolModuleStore({
   ): Promise<ToolModuleValidationResult> {
     const errors: string[] = []
     const manifestPath = path.join(sourcePath, 'manifest.json')
-    const logicPath = path.join(sourcePath, 'logic.js')
+    const logicPath = path.join(sourcePath, 'logic.mjs')
 
     try {
       await stat(logicPath)
     } catch {
-      errors.push('logic.js 파일이 필요합니다.')
+      errors.push('logic.mjs 파일이 필요합니다.')
     }
 
     let manifest: ToolModuleManifest | undefined

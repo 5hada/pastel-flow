@@ -49,14 +49,14 @@ export function createToolModuleRunner({
       const tool = await toolModuleStore.getTool(toolId)
       const normalizedInput = normalizeRunInput(tool.manifest.inputs, input)
       const logicPath = pathToFileURL(
-        path.join(tool.sourcePath, 'logic.js'),
+        path.join(tool.sourcePath, 'logic.mjs'),
       ).href
       const logicModule = (await import(
         `${logicPath}?updatedAt=${encodeURIComponent(tool.updatedAt)}`
       )) as ToolLogicModule
 
       if (typeof logicModule.run !== 'function') {
-        throw new Error('logic.js는 run(input, context) 함수를 export해야 합니다.')
+        throw new Error('logic.mjs는 run(input, context) 함수를 export해야 합니다.')
       }
 
       const output = await logicModule.run(

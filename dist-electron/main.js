@@ -694,11 +694,11 @@ function createToolModuleRunner({
       const tool = await toolModuleStore.getTool(toolId);
       const normalizedInput = normalizeRunInput(tool.manifest.inputs, input);
       const logicPath = pathToFileURL(
-        path.join(tool.sourcePath, "logic.js")
+        path.join(tool.sourcePath, "logic.mjs")
       ).href;
       const logicModule = await import(`${logicPath}?updatedAt=${encodeURIComponent(tool.updatedAt)}`);
       if (typeof logicModule.run !== "function") {
-        throw new Error("logic.js는 run(input, context) 함수를 export해야 합니다.");
+        throw new Error("logic.mjs는 run(input, context) 함수를 export해야 합니다.");
       }
       const output = await logicModule.run(
         normalizedInput,
@@ -857,11 +857,11 @@ function createToolModuleStore({
   async function validateToolPath(sourcePath) {
     const errors = [];
     const manifestPath = path.join(sourcePath, "manifest.json");
-    const logicPath = path.join(sourcePath, "logic.js");
+    const logicPath = path.join(sourcePath, "logic.mjs");
     try {
       await stat(logicPath);
     } catch {
-      errors.push("logic.js 파일이 필요합니다.");
+      errors.push("logic.mjs 파일이 필요합니다.");
     }
     let manifest;
     try {

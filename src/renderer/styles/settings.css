@@ -1,0 +1,222 @@
+.settings-fieldset {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.settings-fieldset legend {
+  margin-bottom: 8px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.segmented-control {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
+}
+
+.segmented-control label {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+}
+
+.segmented-control input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.segmented-control span {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  padding: 0 8px;
+}
+
+.segmented-control input:checked + span {
+  color: var(--surface);
+  background: var(--accent);
+}
+
+.theme-preview {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  color: var(--text);
+  background: var(--surface-muted);
+}
+
+.theme-preview strong,
+.theme-preview p {
+  margin: 0;
+}
+
+.theme-preview span {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.theme-preview[data-preview-theme='dark'] {
+  border-color: #303a47;
+  color: #ecf1f6;
+  background: #1d232c;
+}
+
+.theme-preview[data-preview-theme='dark'] span {
+  color: #9bd2ca;
+  background: #1e3d39;
+}
+
+.theme-preview[data-preview-theme='light'] {
+  border-color: #d9e0ea;
+  color: #182231;
+  background: #f7fafc;
+}
+
+.theme-preview[data-preview-theme='light'] span {
+  color: #1f6f68;
+  background: #dff3ef;
+}
+
+.sensitive-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  border-radius: 999px;
+  padding: 0 10px;
+  color: var(--warning-text);
+  background: var(--warning);
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.settings-subsection {
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.device-current {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--text);
+  background: var(--surface-muted);
+}
+
+.device-current span,
+.device-current code {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.device-current code {
+  overflow-wrap: anywhere;
+}
+
+.linked-device-list {
+  display: grid;
+  gap: 10px;
+}
+
+.linked-device-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(180px, 1fr) minmax(140px, 0.7fr) auto;
+  gap: 10px;
+  align-items: end;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface-muted);
+}
+
+.secret-form {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(160px, 1fr) minmax(160px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.secret-storage-status {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface-muted);
+}
+
+.secret-storage-status.is-ok {
+  border-color: var(--success);
+  background: var(--success-soft);
+}
+
+.secret-storage-status.is-warning {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.secret-storage-status span,
+.secret-storage-status code {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.secret-list {
+  display: grid;
+  gap: 8px;
+}
+
+.secret-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface-muted);
+}
+
+.secret-row div {
+  display: grid;
+  gap: 4px;
+}
+
+.secret-row small {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-color-scheme: dark) {
+  .theme-preview[data-preview-theme='system'] {
+    border-color: #303a47;
+    color: #ecf1f6;
+    background: #1d232c;
+  }
+}

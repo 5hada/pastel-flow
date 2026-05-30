@@ -100,12 +100,23 @@ electron/
       workflowRunner.ts           Workflow 조회, enabled Action 확인, legacy task 기반 Workflow 실행/중지 위임
 
 src/
-  App.tsx                         현재 최소 Pastel Flow UI
-  App.css                         App.tsx 스타일
+  App.tsx                         renderer 앱 진입점. PastelFlowApp 연결과 최상위 스타일 import만 담당
+  App.css                         기능별 renderer 스타일 모듈 import만 담당
   index.css                       전역 스타일
   renderer/
+    app/
+      PastelFlowApp.tsx           Pastel Flow renderer UI 조립과 화면 상태/IPC orchestration
+      taskFormState.ts            작업/설정/Secret 폼 상태 타입, 기본값, 초기 snapshot
     api/
       tasksApi.ts                 renderer에서 보는 preload API 타입
+    styles/
+      tokens.css                  테마 변수와 색상 토큰
+      layout.css                  앱 shell, header, sidebar, workspace layout
+      forms.css                   폼, 버튼, 입력, 오류/성공 메시지 공용 스타일
+      tasks.css                   실행/Action/Workflow 목록, 상세, 실행 이벤트 스타일
+      tools.css                   Tool Module 목록, runner, manifest input 컨트롤 스타일
+      settings.css                설정/Secret/기기/테마 preview 스타일
+      responsive.css              모바일/좁은 viewport 대응 스타일
     types/
       global.d.ts                 window.pastelFlow 전역 타입 선언
   shared/
@@ -124,6 +135,7 @@ src/
 
 ```text
 App.tsx
+  -> renderer/app/PastelFlowApp.tsx
   -> window.pastelFlow.tasks / window.pastelFlow.settings
   -> electron/preload.ts
   -> IPC channel: tasks:* | settings:*

@@ -1,0 +1,117 @@
+.tool-module-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.42fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.tool-module-list,
+.tool-module-detail,
+.tool-runner {
+  display: grid;
+  gap: 10px;
+}
+
+.tool-module-item {
+  display: grid;
+  min-height: auto;
+  justify-items: start;
+  gap: 4px;
+  border-color: var(--border);
+  padding: 12px;
+  color: var(--text);
+  background: var(--surface-muted);
+  text-align: left;
+}
+
+.tool-module-item:hover,
+.tool-module-item.is-selected {
+  border-color: var(--border-strong);
+  color: var(--text);
+  background: var(--surface-selected);
+}
+
+.tool-module-item span {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.tool-runner {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.tool-output {
+  max-height: 280px;
+  overflow: auto;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--text);
+  background: var(--control-bg);
+  font-size: 0.86rem;
+  white-space: pre-wrap;
+}
+
+.toggle-field {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.option-swatch-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.option-swatch input {
+  position: absolute;
+  opacity: 0;
+}
+
+.option-swatch span {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 12px;
+  color: var(--text);
+  background: var(--surface-muted);
+}
+
+.option-swatch input:checked + span {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.color-input-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.color-input {
+  min-width: 52px;
+  padding: 4px;
+}
+
+.tool-list-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.tool-list-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.danger-zone {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}

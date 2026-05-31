@@ -60,6 +60,24 @@
   background: var(--surface);
 }
 
+.theme-preview-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(22px, 1fr));
+  gap: 5px;
+}
+
+.theme-preview-swatches i {
+  height: 18px;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 4px;
+}
+
+.theme-color-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 10px;
+}
+
 .theme-preview strong,
 .theme-preview p {
   margin: 0;
@@ -156,9 +174,29 @@
 
 .secret-form {
   display: grid;
-  grid-template-columns: minmax(120px, 0.7fr) minmax(160px, 1fr) minmax(160px, 1fr) auto;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
   gap: 10px;
   align-items: end;
+}
+
+.secret-form button {
+  width: fit-content;
+}
+
+.profile-preset-list {
+  display: grid;
+  gap: 10px;
+}
+
+.profile-preset-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(130px, 0.5fr) minmax(180px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface);
 }
 
 .secret-storage-status {

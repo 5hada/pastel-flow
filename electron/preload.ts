@@ -103,6 +103,30 @@ const pastelFlowApi = {
     delete(id: string) {
       return ipcRenderer.invoke('actions:delete', id)
     },
+    onChanged(listener: (action: unknown) => void) {
+      const wrappedListener = (
+        _event: Electron.IpcRendererEvent,
+        action: unknown,
+      ) => listener(action)
+
+      ipcRenderer.on('actions:changed', wrappedListener)
+
+      return () => {
+        ipcRenderer.off('actions:changed', wrappedListener)
+      }
+    },
+    onDeleted(listener: (actionId: string) => void) {
+      const wrappedListener = (
+        _event: Electron.IpcRendererEvent,
+        actionId: string,
+      ) => listener(actionId)
+
+      ipcRenderer.on('actions:deleted', wrappedListener)
+
+      return () => {
+        ipcRenderer.off('actions:deleted', wrappedListener)
+      }
+    },
   },
   workflows: {
     list() {
@@ -125,6 +149,30 @@ const pastelFlowApi = {
     },
     listEvents(workflowId?: string) {
       return ipcRenderer.invoke('workflows:list-events', workflowId)
+    },
+    onChanged(listener: (workflow: unknown) => void) {
+      const wrappedListener = (
+        _event: Electron.IpcRendererEvent,
+        workflow: unknown,
+      ) => listener(workflow)
+
+      ipcRenderer.on('workflows:changed', wrappedListener)
+
+      return () => {
+        ipcRenderer.off('workflows:changed', wrappedListener)
+      }
+    },
+    onDeleted(listener: (workflowId: string) => void) {
+      const wrappedListener = (
+        _event: Electron.IpcRendererEvent,
+        workflowId: string,
+      ) => listener(workflowId)
+
+      ipcRenderer.on('workflows:deleted', wrappedListener)
+
+      return () => {
+        ipcRenderer.off('workflows:deleted', wrappedListener)
+      }
     },
   },
 }

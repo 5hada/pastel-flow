@@ -69,13 +69,28 @@ input[readonly] {
   background: var(--readonly-bg);
 }
 
+label,
+button,
+.sidebar-item,
+.task-picker,
+.workflow-grid-button,
+.detail-list dt,
+.eyebrow,
+.muted-text,
+.empty-state {
+  user-select: none;
+}
+
 textarea {
   min-height: 96px;
   resize: vertical;
 }
 
 button {
+  display: inline-flex;
   min-height: 42px;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--accent);
   border-radius: 8px;
   padding: 0 16px;
@@ -83,6 +98,9 @@ button {
   background: var(--accent);
   font: inherit;
   font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  user-select: none;
   cursor: pointer;
   transition:
     background 0.16s ease,

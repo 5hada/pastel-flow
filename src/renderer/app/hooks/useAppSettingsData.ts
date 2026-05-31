@@ -41,7 +41,41 @@ export function useAppSettingsData(
 
   useEffect(() => {
     document.documentElement.dataset.theme = appSettings.themeMode
-  }, [appSettings.themeMode])
+    const root = document.documentElement
+    const customVars: [string, string][] = [
+      ['--app-bg', appSettings.customThemeColors.appBg],
+      ['--surface', appSettings.customThemeColors.surface],
+      ['--surface-muted', appSettings.customThemeColors.surfaceMuted],
+      ['--surface-raised', appSettings.customThemeColors.surfaceRaised],
+      ['--surface-selected', appSettings.customThemeColors.surfaceSelected],
+      ['--border', appSettings.customThemeColors.border],
+      ['--border-strong', appSettings.customThemeColors.borderStrong],
+      ['--text', appSettings.customThemeColors.text],
+      ['--text-muted', appSettings.customThemeColors.textMuted],
+      ['--accent', appSettings.customThemeColors.accent],
+      ['--accent-hover', appSettings.customThemeColors.accentHover],
+      ['--accent-soft', appSettings.customThemeColors.accentSoft],
+      ['--accent-contrast', appSettings.customThemeColors.accentContrast],
+      ['--danger', appSettings.customThemeColors.danger],
+      ['--danger-hover', appSettings.customThemeColors.dangerHover],
+      ['--danger-soft', appSettings.customThemeColors.dangerSoft],
+      ['--info', appSettings.customThemeColors.info],
+      ['--info-soft', appSettings.customThemeColors.infoSoft],
+      ['--warning', appSettings.customThemeColors.warning],
+      ['--warning-text', appSettings.customThemeColors.warningText],
+      ['--success', appSettings.customThemeColors.success],
+      ['--success-soft', appSettings.customThemeColors.successSoft],
+      ['--control-bg', appSettings.customThemeColors.controlBg],
+      ['--readonly-bg', appSettings.customThemeColors.readonlyBg],
+      ['--rail-bg', appSettings.customThemeColors.railBg],
+    ]
+
+    if (appSettings.themeMode === 'custom') {
+      customVars.forEach(([name, value]) => root.style.setProperty(name, value))
+    } else {
+      customVars.forEach(([name]) => root.style.removeProperty(name))
+    }
+  }, [appSettings])
 
   function applySnapshot(snapshot: AppSettingsSnapshot) {
     setAppSettings(snapshot.settings)

@@ -12,6 +12,7 @@ export type ToolsPanelProps = {
   toolMessage: string | null
   toolModules: RegisteredToolModule[]
   toolRunResult: ToolModuleRunResult | null
+  showToolMetadata: boolean
   onCreateToolAction(): Promise<void>
   onRegisterToolModule(): Promise<void>
   onRunToolModule(): Promise<void>
@@ -24,6 +25,7 @@ export function ToolsPanel({
   onRunToolModule,
   onToolInputChange,
   selectedToolId,
+  showToolMetadata,
   toolInputValues,
   toolMessage,
   toolModules,
@@ -39,9 +41,11 @@ export function ToolsPanel({
           <p className="eyebrow">Tool modules</p>
           <h2>{selectedTool?.manifest.name ?? '도구 모듈'}</h2>
         </div>
-        <button type="button" onClick={() => void onRegisterToolModule()}>
-          폴더 등록
-        </button>
+        {toolModules.length > 0 ? (
+          <button type="button" onClick={() => void onCreateToolAction()}>
+            Action 생성
+          </button>
+        ) : null}
       </div>
       <section className="settings-subsection" aria-label="tool modules">
         {toolModules.length === 0 ? (
@@ -53,58 +57,11 @@ export function ToolsPanel({
           </div>
         ) : selectedTool ? (
           <div className="tool-module-detail">
-                <div className="detail-actions">
-                  <button
-                    className="ghost-button"
-                    type="button"
-                    onClick={() => void onCreateToolAction()}
-                  >
-                    Action 생성
-                  </button>
-                </div>
                 {selectedTool.manifest.description ? (
                   <p className="muted-text">
                     {selectedTool.manifest.description}
                   </p>
                 ) : null}
-                <dl className="detail-list">
-                  <DetailItem
-                    label="입력"
-                    value={`${selectedTool.manifest.inputs.length}개`}
-                  />
-                  <DetailItem
-                    label="출력"
-                    value={`${selectedTool.manifest.outputs.length}개`}
-                  />
-                  <DetailItem
-                    label="권한"
-                    value={
-                      selectedTool.manifest.permissions.length > 0
-                        ? selectedTool.manifest.permissions.join(', ')
-                        : '없음'
-                    }
-                  />
-                  <DetailItem
-                    label="등록 위치"
-                    value={selectedTool.sourcePath}
-                  />
-                  <DetailItem
-                    label="Assets"
-                    value={`${selectedTool.manifest.assets.length}개`}
-                  />
-                  <DetailItem
-                    label="Data sources"
-                    value={`${selectedTool.manifest.dataSources.length}개`}
-                  />
-                  <DetailItem
-                    label="Datasets"
-                    value={`${selectedTool.manifest.datasets.length}개`}
-                  />
-                  <DetailItem
-                    label="Indexing"
-                    value={selectedTool.manifest.indexing?.enabled ? '사용' : '미사용'}
-                  />
-                </dl>
                 <div className="tool-runner">
                   {selectedTool.manifest.inputs.length > 0 ? (
                     selectedTool.manifest.inputs.map((field) => (
@@ -132,6 +89,47 @@ export function ToolsPanel({
                     output={toolRunResult.output}
                     outputs={selectedTool.manifest.outputs}
                   />
+                ) : null}
+                {showToolMetadata ? (
+                  <section className="tool-metadata-panel" aria-label="도구 기타 정보">
+                    <dl className="detail-list">
+                      <DetailItem
+                        label="입력"
+                        value={`${selectedTool.manifest.inputs.length}개`}
+                      />
+                      <DetailItem
+                        label="출력"
+                        value={`${selectedTool.manifest.outputs.length}개`}
+                      />
+                      <DetailItem
+                        label="권한"
+                        value={
+                          selectedTool.manifest.permissions.length > 0
+                            ? selectedTool.manifest.permissions.join(', ')
+                            : '없음'
+                        }
+                      />
+                      <DetailItem label="등록 위치" value={selectedTool.sourcePath} />
+                      <DetailItem
+                        label="Assets"
+                        value={`${selectedTool.manifest.assets.length}개`}
+                      />
+                      <DetailItem
+                        label="Data sources"
+                        value={`${selectedTool.manifest.dataSources.length}개`}
+                      />
+                      <DetailItem
+                        label="Datasets"
+                        value={`${selectedTool.manifest.datasets.length}개`}
+                      />
+                      <DetailItem
+                        label="Indexing"
+                        value={
+                          selectedTool.manifest.indexing?.enabled ? '사용' : '미사용'
+                        }
+                      />
+                    </dl>
+                  </section>
                 ) : null}
           </div>
         ) : (

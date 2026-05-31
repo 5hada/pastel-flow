@@ -1,6 +1,10 @@
 import type { FormEvent } from 'react'
 import type { CurrentDevice } from '../../../../shared/devices'
 import type { LocalSecretMetadata } from '../../../../shared/secrets'
+import type {
+  BrowserProfilePreset,
+  DeveloperVisibilitySettings,
+} from '../../../../shared/settings'
 import {
   getBrowserRunModeLabel,
   getDeviceExecutionPolicyLabel,
@@ -33,7 +37,9 @@ export type EditWorkspaceProps = {
   confirmDeleteTaskId: string | null
   currentDevice: CurrentDevice
   editForm: BrowserTaskFormState
+  developerVisibility: DeveloperVisibilitySettings
   isLoading: boolean
+  profilePresets: BrowserProfilePreset[]
   secrets: LocalSecretMetadata[]
   selectedTask: TaskTemplate | null
   selectedWorkflowId: string | null
@@ -56,6 +62,7 @@ export function EditWorkspace({
   confirmDeleteTaskId,
   currentDevice,
   editForm,
+  developerVisibility,
   isLoading,
   onChange,
   onConfirmDelete,
@@ -64,6 +71,7 @@ export function EditWorkspace({
   onDeleteRequest,
   onSubmit,
   onUpdateWorkflow,
+  profilePresets,
   secrets,
   selectedWorkflowId,
   selectedTask,
@@ -155,6 +163,17 @@ export function EditWorkspace({
                   ),
                 })
               }}
+              onReorderActions={(actionRefIds) => {
+                if (!selectedWorkflow) {
+                  return
+                }
+                void onUpdateWorkflow(selectedWorkflow.id, {
+                  actionRefs: reorderWorkflowActionRefs(
+                    selectedWorkflow.actionRefs,
+                    actionRefIds,
+                  ),
+                })
+              }}
               onRemoveAction={(actionRefId) => {
                 if (!selectedWorkflow) {
                   return
@@ -216,6 +235,7 @@ export function EditWorkspace({
         <TaskEditPanel
           currentDevice={currentDevice}
           editForm={editForm}
+          profilePresets={profilePresets}
           onChange={onChange}
           onSubmit={onSubmit}
           secrets={secrets}
@@ -240,7 +260,9 @@ export function EditWorkspace({
                 label="탭 그룹 스냅샷"
                 value={getTabGroupSnapshotLabel(config)}
               />
-              <DetailItem label="프로필 ID" value={config.profileId || '없음'} />
+              {developerVisibility.showIds ? (
+                <DetailItem label="프로필 ID" value={config.profileId || '없음'} />
+              ) : null}
             </>
           ) : null}
           <DetailItem label="예약" value={getTaskScheduleLabel(selectedTask.schedule)} />
@@ -250,14 +272,16 @@ export function EditWorkspace({
             label="마지막 메시지"
             value={selectedTask.state.lastMessage ?? '아직 없음'}
           />
-          <DetailItem
-            label="출력 경로"
-            value={
-              selectedTask.state.outputPath ??
-              selectedTask.state.localProfilePath ??
-              '아직 없음'
-            }
-          />
+          {developerVisibility.showPaths ? (
+            <DetailItem
+              label="출력 경로"
+              value={
+                selectedTask.state.outputPath ??
+                selectedTask.state.localProfilePath ??
+                '아직 없음'
+              }
+            />
+          ) : null}
           <DetailItem label="생성 시간" value={formatDate(selectedTask.createdAt)} />
           <DetailItem label="수정 시간" value={formatDate(selectedTask.updatedAt)} />
           <DetailItem
@@ -311,11 +335,7 @@ export function EditWorkspace({
           )}
         </section>
       </section>
-      ) : (
-        <section className="mode-panel">
-          <p className="empty-state">이 Workflow에 연결된 legacy 작업이 없습니다.</p>
-        </section>
-      )}
+      ) : null}
     </section>
   )
 }
@@ -323,7 +343,7 @@ export function EditWorkspace({
 function moveWorkflowActionRef(
   actionRefs: WorkflowDefinition['actionRefs'],
   actionRefId: string,
-  direction: 'up' | 'down',
+  position: 'top' | 'bottom',
 ): WorkflowDefinition['actionRefs'] {
   const sortedActionRefs = [...actionRefs].sort(
     (left, right) => left.order - right.order,
@@ -331,19 +351,44 @@ function moveWorkflowActionRef(
   const index = sortedActionRefs.findIndex(
     (actionRef) => actionRef.id === actionRefId,
   )
-  const nextIndex = direction === 'up' ? index - 1 : index + 1
 
-  if (index < 0 || nextIndex < 0 || nextIndex >= sortedActionRefs.length) {
+  if (index < 0) {
     return sortedActionRefs
   }
 
   const nextActionRefs = [...sortedActionRefs]
-  const currentActionRef = nextActionRefs[index]
-  nextActionRefs[index] = nextActionRefs[nextIndex]
-  nextActionRefs[nextIndex] = currentActionRef
+  const [currentActionRef] = nextActionRefs.splice(index, 1)
+  if (!currentActionRef) {
+    return sortedActionRefs
+  }
+
+  if (position === 'top') {
+    nextActionRefs.unshift(currentActionRef)
+  } else {
+    nextActionRefs.push(currentActionRef)
+  }
 
   return nextActionRefs.map((actionRef, currentIndex) => ({
     ...actionRef,
     order: currentIndex,
   }))
+}
+
+function reorderWorkflowActionRefs(
+  actionRefs: WorkflowDefinition['actionRefs'],
+  actionRefIds: string[],
+): WorkflowDefinition['actionRefs'] {
+  const actionRefMap = new Map(
+    actionRefs.map((actionRef) => [actionRef.id, actionRef]),
+  )
+
+  return actionRefIds
+    .map((actionRefId) => actionRefMap.get(actionRefId))
+    .filter((actionRef): actionRef is WorkflowDefinition['actionRefs'][number] =>
+      Boolean(actionRef),
+    )
+    .map((actionRef, index) => ({
+      ...actionRef,
+      order: index,
+    }))
 }

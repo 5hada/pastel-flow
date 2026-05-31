@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   isRestrictedDevicePolicy,
   type ActionDefinition,
@@ -47,6 +48,9 @@ export function WorkspaceSidebar({
   onSelectTool,
   onSelectWorkflow,
 }: WorkspaceSidebarProps) {
+  const [actionTypeFilter, setActionTypeFilter] = useState<
+    ActionDefinition['type'] | 'all'
+  >('all')
   const restrictedCount = tasks.filter((task) =>
     isRestrictedDevicePolicy(task.permissions),
   ).length
@@ -77,6 +81,7 @@ export function WorkspaceSidebar({
     label: string
   }[] = [
     { id: 'general', icon: '◌', label: '일반' },
+    { id: 'appearance', icon: '◐', label: '모양' },
     { id: 'browser', icon: '▤', label: '브라우저' },
     { id: 'shortcuts', icon: '⌘', label: '단축키' },
     { id: 'devices', icon: '▣', label: '기기' },
@@ -84,7 +89,14 @@ export function WorkspaceSidebar({
     { id: 'sync', icon: '⇄', label: '동기화' },
     { id: 'events', icon: '≡', label: '실행 이벤트' },
     { id: 'data', icon: '▥', label: '데이터 관리' },
-  ]
+    { id: 'developer', icon: '{}', label: '개발자' },
+  ] 
+  const actionTypeOptions = Array.from(
+    new Set(actions.map((action) => action.type)),
+  )
+  const visibleActions = actions.filter(
+    (action) => actionTypeFilter === 'all' || action.type === actionTypeFilter,
+  )
 
   return (
     <aside className="workspace-sidebar" aria-label="보조 패널">
@@ -126,20 +138,43 @@ export function WorkspaceSidebar({
                 <span>저장된 Action이 없습니다.</span>
               </div>
             ) : (
-              actions.map((action) => (
-                <button
-                  className={`sidebar-item task-sidebar-item${
-                    selectedActionId === action.id ? ' is-active' : ''
-                  }`}
-                  key={action.id}
-                  type="button"
-                  onClick={() => onSelectAction(action.id)}
-                >
-                  <span aria-hidden="true">◇</span>
-                  <strong>{action.name}</strong>
-                  <em>{getActionTypeLabel(action.type)}</em>
-                </button>
-              ))
+              <>
+                <div className="sidebar-filter-bar">
+                  <button
+                    className={actionTypeFilter === 'all' ? 'is-active' : ''}
+                    type="button"
+                    onClick={() => setActionTypeFilter('all')}
+                  >
+                    전체
+                  </button>
+                  {actionTypeOptions.map((actionType) => (
+                    <button
+                      className={
+                        actionTypeFilter === actionType ? 'is-active' : ''
+                      }
+                      key={actionType}
+                      type="button"
+                      onClick={() => setActionTypeFilter(actionType)}
+                    >
+                      {getActionTypeLabel(actionType)}
+                    </button>
+                  ))}
+                </div>
+                {visibleActions.map((action) => (
+                  <button
+                    className={`sidebar-item task-sidebar-item${
+                      selectedActionId === action.id ? ' is-active' : ''
+                    }`}
+                    key={action.id}
+                    type="button"
+                    onClick={() => onSelectAction(action.id)}
+                  >
+                    <span aria-hidden="true">◇</span>
+                    <strong>{action.name}</strong>
+                    <em>{getActionTypeLabel(action.type)}</em>
+                  </button>
+                ))}
+              </>
             )}
           </>
         ) : null}

@@ -20,6 +20,7 @@ export type TaskLaunchPanelProps = {
   selectedWorkflowId: string | null
   stoppingWorkflowId: string | null
   workflows: WorkflowDefinition[]
+  workflowHierarchy: string[]
   onCreate(): void
   onDisplayModeChange(displayMode: TaskListDisplayMode): Promise<void>
   onGridColumnCountChange(columnCount: number): Promise<void>
@@ -30,6 +31,7 @@ export type TaskLaunchPanelProps = {
 
 export function TaskLaunchPanel({
   workflows,
+  workflowHierarchy,
   categoryLabel,
   displayMode,
   gridColumnCount,
@@ -95,7 +97,7 @@ export function TaskLaunchPanel({
         </div>
       ) : (
         <div
-          className={`task-list task-list-${displayMode}`}
+          className="task-list workflow-grouped-list"
           style={
             displayMode === 'grid'
               ? ({
@@ -104,7 +106,11 @@ export function TaskLaunchPanel({
               : undefined
           }
         >
-          {workflows.map((workflow) => {
+          {groupWorkflows(workflows, workflowHierarchy).map((group) => (
+            <section className="workflow-run-group" key={group.name}>
+              <h3>{group.name}</h3>
+              <div className={`workflow-run-group-items task-list-${displayMode}`}>
+          {group.workflows.map((workflow) => {
             const isRunning = runningWorkflowId === workflow.id
             const isStopping = stoppingWorkflowId === workflow.id
             const isSelected = selectedWorkflowId === workflow.id
@@ -136,11 +142,22 @@ export function TaskLaunchPanel({
                 ) : (
                   <button
                     className={`workflow-grid-button status-${workflow.state.status}`}
-                    disabled={isRunning || isStopping || canStop}
+                    disabled={isRunning || isStopping}
                     type="button"
-                    onClick={() => void onRun(workflow.id)}
+                    onClick={() =>
+                      void (canStop ? onStop(workflow.id) : onRun(workflow.id))
+                    }
                   >
-                    {workflow.name}
+                    <span>{workflow.name}</span>
+                    {canStop || isStopping || isRunning ? (
+                      <small>
+                        {isStopping
+                          ? '중지 중'
+                          : canStop
+                            ? '중지'
+                            : '실행 중'}
+                      </small>
+                    ) : null}
                   </button>
                 )}
                 {displayMode === 'list' &&
@@ -172,8 +189,33 @@ export function TaskLaunchPanel({
               </article>
             )
           })}
+              </div>
+            </section>
+          ))}
         </div>
       )}
     </section>
   )
+}
+
+function groupWorkflows(
+  workflows: WorkflowDefinition[],
+  workflowHierarchy: string[],
+): { name: string; workflows: WorkflowDefinition[] }[] {
+  const fallbackGroup = workflowHierarchy[0] ?? '기본'
+  const groups = workflowHierarchy.map((name) => ({
+    name,
+    workflows: [] as WorkflowDefinition[],
+  }))
+
+  workflows.forEach((workflow) => {
+    const group =
+      groups.find((currentGroup) =>
+        workflow.name.toLowerCase().startsWith(currentGroup.name.toLowerCase()),
+      ) ?? groups[0]
+
+    ;(group ?? { name: fallbackGroup, workflows: [] }).workflows.push(workflow)
+  })
+
+  return groups.filter((group) => group.workflows.length > 0)
 }

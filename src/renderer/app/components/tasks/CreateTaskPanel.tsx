@@ -1,5 +1,6 @@
 import type { FormEvent } from 'react'
 import type { CurrentDevice } from '../../../../shared/devices'
+import type { BrowserProfilePreset } from '../../../../shared/settings'
 import type { LocalSecretMetadata } from '../../../../shared/secrets'
 import type { TaskType } from '../../../../shared/tasks'
 import { taskTypeOptions, type BrowserTaskFormState } from '../../taskFormState'
@@ -10,6 +11,7 @@ export type CreateTaskPanelProps = {
   createForm: BrowserTaskFormState
   currentDevice: CurrentDevice
   isEmbedded?: boolean
+  profilePresets?: BrowserProfilePreset[]
   secrets: LocalSecretMetadata[]
   onCancel(): void
   onChange(value: BrowserTaskFormState): void
@@ -23,6 +25,7 @@ export function CreateTaskPanel({
   onCancel,
   onChange,
   onSubmit,
+  profilePresets,
   secrets,
 }: CreateTaskPanelProps) {
   return (
@@ -75,7 +78,11 @@ export function CreateTaskPanel({
             />
           </label>
         </div>
-        <TaskTypeConfigFields form={createForm} onChange={onChange} />
+        <TaskTypeConfigFields
+          form={createForm}
+          profilePresets={profilePresets}
+          onChange={onChange}
+        />
         <label className="inline-check">
           <input
             checked={createForm.createSingleActionWorkflow}

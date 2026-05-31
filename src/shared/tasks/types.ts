@@ -91,6 +91,16 @@ export type DevicePolicy = {
 
 export type WorkflowState = {
   status: ActionRunStatus
+  actionStates?: Record<string, ActionRuntimeState>
+  lastRunAt?: string
+  lastError?: string
+  localProfilePath?: string
+  outputPath?: string
+  lastMessage?: string
+}
+
+export type ActionRuntimeState = {
+  status: ActionRunStatus
   lastRunAt?: string
   lastError?: string
   localProfilePath?: string
@@ -152,6 +162,7 @@ export type WorkflowDefinition = {
 }
 
 export type BrowserTabGroupConfig = {
+  browserGroupId: string
   profileId: string
   initialUrls: string[]
   browserKind: BrowserKind

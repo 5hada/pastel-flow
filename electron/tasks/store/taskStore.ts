@@ -68,7 +68,7 @@ export type CreateActionInput<TConfig = unknown> = {
 export type UpdateActionInput<TConfig = unknown> = Partial<
   Pick<
     ActionDefinition<TConfig>,
-    'name' | 'config' | 'secretRefs' | 'inputSchema' | 'outputSchema'
+    'name' | 'type' | 'config' | 'secretRefs' | 'inputSchema' | 'outputSchema'
   >
 >
 

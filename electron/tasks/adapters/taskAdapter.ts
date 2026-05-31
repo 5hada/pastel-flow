@@ -15,12 +15,18 @@ export type TaskRunResult<TState = unknown> = {
   message?: string
 }
 
+export type TaskStopResult<TConfig = unknown, TState = unknown> = {
+  config?: TConfig
+  state?: Partial<TState>
+  message?: string
+}
+
 export type TaskAdapter<TConfig = unknown, TState = unknown> = {
   type: TaskType
   validateConfig(config: TConfig): Promise<void> | void
   run(
     context: TaskRunContext<TConfig, TState>,
   ): Promise<TaskRunResult<TState>>
-  stop?(taskId: string): Promise<void>
+  stop?(taskId: string): Promise<TaskStopResult<TConfig, TState> | void>
   getState?(taskId: string): Promise<TState>
 }

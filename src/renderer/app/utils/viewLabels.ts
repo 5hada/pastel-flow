@@ -187,6 +187,8 @@ export function getThemeModeLabel(themeMode: ThemeMode): string {
       return '라이트'
     case 'dark':
       return '다크'
+    case 'custom':
+      return '사용자 지정'
   }
 }
 

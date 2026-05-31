@@ -22,7 +22,7 @@ import { createTaskAdapterRegistry } from './tasks/adapters/taskAdapterRegistry'
 import { registerTaskIpc } from './tasks/ipc/taskIpc'
 import { createTaskScheduler } from './tasks/scheduler/taskScheduler'
 import { createTaskRunEventStore } from './tasks/store/taskRunEventStore'
-import { createTaskStore } from './tasks/store/taskStore'
+import { createTaskStore, type TaskStore } from './tasks/store/taskStore'
 import { createWorkflowRunner } from './workflows/runner/workflowRunner'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -105,9 +105,10 @@ app.whenReady().then(async () => {
     dataDir,
   })
   const currentDevice = await deviceStore.getCurrentDevice()
-  const taskStore = createTaskStore({
+  const taskStore = createObservedTaskStore(createTaskStore({
     dataDir,
-  })
+  }))
+  await resetStaleRunningWorkflows(taskStore)
   const toolModuleStore = createToolModuleStore({
     dataDir,
   })
@@ -181,3 +182,61 @@ app.whenReady().then(async () => {
   }).start()
   createWindow()
 })
+
+function createObservedTaskStore(taskStore: TaskStore): TaskStore {
+  function broadcast(channel: string, payload: unknown) {
+    BrowserWindow.getAllWindows().forEach((browserWindow) => {
+      browserWindow.webContents.send(channel, payload)
+    })
+  }
+
+  return {
+    ...taskStore,
+    async createAction(input) {
+      const action = await taskStore.createAction(input)
+      broadcast('actions:changed', action)
+      return action
+    },
+    async updateAction(id, input) {
+      const action = await taskStore.updateAction(id, input)
+      broadcast('actions:changed', action)
+      return action
+    },
+    async deleteAction(id) {
+      await taskStore.deleteAction(id)
+      broadcast('actions:deleted', id)
+    },
+    async createWorkflow(input) {
+      const workflow = await taskStore.createWorkflow(input)
+      broadcast('workflows:changed', workflow)
+      return workflow
+    },
+    async updateWorkflow(id, input) {
+      const workflow = await taskStore.updateWorkflow(id, input)
+      broadcast('workflows:changed', workflow)
+      return workflow
+    },
+    async deleteWorkflow(id) {
+      await taskStore.deleteWorkflow(id)
+      broadcast('workflows:deleted', id)
+    },
+  }
+}
+
+async function resetStaleRunningWorkflows(taskStore: TaskStore): Promise<void> {
+  const workflows = await taskStore.listWorkflows()
+
+  await Promise.all(
+    workflows
+      .filter((workflow) => workflow.state.status === 'running')
+      .map((workflow) =>
+        taskStore.updateWorkflow(workflow.id, {
+          state: {
+            ...workflow.state,
+            status: 'idle',
+            lastMessage: '앱 시작 시 이전 실행 상태를 정리했습니다.',
+          },
+        }),
+      ),
+  )
+}

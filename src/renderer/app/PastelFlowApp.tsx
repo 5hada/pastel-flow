@@ -56,6 +56,7 @@ function App() {
     handleDeleteWorkflow,
     handleCreateToolAction,
     handleDeleteSecret,
+    handleDeleteAction,
     handleDeleteTask,
     handleExportSyncSnapshot,
     handleExportSyncSnapshotFile,
@@ -69,6 +70,7 @@ function App() {
     handleStopWorkflow,
     handleTaskListDisplayModeChange,
     handleUpdateTask,
+    handleUpdateAction,
     handleUpdateWorkflow,
     handleWorkflowGridColumnCountChange,
     openActionMode,
@@ -165,6 +167,7 @@ function App() {
               selectedWorkflowId={selectedWorkflowId}
               stoppingWorkflowId={stoppingWorkflowId}
               gridColumnCount={appSettings.workflowGridColumnCount}
+              workflowHierarchy={appSettings.workflowHierarchy}
               onCreate={openWorkflowMode}
               onDisplayModeChange={handleTaskListDisplayModeChange}
               onGridColumnCountChange={handleWorkflowGridColumnCountChange}
@@ -179,11 +182,15 @@ function App() {
               actions={actions}
               createForm={createForm}
               currentDevice={currentDevice}
+              developerVisibility={appSettings.developerVisibility}
+              profilePresets={appSettings.browserProfilePresets}
               selectedActionId={selectedActionId}
               secrets={secrets}
               onChange={setCreateForm}
+              onDeleteAction={handleDeleteAction}
               onSelectAction={setSelectedActionId}
               onSubmit={handleCreateTask}
+              onUpdateAction={handleUpdateAction}
             />
           ) : null}
 
@@ -193,6 +200,8 @@ function App() {
               confirmDeleteTaskId={confirmDeleteTaskId}
               currentDevice={currentDevice}
               editForm={editForm}
+              profilePresets={appSettings.browserProfilePresets}
+              developerVisibility={appSettings.developerVisibility}
               isLoading={isLoading}
               secrets={secrets}
               selectedWorkflowId={selectedWorkflowId}
@@ -216,6 +225,7 @@ function App() {
               toolMessage={toolMessage}
               toolModules={toolModules}
               toolRunResult={toolRunResult}
+              showToolMetadata={appSettings.developerVisibility.showToolMetadata}
               onCreateToolAction={handleCreateToolAction}
               onRegisterToolModule={handleRegisterToolModule}
               onRunToolModule={handleRunToolModule}
@@ -255,6 +265,7 @@ function App() {
                 onImportSyncSnapshot={handleImportSyncSnapshot}
                 onImportSyncSnapshotFile={handleImportSyncSnapshotFile}
                 onPruneTaskRunEvents={handlePruneTaskRunEvents}
+                onRegisterToolModule={handleRegisterToolModule}
               />
             </section>
           ) : null}

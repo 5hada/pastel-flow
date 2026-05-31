@@ -18,6 +18,7 @@ export type BrowserTaskFormState = {
   browserKind: BrowserKind
   runMode: BrowserRunMode
   profileSource: BrowserProfileSource
+  profilePresetId: string
   existingProfilePath: string
   initialUrls: string
   dynamicTemplateUpdates: boolean
@@ -58,6 +59,7 @@ export type NavigationCategory =
 
 export type SettingsCategory =
   | 'general'
+  | 'appearance'
   | 'browser'
   | 'devices'
   | 'secrets'
@@ -65,6 +67,7 @@ export type SettingsCategory =
   | 'events'
   | 'data'
   | 'shortcuts'
+  | 'developer'
 
 export const defaultSettingsForm: AppSettings = {
   ...defaultAppSettings,
@@ -78,8 +81,9 @@ export function createBrowserTaskForm(
     taskType: 'browser_tab_group',
     createSingleActionWorkflow: false,
     browserKind: settings.defaultBrowserKind,
-    runMode: 'dedicated_profile',
-    profileSource: 'task_profile',
+    runMode: settings.defaultBrowserRunMode,
+    profileSource: settings.defaultBrowserProfileSource,
+    profilePresetId: '',
     existingProfilePath: '',
     initialUrls: '',
     dynamicTemplateUpdates: false,
@@ -119,6 +123,7 @@ export const defaultEditForm: BrowserTaskFormState = {
   browserKind: defaultAppSettings.defaultBrowserKind,
   runMode: 'dedicated_profile',
   profileSource: 'task_profile',
+  profilePresetId: '',
   existingProfilePath: '',
   initialUrls: '',
   dynamicTemplateUpdates: false,

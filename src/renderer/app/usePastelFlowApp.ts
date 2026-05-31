@@ -22,7 +22,7 @@ export function usePastelFlowApp() {
     useState<NavigationCategory>('all')
   const [selectedSettingsCategory, setSelectedSettingsCategory] =
     useState<SettingsCategory>('general')
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
   const actionWorkflow = useActionWorkflowData(setErrorMessage)
   const settings = useAppSettingsData(setErrorMessage, setWorkspaceMode)
@@ -64,13 +64,54 @@ export function usePastelFlowApp() {
   }, [])
 
   useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      const pressedShortcut = formatKeyboardShortcut(event)
+      const shortcuts = settings.appSettings.shortcuts
+
+      if (pressedShortcut === shortcuts.refresh) {
+        event.preventDefault()
+        void refreshWorkspaceData()
+      } else if (pressedShortcut === shortcuts.openRun) {
+        event.preventDefault()
+        openRunMode()
+      } else if (pressedShortcut === shortcuts.openActions) {
+        event.preventDefault()
+        openActionMode()
+      } else if (pressedShortcut === shortcuts.openWorkflows) {
+        event.preventDefault()
+        openWorkflowMode()
+      } else if (pressedShortcut === shortcuts.openTools) {
+        event.preventDefault()
+        openToolsMode()
+      } else if (pressedShortcut === shortcuts.openSettings) {
+        event.preventDefault()
+        openSettingsMode()
+      } else if (
+        pressedShortcut === shortcuts.runSelectedWorkflow &&
+        actionWorkflow.selectedWorkflowId
+      ) {
+        event.preventDefault()
+        void actionWorkflow.runWorkflow(actionWorkflow.selectedWorkflowId)
+      }
+    }
+
+    window.addEventListener('keydown', handleShortcut)
+
+    return () => {
+      window.removeEventListener('keydown', handleShortcut)
+    }
+  })
+
+  useEffect(() => {
     const mediaQuery = window.matchMedia(sidebarAutoCollapseQuery)
 
     function syncSidebarWithCompactWidth(event: MediaQueryListEvent) {
       setIsSidebarOpen(!event.matches)
     }
 
-    setIsSidebarOpen(!mediaQuery.matches)
+    if (mediaQuery.matches) {
+      setIsSidebarOpen(false)
+    }
 
     mediaQuery.addEventListener('change', syncSidebarWithCompactWidth)
 
@@ -204,6 +245,7 @@ export function usePastelFlowApp() {
     handleDeleteWorkflow: actionWorkflow.deleteWorkflow,
     handleCreateToolAction: tools.handleCreateToolAction,
     handleDeleteSecret: secrets.handleDeleteSecret,
+    handleDeleteAction: actionWorkflow.deleteAction,
     handleDeleteTask: tasks.handleDeleteTask,
     handleExportSyncSnapshot: sync.handleExportSyncSnapshot,
     handleExportSyncSnapshotFile: sync.handleExportSyncSnapshotFile,
@@ -220,6 +262,7 @@ export function usePastelFlowApp() {
     handleTaskListDisplayModeChange:
       settings.handleTaskListDisplayModeChange,
     handleUpdateTask: tasks.handleUpdateTask,
+    handleUpdateAction: actionWorkflow.updateAction,
     handleUpdateWorkflow: actionWorkflow.updateWorkflow,
     handleWorkflowGridColumnCountChange:
       settings.handleWorkflowGridColumnCountChange,
@@ -247,4 +290,28 @@ export function usePastelFlowApp() {
     setToolRunResult: tools.setToolRunResult,
     startEditing: tasks.startEditing,
   }
+}
+
+function formatKeyboardShortcut(event: KeyboardEvent): string {
+  const parts = [
+    event.ctrlKey ? 'Ctrl' : '',
+    event.altKey ? 'Alt' : '',
+    event.shiftKey ? 'Shift' : '',
+    event.metaKey ? 'Meta' : '',
+    normalizeShortcutKey(event.key),
+  ].filter(Boolean)
+
+  return parts.join('+')
+}
+
+function normalizeShortcutKey(key: string): string {
+  if (key === ' ') {
+    return 'Space'
+  }
+
+  if (key === ',') {
+    return ','
+  }
+
+  return key.length === 1 ? key.toUpperCase() : key
 }

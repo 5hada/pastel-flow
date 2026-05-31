@@ -38,6 +38,12 @@
 }
 
 .tool-runner {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.tool-metadata-panel {
   margin-top: 18px;
   padding-top: 18px;
   border-top: 1px solid var(--border);

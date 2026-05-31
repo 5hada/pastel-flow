@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type {
   ActionDefinition,
   DevicePolicy,
@@ -118,6 +118,111 @@ export function useActionWorkflowData(
     }
   }
 
+  useEffect(() => {
+    if (!window.pastelFlow) {
+      return undefined
+    }
+
+    const unsubscribeActionChanged = window.pastelFlow.actions.onChanged(
+      (updatedAction) => {
+        setActions((currentActions) => {
+          if (
+            !currentActions.some((action) => action.id === updatedAction.id)
+          ) {
+            return [...currentActions, updatedAction]
+          }
+
+          return currentActions.map((action) =>
+            action.id === updatedAction.id ? updatedAction : action,
+          )
+        })
+      },
+    )
+    const unsubscribeActionDeleted = window.pastelFlow.actions.onDeleted(
+      (actionId) => {
+        setActions((currentActions) =>
+          currentActions.filter((action) => action.id !== actionId),
+        )
+      },
+    )
+    const unsubscribeWorkflowChanged = window.pastelFlow.workflows.onChanged(
+      (updatedWorkflow) => {
+        setWorkflows((currentWorkflows) => {
+          if (
+            !currentWorkflows.some(
+              (workflow) => workflow.id === updatedWorkflow.id,
+            )
+          ) {
+            return [...currentWorkflows, updatedWorkflow]
+          }
+
+          return currentWorkflows.map((workflow) =>
+            workflow.id === updatedWorkflow.id ? updatedWorkflow : workflow,
+          )
+        })
+      },
+    )
+    const unsubscribeWorkflowDeleted = window.pastelFlow.workflows.onDeleted(
+      (workflowId) => {
+        setWorkflows((currentWorkflows) =>
+          currentWorkflows.filter((workflow) => workflow.id !== workflowId),
+        )
+      },
+    )
+
+    return () => {
+      unsubscribeActionChanged()
+      unsubscribeActionDeleted()
+      unsubscribeWorkflowChanged()
+      unsubscribeWorkflowDeleted()
+    }
+  }, [])
+
+  async function updateAction(
+    actionId: string,
+    input: Partial<ActionDefinition>,
+  ) {
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      const action = await window.pastelFlow.actions.update(actionId, input)
+      setActions((currentActions) =>
+        currentActions.map((currentAction) =>
+          currentAction.id === action.id ? action : currentAction,
+        ),
+      )
+      setSelectedActionId(action.id)
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    }
+  }
+
+  async function deleteAction(actionId: string) {
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      await window.pastelFlow.actions.delete(actionId)
+      setActions((currentActions) => {
+        const nextActions = currentActions.filter(
+          (action) => action.id !== actionId,
+        )
+        setSelectedActionId((currentActionId) =>
+          currentActionId === actionId
+            ? nextActions[0]?.id ?? null
+            : currentActionId,
+        )
+        return nextActions
+      })
+      await loadActionWorkflowData()
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    }
+  }
+
   async function runWorkflow(workflowId: string) {
     if (!window.pastelFlow) {
       return
@@ -176,11 +281,13 @@ export function useActionWorkflowData(
     stoppingWorkflowId,
     createWorkflow,
     deleteWorkflow,
+    deleteAction,
     loadActionWorkflowData,
     runWorkflow,
     setSelectedActionId,
     setSelectedWorkflowId,
     stopWorkflow,
     updateWorkflow,
+    updateAction,
   }
 }

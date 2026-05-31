@@ -45,6 +45,7 @@ export function createDefaultBrowserTabGroupConfig(
   profileId: string,
 ): BrowserTabGroupConfig {
   return {
+    browserGroupId: `browser-group-${profileId}`,
     profileId,
     initialUrls: [],
     browserKind: 'chrome',
@@ -59,6 +60,10 @@ export function normalizeBrowserTabGroupConfig(
   config: Partial<BrowserTabGroupConfig>,
 ): BrowserTabGroupConfig {
   return {
+    browserGroupId:
+      typeof config.browserGroupId === 'string' && config.browserGroupId.trim()
+        ? config.browserGroupId.trim()
+        : `browser-group-${config.profileId ?? 'default'}`,
     profileId: config.profileId ?? '',
     initialUrls: Array.isArray(config.initialUrls) ? config.initialUrls : [],
     browserKind: isBrowserKind(config.browserKind)

@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import type {
   ActionDefinition,
+  ActionRuntimeState,
   TaskState,
   TaskTemplate,
   WorkflowDefinition,
+  WorkflowState,
 } from '../../../src/shared/tasks'
 import type { AppSettingsStore } from '../../settings/store/appSettingsStore'
 import type { TaskAdapterRegistry } from '../../tasks/adapters/taskAdapterRegistry'
@@ -64,6 +66,9 @@ export function createWorkflowRunner({
     getWorkflow,
     async runWorkflow(id) {
       const workflow = await getWorkflow(id)
+      if (workflow.state.status === 'running') {
+        return workflow
+      }
       getRunnableActionRefs(workflow)
       return runActionWorkflow(workflow, await taskStore.listActions(), {
         adapterRegistry,
@@ -87,18 +92,53 @@ export function createWorkflowRunner({
         }
 
         const adapter = adapterRegistry.getAdapter(action.type)
-        await adapter.stop?.(action.id)
+        const stopResult = await adapter.stop?.(action.id).catch((error) => {
+          if (isMissingBrowserActionGroupError(error)) {
+            return {
+              state: {
+                status: 'idle' as const,
+                lastError: undefined,
+                lastMessage: '실행 세션이 없어 상태만 정리했습니다.',
+              },
+            }
+          }
+
+          throw error
+        })
+        if (stopResult && 'config' in stopResult && stopResult.config) {
+          await taskStore.updateAction(action.id, {
+            config: stopResult.config,
+          })
+        }
+        if (stopResult && 'state' in stopResult && stopResult.state) {
+          const latestWorkflow = await getWorkflow(workflow.id)
+          await taskStore.updateWorkflow(workflow.id, {
+            state: mergeActionState(
+              latestWorkflow.state,
+              action.id,
+              stopResult.state as Partial<ActionRuntimeState>,
+            ),
+          })
+        }
       }
 
+      const latestWorkflow = await getWorkflow(workflow.id)
       return taskStore.updateWorkflow(workflow.id, {
         state: {
-          ...workflow.state,
+          ...latestWorkflow.state,
           status: 'idle',
           lastMessage: 'Workflow 중지를 요청했습니다.',
         },
       })
     },
   }
+}
+
+function isMissingBrowserActionGroupError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes('관리 중인 브라우저 Action 그룹을 찾지 못했습니다')
+  )
 }
 
 async function runActionWorkflow(
@@ -164,15 +204,31 @@ async function runActionWorkflow(
                   (current) => current.id === workflow.id,
                 ),
               )
+            const nextActionState = mergeActionState(
+              currentWorkflow?.state ?? workflow.state,
+              action.id,
+              state as Partial<ActionRuntimeState>,
+            )
             await context.taskStore.updateWorkflow(workflow.id, {
               state: {
                 ...(currentWorkflow?.state ?? workflow.state),
                 ...(state as Partial<TaskState>),
+                actionStates: nextActionState.actionStates,
               },
             })
           },
         })
         const resultState = result.state as TaskState
+        const currentWorkflow = await context.taskStore
+          .listWorkflows()
+          .then((workflows) =>
+            workflows.find((current) => current.id === workflow.id),
+          )
+        const stateWithAction = mergeActionState(
+          currentWorkflow?.state ?? workflow.state,
+          action.id,
+          resultState,
+        )
         outputScope = {
           ...outputScope,
           [actionRef.id]: resultState,
@@ -184,6 +240,21 @@ async function runActionWorkflow(
           status: resultState.status,
           message: result.message ?? `${action.name} Action 실행을 처리했습니다.`,
         })
+        if (resultState.status === 'running') {
+          const runningWorkflow = await context.taskStore.updateWorkflow(
+            workflow.id,
+            {
+              state: {
+                ...stateWithAction,
+                ...resultState,
+                lastMessage:
+                  result.message ?? `${action.name} Action 실행 중입니다.`,
+              },
+            },
+          )
+
+          return runningWorkflow
+        }
         continue
       }
 
@@ -214,6 +285,7 @@ async function runActionWorkflow(
 
     const completedWorkflow = await context.taskStore.updateWorkflow(workflow.id, {
       state: {
+        ...(await getLatestWorkflowState(context.taskStore, workflow.id)),
         status: 'idle',
         lastRunAt: new Date().toISOString(),
         lastMessage: `${enabledActionRefs.length}개 Action 실행을 완료했습니다.`,
@@ -230,6 +302,7 @@ async function runActionWorkflow(
   } catch (error) {
     const failedWorkflow = await context.taskStore.updateWorkflow(workflow.id, {
       state: {
+        ...(await getLatestWorkflowState(context.taskStore, workflow.id)),
         status: 'failed',
         lastRunAt: new Date().toISOString(),
         lastError: getErrorMessage(error),
@@ -243,6 +316,37 @@ async function runActionWorkflow(
     })
 
     return failedWorkflow
+  }
+}
+
+async function getLatestWorkflowState(
+  taskStore: TaskStore,
+  workflowId: string,
+): Promise<WorkflowState> {
+  const workflows = await taskStore.listWorkflows()
+  const workflow = workflows.find((current) => current.id === workflowId)
+
+  if (!workflow) {
+    throw new Error(`Workflow not found: ${workflowId}`)
+  }
+
+  return workflow.state
+}
+
+function mergeActionState(
+  workflowState: WorkflowState,
+  actionId: string,
+  actionState: Partial<ActionRuntimeState>,
+): WorkflowState {
+  return {
+    ...workflowState,
+    actionStates: {
+      ...(workflowState.actionStates ?? {}),
+      [actionId]: {
+        ...(workflowState.actionStates?.[actionId] ?? { status: 'idle' }),
+        ...actionState,
+      },
+    },
   }
 }
 

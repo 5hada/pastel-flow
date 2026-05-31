@@ -75,6 +75,8 @@ export type ActionsApi = {
     input: Partial<ActionDefinition<TConfig>>,
   ): Promise<ActionDefinition<TConfig>>
   delete(id: string): Promise<void>
+  onChanged(listener: (action: ActionDefinition) => void): () => void
+  onDeleted(listener: (actionId: string) => void): () => void
 }
 
 export type WorkflowsApi = {
@@ -88,6 +90,8 @@ export type WorkflowsApi = {
   run(id: string): Promise<WorkflowDefinition>
   stop(id: string): Promise<WorkflowDefinition>
   listEvents(workflowId?: string): Promise<TaskRunEvent[]>
+  onChanged(listener: (workflow: WorkflowDefinition) => void): () => void
+  onDeleted(listener: (workflowId: string) => void): () => void
 }
 
 export type SettingsApi = {

@@ -1,12 +1,23 @@
-import type { FormEvent } from 'react'
+import type { CSSProperties, FormEvent } from 'react'
 import { getDeviceAccessLevelLabel, type CurrentDevice, type DeviceAccessLevel, type LinkedDevice } from '../../../../shared/devices'
-import type { AppSettings, TaskListDisplayMode, ThemeMode } from '../../../../shared/settings'
+import type {
+  AppSettings,
+  BrowserProfilePreset,
+  TaskListDisplayMode,
+  ThemeColorKey,
+  ThemeMode,
+} from '../../../../shared/settings'
 import type { LocalSecretMetadata, SecretStorageStatus } from '../../../../shared/secrets'
 import type { SyncImportResult, SyncStatus } from '../../../../shared/sync'
-import type { BrowserKind } from '../../../../shared/tasks'
+import type { BrowserKind, BrowserProfileSource, BrowserRunMode } from '../../../../shared/tasks'
 import type { SecretFormState, SettingsCategory, SettingsSaveState } from '../../taskFormState'
 import { createEmptyLinkedDevice } from '../../utils/taskFormTransforms'
-import { formatDate, getSyncModeLabel, getThemeModeLabel } from '../../utils/viewLabels'
+import {
+  formatDate,
+  getBrowserProfileSourceLabel,
+  getSyncModeLabel,
+  getThemeModeLabel,
+} from '../../utils/viewLabels'
 import { DetailItem } from '../tasks/DetailItem'
 
 export type AppSettingsPanelProps = {
@@ -32,6 +43,7 @@ export type AppSettingsPanelProps = {
   onImportSyncSnapshot(): Promise<void>
   onImportSyncSnapshotFile(): Promise<void>
   onPruneTaskRunEvents(): Promise<void>
+  onRegisterToolModule(): Promise<void>
   onSecretFormChange(value: SecretFormState): void
   onSubmit(event: FormEvent<HTMLFormElement>): Promise<void>
 }
@@ -52,6 +64,7 @@ export function AppSettingsPanel({
   onImportSyncSnapshot,
   onImportSyncSnapshotFile,
   onPruneTaskRunEvents,
+  onRegisterToolModule,
   onSecretFormChange,
   onSubmit,
   saveState,
@@ -77,50 +90,18 @@ export function AppSettingsPanel({
       <form className="task-form" onSubmit={onSubmit}>
         {selectedCategory === 'general' ? (
           <>
-            <fieldset className="settings-fieldset">
-              <legend>테마</legend>
-              <div className="segmented-control">
-                {(['system', 'light', 'dark'] as ThemeMode[]).map((themeMode) => (
-                  <label key={themeMode}>
-                    <input
-                      checked={form.themeMode === themeMode}
-                      name="themeMode"
-                      type="radio"
-                      value={themeMode}
-                      onChange={() =>
-                        onChange({
-                          ...form,
-                          themeMode,
-                        })
-                      }
-                    />
-                    <span>{getThemeModeLabel(themeMode)}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-
-            <div className="theme-preview" data-preview-theme={form.themeMode}>
-              <span>{getThemeModeLabel(form.themeMode)}</span>
-              <strong>Pastel Flow</strong>
-              <p>설정 저장 전에는 이 미리보기만 변경됩니다.</p>
-            </div>
-
-            <label>
-              기본 브라우저
-              <select
-                value={form.defaultBrowserKind}
+            <label className="inline-check">
+              <input
+                checked={form.startAtLogin}
+                type="checkbox"
                 onChange={(event) =>
                   onChange({
                     ...form,
-                    defaultBrowserKind: event.target.value as BrowserKind,
+                    startAtLogin: event.target.checked,
                   })
                 }
-              >
-                <option value="chrome">Chrome</option>
-                <option value="edge">Edge</option>
-                <option value="chromium">Chromium</option>
-              </select>
+              />
+              시작 프로그램으로 설정
             </label>
 
             <label>
@@ -148,6 +129,106 @@ export function AppSettingsPanel({
                 }
               />
             </label>
+
+            <section className="settings-subsection" aria-label="도구 폴더">
+              <div className="section-heading compact-heading">
+                <div>
+                  <p className="eyebrow">Tools</p>
+                  <h3>도구 폴더 등록</h3>
+                </div>
+                <button type="button" onClick={() => void onRegisterToolModule()}>
+                  폴더 등록
+                </button>
+              </div>
+            </section>
+          </>
+        ) : null}
+
+        {selectedCategory === 'appearance' ? (
+          <>
+            <fieldset className="settings-fieldset">
+              <legend>테마</legend>
+              <div className="segmented-control">
+                {(['system', 'light', 'dark', 'custom'] as ThemeMode[]).map((themeMode) => (
+                  <label key={themeMode}>
+                    <input
+                      checked={form.themeMode === themeMode}
+                      name="themeMode"
+                      type="radio"
+                      value={themeMode}
+                      onChange={() =>
+                        onChange({
+                          ...form,
+                          themeMode,
+                        })
+                      }
+                    />
+                    <span>{getThemeModeLabel(themeMode)}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <div
+              className="theme-preview"
+              data-preview-theme={form.themeMode}
+              style={getThemePreviewStyle(form)}
+            >
+              <span>{getThemeModeLabel(form.themeMode)}</span>
+              <strong>Pastel Flow</strong>
+              <p>설정 저장 전에는 이 미리보기만 변경됩니다.</p>
+              <div className="theme-preview-swatches">
+                {(Object.keys(form.customThemeColors) as ThemeColorKey[]).map(
+                  (key) => (
+                    <i
+                      aria-label={themeColorLabels[key]}
+                      key={key}
+                      style={{ backgroundColor: form.customThemeColors[key] }}
+                    />
+                  ),
+                )}
+              </div>
+            </div>
+
+            {form.themeMode === 'custom' ? (
+              <div className="theme-color-grid">
+                {(Object.keys(form.customThemeColors) as ThemeColorKey[]).map(
+                  (key) => (
+                    <label key={key}>
+                      {themeColorLabels[key]}
+                      <span className="color-input-row">
+                        <input
+                          className="color-input"
+                          type="color"
+                          value={form.customThemeColors[key]}
+                          onChange={(event) =>
+                            onChange({
+                              ...form,
+                              customThemeColors: {
+                                ...form.customThemeColors,
+                                [key]: event.target.value,
+                              },
+                            })
+                          }
+                        />
+                        <input
+                          value={form.customThemeColors[key]}
+                          onChange={(event) =>
+                            onChange({
+                              ...form,
+                              customThemeColors: {
+                                ...form.customThemeColors,
+                                [key]: event.target.value,
+                              },
+                            })
+                          }
+                        />
+                      </span>
+                    </label>
+                  ),
+                )}
+              </div>
+            ) : null}
 
             <label>
               작업 목록 표시 형식
@@ -180,6 +261,23 @@ export function AppSettingsPanel({
                 }
               />
             </label>
+
+            <label>
+              Workflow 실행 화면 계층 구조
+              <textarea
+                rows={4}
+                value={form.workflowHierarchy.join('\n')}
+                onChange={(event) =>
+                  onChange({
+                    ...form,
+                    workflowHierarchy: event.target.value
+                      .split(/\r?\n/)
+                      .map((item) => item.trim())
+                      .filter(Boolean),
+                  })
+                }
+              />
+            </label>
           </>
         ) : null}
 
@@ -192,21 +290,24 @@ export function AppSettingsPanel({
               </div>
             </div>
             <div className="shortcut-list">
-              {[
-                ['실행 페이지 새로고침', 'Ctrl+R'],
-                ['Action 화면 열기', 'Ctrl+1'],
-                ['Workflow 화면 열기', 'Ctrl+2'],
-                ['도구 페이지 열기', 'Ctrl+3'],
-              ].map(([label, shortcut]) => (
-                <label key={label}>
-                  {label}
-                  <input value={shortcut} readOnly />
+              {shortcutFields.map((field) => (
+                <label key={field.key}>
+                  {field.label}
+                  <input
+                    value={form.shortcuts[field.key]}
+                    onChange={(event) =>
+                      onChange({
+                        ...form,
+                        shortcuts: {
+                          ...form.shortcuts,
+                          [field.key]: event.target.value,
+                        },
+                      })
+                    }
+                  />
                 </label>
               ))}
             </div>
-            <p className="muted-text">
-              단축키 충돌 감지와 저장은 다음 단계에서 활성화합니다.
-            </p>
           </section>
         ) : null}
 
@@ -218,6 +319,63 @@ export function AppSettingsPanel({
                 <h3>브라우저 실행 정책</h3>
               </div>
             </div>
+            <label>
+              기본 브라우저
+              <select
+                value={form.defaultBrowserKind}
+                onChange={(event) =>
+                  onChange({
+                    ...form,
+                    defaultBrowserKind: event.target.value as BrowserKind,
+                  })
+                }
+              >
+                <option value="chrome">Chrome</option>
+                <option value="edge">Edge</option>
+                <option value="chromium">Chromium</option>
+              </select>
+            </label>
+            <div className="form-grid">
+              <label>
+                기본 실행 방식
+                <select
+                  value={form.defaultBrowserRunMode}
+                  onChange={(event) =>
+                    onChange({
+                      ...form,
+                      defaultBrowserRunMode: event.target.value as BrowserRunMode,
+                    })
+                  }
+                >
+                  <option value="dedicated_profile">전용 프로필</option>
+                  <option value="extension_controlled">확장 프로그램 제어</option>
+                  <option value="default_browser_deeplink">기본 브라우저 연결</option>
+                </select>
+              </label>
+              <label>
+                기본 프로필 소스
+                <select
+                  value={form.defaultBrowserProfileSource}
+                  onChange={(event) =>
+                    onChange({
+                      ...form,
+                      defaultBrowserProfileSource: event.target.value as BrowserProfileSource,
+                    })
+                  }
+                >
+                  {(['task_profile', 'existing_profile'] as BrowserProfileSource[]).map(
+                    (profileSource) => (
+                      <option key={profileSource} value={profileSource}>
+                        {getBrowserProfileSourceLabel(profileSource)}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+            </div>
+
+            <ProfilePresetEditor form={form} onChange={onChange} />
+
             <label>
               Chrome 실행 파일 경로
               <input
@@ -268,13 +426,6 @@ export function AppSettingsPanel({
                 placeholder="비워두면 자동으로 찾습니다."
               />
             </label>
-            <dl className="detail-list">
-              <DetailItem label="기본 실행 방식" value="전용 프로필" />
-              <DetailItem
-                label="기본 프로필 조작"
-                value="자동 탐색/강제 조작 안 함"
-              />
-            </dl>
           </section>
         ) : null}
 
@@ -573,6 +724,43 @@ export function AppSettingsPanel({
           </section>
         ) : null}
 
+        {selectedCategory === 'developer' ? (
+          <section className="settings-subsection" aria-label="개발자 설정">
+            <div className="section-heading compact-heading">
+              <div>
+                <p className="eyebrow">Developer</p>
+                <h3>세부 정보 표시</h3>
+              </div>
+            </div>
+            {[
+              ['showIds', 'ID 표시'],
+              ['showPaths', '세부 위치 경로 표시'],
+              ['showToolMetadata', '도구 메타데이터 표시'],
+            ].map(([key, label]) => (
+              <label className="inline-check" key={key}>
+                <input
+                  checked={
+                    form.developerVisibility[
+                      key as keyof typeof form.developerVisibility
+                    ]
+                  }
+                  type="checkbox"
+                  onChange={(event) =>
+                    onChange({
+                      ...form,
+                      developerVisibility: {
+                        ...form.developerVisibility,
+                        [key]: event.target.checked,
+                      },
+                    })
+                  }
+                />
+                {label}
+              </label>
+            ))}
+          </section>
+        ) : null}
+
         {settingsErrorMessage ? (
           <p className="panel-error">{settingsErrorMessage}</p>
         ) : null}
@@ -649,5 +837,171 @@ export function LinkedDeviceEditor({
         제거
       </button>
     </div>
+  )
+}
+
+const themeColorLabels: Record<ThemeColorKey, string> = {
+  appBg: '앱 배경',
+  surface: '표면',
+  surfaceMuted: '보조 표면',
+  surfaceRaised: '상단 표면',
+  surfaceSelected: '선택 표면',
+  border: '경계선',
+  borderStrong: '강한 경계선',
+  text: '본문',
+  textMuted: '보조 본문',
+  accent: '강조',
+  accentHover: '강조 hover',
+  accentSoft: '부드러운 강조',
+  accentContrast: '강조 대비',
+  danger: '위험',
+  dangerHover: '위험 hover',
+  dangerSoft: '부드러운 위험',
+  info: '정보',
+  infoSoft: '부드러운 정보',
+  warning: '경고',
+  warningText: '경고 본문',
+  success: '성공',
+  successSoft: '부드러운 성공',
+  controlBg: '입력 배경',
+  readonlyBg: '읽기 전용',
+  railBg: '레일',
+}
+
+const shortcutFields: {
+  key: keyof AppSettings['shortcuts']
+  label: string
+}[] = [
+  { key: 'refresh', label: '새로고침' },
+  { key: 'openRun', label: '실행 화면 열기' },
+  { key: 'openActions', label: 'Action 화면 열기' },
+  { key: 'openWorkflows', label: 'Workflow 화면 열기' },
+  { key: 'openTools', label: '도구 화면 열기' },
+  { key: 'openSettings', label: '설정 열기' },
+  { key: 'runSelectedWorkflow', label: '선택 Workflow 실행' },
+]
+
+function getThemePreviewStyle(form: AppSettings): CSSProperties {
+  if (form.themeMode !== 'custom') {
+    return {}
+  }
+
+  return {
+    color: form.customThemeColors.text,
+    backgroundColor: form.customThemeColors.surface,
+    borderColor: form.customThemeColors.border,
+  }
+}
+
+function ProfilePresetEditor({
+  form,
+  onChange,
+}: {
+  form: AppSettings
+  onChange(value: AppSettings): void
+}) {
+  function updateProfile(index: number, profile: BrowserProfilePreset) {
+    onChange({
+      ...form,
+      browserProfilePresets: form.browserProfilePresets.map(
+        (currentProfile, currentIndex) =>
+          currentIndex === index ? profile : currentProfile,
+      ),
+    })
+  }
+
+  return (
+    <section className="settings-subsection" aria-label="사용자 지정 프로필">
+      <div className="section-heading compact-heading">
+        <div>
+          <p className="eyebrow">Profiles</p>
+          <h3>사용자 지정 프로필</h3>
+        </div>
+        <button
+          className="ghost-button"
+          type="button"
+          onClick={() =>
+            onChange({
+              ...form,
+              browserProfilePresets: [
+                ...form.browserProfilePresets,
+                {
+                  id: `profile_${crypto.randomUUID()}`,
+                  name: '',
+                  browserKind: form.defaultBrowserKind,
+                  profilePath: '',
+                },
+              ],
+            })
+          }
+        >
+          프로필 추가
+        </button>
+      </div>
+      {form.browserProfilePresets.length === 0 ? (
+        <p className="muted-text">등록된 사용자 지정 프로필이 없습니다.</p>
+      ) : (
+        <div className="profile-preset-list">
+          {form.browserProfilePresets.map((profile, index) => (
+            <div className="profile-preset-row" key={profile.id}>
+              <label>
+                이름
+                <input
+                  value={profile.name}
+                  onChange={(event) =>
+                    updateProfile(index, {
+                      ...profile,
+                      name: event.target.value,
+                    })
+                  }
+                />
+              </label>
+              <label>
+                브라우저
+                <select
+                  value={profile.browserKind}
+                  onChange={(event) =>
+                    updateProfile(index, {
+                      ...profile,
+                      browserKind: event.target.value as BrowserKind,
+                    })
+                  }
+                >
+                  <option value="chrome">Chrome</option>
+                  <option value="edge">Edge</option>
+                  <option value="chromium">Chromium</option>
+                </select>
+              </label>
+              <label>
+                프로필 경로
+                <input
+                  value={profile.profilePath}
+                  onChange={(event) =>
+                    updateProfile(index, {
+                      ...profile,
+                      profilePath: event.target.value,
+                    })
+                  }
+                />
+              </label>
+              <button
+                className="danger-button"
+                type="button"
+                onClick={() =>
+                  onChange({
+                    ...form,
+                    browserProfilePresets: form.browserProfilePresets.filter(
+                      (_profile, currentIndex) => currentIndex !== index,
+                    ),
+                  })
+                }
+              >
+                삭제
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   )
 }

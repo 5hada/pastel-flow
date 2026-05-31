@@ -2,8 +2,11 @@ import type { AppSettings } from '../../../shared/settings'
 import type { CurrentDevice, LinkedDevice } from '../../../shared/devices'
 import {
   createDefaultBrowserTabGroupConfig,
+  defaultDevicePolicy,
   normalizeBrowserTabGroupConfig,
   normalizeDevicePolicy,
+  type ActionDefinition,
+  type ActionType,
   type BrowserTabGroupConfig,
   type CrawlerConfig,
   type DevicePolicy,
@@ -12,6 +15,7 @@ import {
   type SecretRef,
   type TaskSchedule,
   type TaskTemplate,
+  type TaskType,
   type TradingBotConfig,
 } from '../../../shared/tasks'
 import type { BrowserTaskFormState } from '../taskFormState'
@@ -188,6 +192,7 @@ export function createTaskEditForm(task: TaskTemplate): BrowserTaskFormState {
     browserKind: browserConfig.browserKind,
     runMode: browserConfig.runMode,
     profileSource: browserConfig.profileSource,
+    profilePresetId: '',
     existingProfilePath: browserConfig.existingProfilePath ?? '',
     initialUrls: browserConfig.initialUrls.join('\n'),
     dynamicTemplateUpdates: browserConfig.dynamicTemplateUpdates,
@@ -207,6 +212,81 @@ export function createTaskEditForm(task: TaskTemplate): BrowserTaskFormState {
     allowedDeviceIds: permissions.allowedDeviceIds?.join('\n') ?? '',
     secretRefIds:
       permissions.secretRefs?.map((secretRef) => secretRef.id).join('\n') ?? '',
+  }
+}
+
+export function createActionEditForm(action: ActionDefinition): BrowserTaskFormState {
+  return createTaskEditForm(createTaskTemplateFromAction(action))
+}
+
+export function createActionUpdateInputFromForm(
+  form: BrowserTaskFormState,
+  existingAction: ActionDefinition,
+): Partial<ActionDefinition> {
+  const taskType = getTaskTypeForActionType(existingAction.type) ?? form.taskType
+  const existingTask = createTaskTemplateFromAction({
+    ...existingAction,
+    type: getActionTypeForTaskType(taskType),
+  })
+
+  return {
+    name: form.name.trim(),
+    type: getActionTypeForTaskType(form.taskType),
+    config: createTaskConfigFromForm(form, existingTask),
+    secretRefs: parseLines(form.secretRefIds).map((secretId) => ({
+      id: secretId,
+      scope: 'local_device',
+    })),
+  }
+}
+
+export function getTaskTypeForActionType(
+  actionType: ActionType,
+): TaskType | null {
+  switch (actionType) {
+    case 'browser_action':
+      return 'browser_tab_group'
+    case 'crawler_action':
+      return 'crawler'
+    case 'discord_dry_run_action':
+      return 'discord_bot'
+    case 'notion_dry_run_action':
+      return 'notion_sync'
+    case 'trading_dry_run_action':
+      return 'trading_bot'
+    case 'tool_action':
+      return null
+  }
+}
+
+export function getActionTypeForTaskType(taskType: TaskType): ActionType {
+  switch (taskType) {
+    case 'browser_tab_group':
+      return 'browser_action'
+    case 'crawler':
+      return 'crawler_action'
+    case 'discord_bot':
+      return 'discord_dry_run_action'
+    case 'notion_sync':
+      return 'notion_dry_run_action'
+    case 'trading_bot':
+      return 'trading_dry_run_action'
+  }
+}
+
+function createTaskTemplateFromAction(action: ActionDefinition): TaskTemplate {
+  return {
+    id: action.id,
+    name: action.name,
+    type: getTaskTypeForActionType(action.type) ?? 'crawler',
+    config: action.config,
+    state: { status: 'idle' },
+    permissions: normalizeDevicePolicy({
+      ...defaultDevicePolicy,
+      secretRefs: action.secretRefs,
+    }),
+    createdAt: action.createdAt,
+    updatedAt: action.updatedAt,
   }
 }
 
@@ -256,15 +336,27 @@ function getNextWallClockRunAt(
 export function isSettingsDirty(form: AppSettings, settings: AppSettings): boolean {
   return (
     form.themeMode !== settings.themeMode ||
+    JSON.stringify(form.customThemeColors) !==
+      JSON.stringify(settings.customThemeColors) ||
     form.defaultBrowserKind !== settings.defaultBrowserKind ||
+    form.defaultBrowserRunMode !== settings.defaultBrowserRunMode ||
+    form.defaultBrowserProfileSource !== settings.defaultBrowserProfileSource ||
     form.defaultTaskName.trim() !== settings.defaultTaskName ||
     form.defaultActionName.trim() !== settings.defaultActionName ||
     form.defaultWorkflowName.trim() !== settings.defaultWorkflowName ||
     form.initialUrlInputMode !== settings.initialUrlInputMode ||
     form.taskListDisplayMode !== settings.taskListDisplayMode ||
     form.workflowGridColumnCount !== settings.workflowGridColumnCount ||
+    form.startAtLogin !== settings.startAtLogin ||
     form.taskRunEventRetentionLimit !== settings.taskRunEventRetentionLimit ||
     form.taskRunEventExportLimit !== settings.taskRunEventExportLimit ||
+    JSON.stringify(form.workflowHierarchy.map((item) => item.trim()).filter(Boolean)) !==
+      JSON.stringify(settings.workflowHierarchy) ||
+    JSON.stringify(form.browserProfilePresets) !==
+      JSON.stringify(settings.browserProfilePresets) ||
+    JSON.stringify(form.developerVisibility) !==
+      JSON.stringify(settings.developerVisibility) ||
+    JSON.stringify(form.shortcuts) !== JSON.stringify(settings.shortcuts) ||
     normalizeSettingsPath(form.browserExecutablePaths.chrome) !==
       normalizeSettingsPath(settings.browserExecutablePaths.chrome) ||
     normalizeSettingsPath(form.browserExecutablePaths.edge) !==

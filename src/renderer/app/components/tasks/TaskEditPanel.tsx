@@ -1,5 +1,6 @@
 import type { FormEvent } from 'react'
 import type { CurrentDevice } from '../../../../shared/devices'
+import type { BrowserProfilePreset } from '../../../../shared/settings'
 import type { LocalSecretMetadata } from '../../../../shared/secrets'
 import type { BrowserTaskFormState } from '../../taskFormState'
 import { PolicyFields, ScheduleFields, TaskTypeConfigFields } from './TaskFormFields'
@@ -7,6 +8,7 @@ import { PolicyFields, ScheduleFields, TaskTypeConfigFields } from './TaskFormFi
 export type TaskEditPanelProps = {
   currentDevice: CurrentDevice
   editForm: BrowserTaskFormState
+  profilePresets?: BrowserProfilePreset[]
   secrets: LocalSecretMetadata[]
   onChange(value: BrowserTaskFormState): void
   onSubmit(event: FormEvent<HTMLFormElement>): void
@@ -17,6 +19,7 @@ export function TaskEditPanel({
   editForm,
   onChange,
   onSubmit,
+  profilePresets,
   secrets,
 }: TaskEditPanelProps) {
   return (
@@ -40,7 +43,11 @@ export function TaskEditPanel({
             }
           />
         </label>
-        <TaskTypeConfigFields form={editForm} onChange={onChange} />
+        <TaskTypeConfigFields
+          form={editForm}
+          profilePresets={profilePresets}
+          onChange={onChange}
+        />
         <ScheduleFields form={editForm} onChange={onChange} />
         <PolicyFields
           currentDevice={currentDevice}

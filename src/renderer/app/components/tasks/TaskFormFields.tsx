@@ -8,6 +8,7 @@ import {
   type DeviceVisibilityPolicy,
   type TaskScheduleMode,
 } from '../../../../shared/tasks'
+import type { BrowserProfilePreset } from '../../../../shared/settings'
 import type { CurrentDevice } from '../../../../shared/devices'
 import type { LocalSecretMetadata } from '../../../../shared/secrets'
 import type { BrowserTaskFormState } from '../../taskFormState'
@@ -15,13 +16,24 @@ import { parseLines } from '../../utils/taskFormTransforms'
 
 export type ScheduleFieldsProps = {
   form: BrowserTaskFormState
+  profilePresets?: BrowserProfilePreset[]
   onChange(value: BrowserTaskFormState): void
 }
 
-export function TaskTypeConfigFields({ form, onChange }: ScheduleFieldsProps) {
+export function TaskTypeConfigFields({
+  form,
+  onChange,
+  profilePresets,
+}: ScheduleFieldsProps) {
   switch (form.taskType) {
     case 'browser_tab_group':
-      return <BrowserConfigFields form={form} onChange={onChange} />
+      return (
+        <BrowserConfigFields
+          form={form}
+          profilePresets={profilePresets}
+          onChange={onChange}
+        />
+      )
     case 'crawler':
       return <CrawlerConfigFields form={form} onChange={onChange} />
     case 'discord_bot':
@@ -33,7 +45,18 @@ export function TaskTypeConfigFields({ form, onChange }: ScheduleFieldsProps) {
   }
 }
 
-export function BrowserConfigFields({ form, onChange }: ScheduleFieldsProps) {
+export function BrowserConfigFields({
+  form,
+  onChange,
+  profilePresets = [],
+}: ScheduleFieldsProps) {
+  const selectedProfilePresetId =
+    form.profilePresetId ||
+    profilePresets.find(
+      (preset) => preset.profilePath === form.existingProfilePath,
+    )?.id ||
+    ''
+
   return (
     <>
       <div className="form-grid">
@@ -89,18 +112,45 @@ export function BrowserConfigFields({ form, onChange }: ScheduleFieldsProps) {
       </div>
       {form.runMode === 'extension_controlled' &&
       form.profileSource === 'existing_profile' ? (
-        <label>
-          기존 프로필 경로
-          <input
-            value={form.existingProfilePath}
-            onChange={(event) =>
-              onChange({
-                ...form,
-                existingProfilePath: event.target.value,
-              })
-            }
-          />
-        </label>
+        profilePresets.length > 0 ? (
+          <label>
+            사용자 지정 프로필
+            <select
+              value={selectedProfilePresetId}
+              onChange={(event) => {
+                const preset = profilePresets.find(
+                  (currentPreset) => currentPreset.id === event.target.value,
+                )
+                onChange({
+                  ...form,
+                  profilePresetId: event.target.value,
+                  browserKind: preset?.browserKind ?? form.browserKind,
+                  existingProfilePath: preset?.profilePath ?? '',
+                })
+              }}
+            >
+              <option value="">프로필 선택</option>
+              {profilePresets.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <label>
+            기존 프로필 경로
+            <input
+              value={form.existingProfilePath}
+              onChange={(event) =>
+                onChange({
+                  ...form,
+                  existingProfilePath: event.target.value,
+                })
+              }
+            />
+          </label>
+        )
       ) : null}
       <label>
         초기 URL

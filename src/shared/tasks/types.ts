@@ -101,6 +101,10 @@ export type WorkflowState = {
 
 export type ActionRuntimeState = {
   status: ActionRunStatus
+  actionRunId?: string
+  workflowActionRefId?: string
+  startedAt?: string
+  completedAt?: string
   lastRunAt?: string
   lastError?: string
   localProfilePath?: string

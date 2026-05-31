@@ -120,6 +120,7 @@ const extensionManifest = {
 
 const extensionBackground = `
 const GROUP_TITLE_PREFIX = 'Pastel Flow · '
+const STORAGE_KEY = 'pastelFlowManagedGroups'
 
 chrome.runtime.onInstalled.addListener(() => undefined)
 chrome.runtime.onStartup.addListener(() => undefined)
@@ -162,15 +163,80 @@ function removeTabs(tabIds) {
   return new Promise((resolve) => chrome.tabs.remove(tabIds, resolve))
 }
 
-async function findManagedGroup(browserGroupId) {
+function getStorageValue(key) {
+  return new Promise((resolve) => chrome.storage.local.get(key, resolve))
+}
+
+function setStorageValue(value) {
+  return new Promise((resolve) => chrome.storage.local.set(value, resolve))
+}
+
+async function readManagedGroups() {
+  const stored = await getStorageValue(STORAGE_KEY)
+  const groups = stored[STORAGE_KEY]
+  return groups && typeof groups === 'object' ? groups : {}
+}
+
+async function writeManagedGroup(browserGroupId, metadata) {
+  const groups = await readManagedGroups()
+  await setStorageValue({
+    [STORAGE_KEY]: {
+      ...groups,
+      [browserGroupId]: {
+        ...metadata,
+        browserGroupId,
+        updatedAt: new Date().toISOString(),
+      },
+    },
+  })
+}
+
+async function deleteManagedGroup(browserGroupId) {
+  const groups = await readManagedGroups()
+  const nextGroups = { ...groups }
+  delete nextGroups[browserGroupId]
+  await setStorageValue({ [STORAGE_KEY]: nextGroups })
+}
+
+async function findGroupById(groupId) {
+  if (typeof groupId !== 'number') {
+    return undefined
+  }
+
+  const groups = await queryTabGroups({})
+  return groups.find((group) => group.id === groupId)
+}
+
+async function findGroupByTitle(browserGroupId) {
   const title = getGroupTitle(browserGroupId)
   const groups = await queryTabGroups({})
   return groups.find((group) => group.title === title)
 }
 
+async function findManagedGroup(browserGroupId) {
+  const managedGroups = await readManagedGroups()
+  const metadata = managedGroups[browserGroupId]
+  const storedGroup = await findGroupById(metadata && metadata.groupId)
+
+  if (storedGroup) {
+    return storedGroup
+  }
+
+  const titledGroup = await findGroupByTitle(browserGroupId)
+  if (titledGroup) {
+    await writeManagedGroup(browserGroupId, {
+      groupId: titledGroup.id,
+      windowId: titledGroup.windowId,
+      title: titledGroup.title,
+    })
+  }
+
+  return titledGroup
+}
+
 async function snapshotGroup(browserGroupId) {
-  const title = getGroupTitle(browserGroupId)
-  const groups = (await queryTabGroups({})).filter((group) => group.title === title)
+  const managedGroup = await findManagedGroup(browserGroupId)
+  const groups = managedGroup ? [managedGroup] : []
   const groupIds = new Set(groups.map((group) => group.id))
   const tabs = (await queryTabs({})).filter((tab) => groupIds.has(tab.groupId))
 
@@ -199,6 +265,11 @@ async function snapshotGroup(browserGroupId) {
 async function ensureGroup(browserGroupId, initialUrls) {
   const existingGroup = await findManagedGroup(browserGroupId)
   if (existingGroup) {
+    await writeManagedGroup(browserGroupId, {
+      groupId: existingGroup.id,
+      windowId: existingGroup.windowId,
+      title: existingGroup.title,
+    })
     return { groupId: existingGroup.id, existing: true }
   }
 
@@ -216,6 +287,13 @@ async function ensureGroup(browserGroupId, initialUrls) {
     title: getGroupTitle(browserGroupId),
     color: 'blue',
   })
+  const createdGroup = await findGroupById(groupId)
+  await writeManagedGroup(browserGroupId, {
+    groupId,
+    windowId: createdGroup && createdGroup.windowId,
+    title: getGroupTitle(browserGroupId),
+    tabIds,
+  })
 
   return { groupId, existing: false }
 }
@@ -231,12 +309,15 @@ async function closeGroup(browserGroupId) {
   }
 
   await removeTabs(tabIds)
+  await deleteManagedGroup(browserGroupId)
   return { closed: tabIds.length }
 }
 
 globalThis.pastelFlowBridge = {
   async handle(command) {
     switch (command.type) {
+      case 'ping':
+        return { ok: true, version: '0.3.0' }
       case 'ensureGroup':
         return ensureGroup(command.browserGroupId, command.initialUrls || [])
       case 'snapshotGroup':
@@ -251,6 +332,9 @@ globalThis.pastelFlowBridge = {
 `
 
 type BrowserBridgeCommand =
+  | {
+      type: 'ping'
+    }
   | {
       type: 'ensureGroup'
       browserGroupId: string
@@ -286,22 +370,42 @@ async function dispatchBridgeCommand(
   port: number,
   command: BrowserBridgeCommand,
 ): Promise<unknown> {
-  const targets = await readDevToolsTargets(port)
-  const extensionTarget = targets.find(
-    (target) =>
-      target.type === 'service_worker' &&
-      target.url?.endsWith('/background.js') &&
-      target.webSocketDebuggerUrl,
-  )
-
-  if (!extensionTarget?.webSocketDebuggerUrl) {
-    throw new Error('브라우저 Action 그룹을 제어할 확장 브리지를 찾지 못했습니다.')
-  }
+  const extensionTarget = await waitForExtensionTarget(port)
 
   return evaluateDevToolsExpression(
     extensionTarget.webSocketDebuggerUrl,
     `globalThis.pastelFlowBridge.handle(${JSON.stringify(command)})`,
   )
+}
+
+async function waitForExtensionTarget(port: number) {
+  const startedAt = Date.now()
+
+  while (Date.now() - startedAt < 5000) {
+    const targets = await readDevToolsTargets(port)
+    const extensionTarget = targets.find(
+      (target) =>
+        target.type === 'service_worker' &&
+        target.url?.endsWith('/background.js') &&
+        target.webSocketDebuggerUrl,
+    )
+
+    if (extensionTarget?.webSocketDebuggerUrl) {
+      return extensionTarget as typeof extensionTarget & {
+        webSocketDebuggerUrl: string
+      }
+    }
+
+    await delay(150)
+  }
+
+  throw new Error('브라우저 Action 그룹을 제어할 확장 브리지를 찾지 못했습니다.')
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds)
+  })
 }
 
 function isBrowserTabGroupStateSnapshot(

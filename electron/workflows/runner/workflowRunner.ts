@@ -112,11 +112,16 @@ export function createWorkflowRunner({
         }
         if (stopResult && 'state' in stopResult && stopResult.state) {
           const latestWorkflow = await getWorkflow(workflow.id)
+          const existingActionState = latestWorkflow.state.actionStates?.[action.id]
           await taskStore.updateWorkflow(workflow.id, {
             state: mergeActionState(
               latestWorkflow.state,
               action.id,
-              stopResult.state as Partial<ActionRuntimeState>,
+              {
+                ...existingActionState,
+                ...(stopResult.state as Partial<ActionRuntimeState>),
+                completedAt: new Date().toISOString(),
+              },
             ),
           })
         }
@@ -186,7 +191,22 @@ async function runActionWorkflow(
       if (action.type !== 'tool_action') {
         const adapter = context.adapterRegistry.getAdapter(action.type)
         const actionRunId = randomUUID()
+        const actionStartedAt = new Date().toISOString()
         await adapter.validateConfig(action.config)
+        await context.taskStore.updateWorkflow(workflow.id, {
+          state: mergeActionState(
+            await getLatestWorkflowState(context.taskStore, workflow.id),
+            action.id,
+            {
+              actionRunId,
+              workflowActionRefId: actionRef.id,
+              status: 'running',
+              startedAt: actionStartedAt,
+              lastRunAt: actionStartedAt,
+              lastError: undefined,
+            },
+          ),
+        })
         const appSettingsSnapshot = await context.appSettingsStore.getSnapshot()
         const result = await adapter.run({
           task: createRuntimeTask(action, workflow),
@@ -207,7 +227,11 @@ async function runActionWorkflow(
             const nextActionState = mergeActionState(
               currentWorkflow?.state ?? workflow.state,
               action.id,
-              state as Partial<ActionRuntimeState>,
+              {
+                actionRunId,
+                workflowActionRefId: actionRef.id,
+                ...(state as Partial<ActionRuntimeState>),
+              },
             )
             await context.taskStore.updateWorkflow(workflow.id, {
               state: {
@@ -227,7 +251,15 @@ async function runActionWorkflow(
         const stateWithAction = mergeActionState(
           currentWorkflow?.state ?? workflow.state,
           action.id,
-          resultState,
+          {
+            ...resultState,
+            actionRunId,
+            workflowActionRefId: actionRef.id,
+            completedAt:
+              resultState.status === 'running'
+                ? undefined
+                : new Date().toISOString(),
+          },
         )
         outputScope = {
           ...outputScope,
@@ -270,13 +302,31 @@ async function runActionWorkflow(
         ...(config.inputDefaults ?? {}),
         ...resolveInputMapping(actionRef.inputMapping, outputScope),
       })
+      const toolActionRunId = randomUUID()
+      const completedAt = new Date().toISOString()
+      await context.taskStore.updateWorkflow(workflow.id, {
+        state: mergeActionState(
+          await getLatestWorkflowState(context.taskStore, workflow.id),
+          action.id,
+          {
+            actionRunId: toolActionRunId,
+            workflowActionRefId: actionRef.id,
+            status: 'idle',
+            startedAt: completedAt,
+            completedAt,
+            lastRunAt: completedAt,
+            lastError: undefined,
+            lastMessage: `${action.name} Tool Action 실행을 완료했습니다.`,
+          },
+        ),
+      })
       outputScope = {
         ...outputScope,
         [actionRef.id]: result.output,
       }
       await context.taskRunEventStore.appendEvent({
         workflowId: workflow.id,
-        actionRunId: actionRef.id,
+        actionRunId: toolActionRunId,
         deviceId: context.deviceId,
         status: 'idle',
         message: `${action.name} Tool Action 실행을 완료했습니다.`,

@@ -12,7 +12,7 @@ import type { ActionAdapter } from './actionAdapter'
 
 export const discordBotAdapter: ActionAdapter<DiscordBotConfig, WorkflowState> = {
   type: 'discord_dry_run_action',
-  validateAConfig(config) {
+  validateConfig(config) {
     if (config.dryRun !== true) {
       throw new Error('Discord bot adapter는 현재 dry-run 실행만 지원합니다.')
     }
@@ -29,7 +29,7 @@ export const discordBotAdapter: ActionAdapter<DiscordBotConfig, WorkflowState> =
 
 export const notionSyncAdapter: ActionAdapter<NotionSyncConfig, WorkflowState> = {
   type: 'notion_dry_run_action',
-  validateAConfig(config) {
+  validateConfig(config) {
     if (config.dryRun !== true) {
       throw new Error('Notion sync adapter는 현재 dry-run 실행만 지원합니다.')
     }
@@ -46,7 +46,7 @@ export const notionSyncAdapter: ActionAdapter<NotionSyncConfig, WorkflowState> =
 
 export const tradingBotAdapter: ActionAdapter<TradingBotConfig, WorkflowState> = {
   type: 'trading_dry_run_action',
-  validateAConfig(config) {
+  validateConfig(config) {
     if (config.dryRun !== true) {
       throw new Error(
         'Trading bot adapter는 뼈대만 제공하며 실제 자동매매 실행을 지원하지 않습니다.',

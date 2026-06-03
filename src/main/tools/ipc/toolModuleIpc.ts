@@ -33,14 +33,14 @@ export function registerToolModuleIpc(
   })
   ipcMain.handle(ipcRequestChannels.tools.run, (_event, toolId, input) =>
     toolModuleRunner.runTool(
-      toolId,
+      assertString(toolId, 'Tool ID'),
       input && typeof input === 'object'
         ? (input as Record<string, unknown>)
         : {},
     ),
   )
   ipcMain.handle(ipcRequestChannels.tools.createAction, async (_event, toolId) => {
-    const tool = await toolModuleStore.getTool(toolId)
+    const tool = await toolModuleStore.getTool(assertString(toolId, 'Tool ID'))
     return workflowStore.createAction({
       name: tool.manifest.name,
       type: 'tool_action',
@@ -64,4 +64,12 @@ export function registerToolModuleIpc(
       })),
     })
   })
+}
+
+function assertString(value: unknown, label: string): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`${label}가 필요합니다.`)
+  }
+
+  return value
 }

@@ -91,7 +91,7 @@ function findLoadedExtensionId(
   targets: Array<{ type?: string; url?: string }>,
 ): string | undefined {
   const extensionTarget = targets.find((target) =>
-    target.url?.startsWith('chrome-extension://'),
+    target.url?.startsWith(`chrome-extension://${browserExtensionId}/`),
   )
   const match = extensionTarget?.url?.match(/^chrome-extension:\/\/([^/]+)\//)
   return match?.[1]
@@ -99,10 +99,14 @@ function findLoadedExtensionId(
 
 function isBridgeTarget(target: { type?: string; url?: string }): boolean {
   const url = target.url ?? ''
+  const isExpectedExtensionUrl = url.startsWith(
+    `chrome-extension://${browserExtensionId}/`,
+  )
 
   return (
-    (target.type === 'page' && url.endsWith('/bridge.html')) ||
-    (target.type === 'service_worker' && url.endsWith('/background.js'))
+    isExpectedExtensionUrl &&
+    ((target.type === 'page' && url.endsWith('/bridge.html')) ||
+      (target.type === 'service_worker' && url.endsWith('/background.js')))
   )
 }
 

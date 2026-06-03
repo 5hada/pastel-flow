@@ -1,4 +1,3 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
   defaultAppSettings,
@@ -6,6 +5,7 @@ import {
   type AppSettings,
   type AppSettingsSnapshot,
 } from '../../../shared/settings'
+import { createAtomicJsonFile } from '../../storage/atomicJsonFile'
 
 export type StoredAppSettingsSnapshot = Omit<AppSettingsSnapshot, 'currentDevice'>
 
@@ -26,29 +26,23 @@ export function createAppSettingsStore({
   dataDir,
 }: AppSettingsStoreOptions): AppSettingsStore {
   const settingsFilePath = path.join(dataDir, 'appSettings.json')
+  const settingsFile = createAtomicJsonFile<AppSettingsFile>({
+    filePath: settingsFilePath,
+    defaultValue: () => ({ settings: defaultAppSettings }),
+    normalize(value) {
+      const candidate = value as Partial<AppSettingsFile>
+      return {
+        settings: normalizeAppSettings(candidate.settings),
+      }
+    },
+  })
 
   async function readSettings(): Promise<AppSettings> {
-    try {
-      const raw = await readFile(settingsFilePath, 'utf8')
-      const parsed = JSON.parse(raw) as AppSettingsFile
-
-      return normalizeAppSettings(parsed.settings)
-    } catch (error) {
-      if (isNodeError(error) && error.code === 'ENOENT') {
-        return defaultAppSettings
-      }
-
-      throw error
-    }
+    return normalizeAppSettings((await settingsFile.read()).settings)
   }
 
   async function writeSettings(settings: AppSettings): Promise<void> {
-    await mkdir(dataDir, { recursive: true })
-    await writeFile(
-      settingsFilePath,
-      `${JSON.stringify({ settings: normalizeAppSettings(settings) }, null, 2)}\n`,
-      'utf8',
-    )
+    await settingsFile.write({ settings: normalizeAppSettings(settings) })
   }
 
   return {
@@ -69,8 +63,4 @@ export function createAppSettingsStore({
       }
     },
   }
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && 'code' in error
 }

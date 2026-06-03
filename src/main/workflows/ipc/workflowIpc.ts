@@ -75,13 +75,18 @@ export function registerWorkflowIpc(
     return WorkflowStore.listActions()
   })
   ipcMain.handle(ipcRequestChannels.actions.create, async (_event, input) => {
-    return WorkflowStore.createAction(input)
+    return WorkflowStore.createAction(assertCreateActionInput(input))
   })
   ipcMain.handle(ipcRequestChannels.actions.update, async (_event, id, input) => {
-    return WorkflowStore.updateAction(id, input)
+    return WorkflowStore.updateAction(
+      assertString(id, 'Action ID'),
+      assertRecord(input, 'Action 수정 입력') as Parameters<
+        WorkflowStore['updateAction']
+      >[1],
+    )
   })
   ipcMain.handle(ipcRequestChannels.actions.delete, async (_event, id) => {
-    return WorkflowStore.deleteAction(id)
+    return WorkflowStore.deleteAction(assertString(id, 'Action ID'))
   })
   ipcMain.handle(ipcRequestChannels.workflows.legacyList, async () => {
     return listVisibleWorkflows()
@@ -99,26 +104,37 @@ export function registerWorkflowIpc(
     })
   })
   ipcMain.handle(ipcRequestChannels.workflows.legacyUpdate, async (_event, id, input) => {
-    await assertCanExecuteWorkflow(id)
-    return WorkflowStore.updateWorkflow(id, input)
+    const workflowId = assertString(id, 'Workflow ID')
+    await assertCanExecuteWorkflow(workflowId)
+    return WorkflowStore.updateWorkflow(
+      workflowId,
+      assertRecord(input, 'Workflow 수정 입력'),
+    )
   })
   ipcMain.handle(ipcRequestChannels.workflows.legacyDelete, async (_event, id) => {
-    await assertCanExecuteWorkflow(id)
-    return WorkflowStore.deleteWorkflow(id)
+    const workflowId = assertString(id, 'Workflow ID')
+    await assertCanExecuteWorkflow(workflowId)
+    return WorkflowStore.deleteWorkflow(workflowId)
   })
   ipcMain.handle(ipcRequestChannels.workflows.list, async () => {
     return listVisibleWorkflows()
   })
   ipcMain.handle(ipcRequestChannels.workflows.create, async (_event, input) => {
     const currentDevice = await deviceStore.getCurrentDevice()
+    const workflowInput = assertRecord(input, 'Workflow 생성 입력') as Parameters<
+      WorkflowStore['createWorkflow']
+    >[0]
+
     return WorkflowStore.createWorkflow({
-      ...input,
-      permissions: input.permissions ?? createLocalOnlyDevicePolicy(currentDevice),
+      ...workflowInput,
+      permissions:
+        workflowInput.permissions ?? createLocalOnlyDevicePolicy(currentDevice),
     })
   })
   ipcMain.handle(ipcRequestChannels.workflows.update, async (_event, id, input) => {
+    const workflowId = assertString(id, 'Workflow ID')
     const [workflow, currentDevice, appSettingsSnapshot] = await Promise.all([
-      workflowRunner.getWorkflow(id),
+      workflowRunner.getWorkflow(workflowId),
       deviceStore.getCurrentDevice(),
       appSettingsStore.getSnapshot(),
     ])
@@ -133,11 +149,17 @@ export function registerWorkflowIpc(
       throw new Error('이 기기에서는 해당 Workflow를 수정할 수 없습니다.')
     }
 
-    return WorkflowStore.updateWorkflow(id, input)
+    return WorkflowStore.updateWorkflow(
+      workflowId,
+      assertRecord(input, 'Workflow 수정 입력') as Parameters<
+        WorkflowStore['updateWorkflow']
+      >[1],
+    )
   })
   ipcMain.handle(ipcRequestChannels.workflows.delete, async (_event, id) => {
+    const workflowId = assertString(id, 'Workflow ID')
     const [workflow, currentDevice, appSettingsSnapshot] = await Promise.all([
-      workflowRunner.getWorkflow(id),
+      workflowRunner.getWorkflow(workflowId),
       deviceStore.getCurrentDevice(),
       appSettingsStore.getSnapshot(),
     ])
@@ -152,11 +174,12 @@ export function registerWorkflowIpc(
       throw new Error('이 기기에서는 해당 Workflow를 삭제할 수 없습니다.')
     }
 
-    return WorkflowStore.deleteWorkflow(id)
+    return WorkflowStore.deleteWorkflow(workflowId)
   })
   ipcMain.handle(ipcRequestChannels.workflows.run, async (_event, id) => {
+    const workflowId = assertString(id, 'Workflow ID')
     const [workflow, currentDevice, appSettingsSnapshot] = await Promise.all([
-      workflowRunner.getWorkflow(id),
+      workflowRunner.getWorkflow(workflowId),
       deviceStore.getCurrentDevice(),
       appSettingsStore.getSnapshot(),
     ])
@@ -171,11 +194,12 @@ export function registerWorkflowIpc(
       throw new Error('이 기기에서는 해당 Workflow를 실행할 수 없습니다.')
     }
 
-    return workflowRunner.runWorkflow(id)
+    return workflowRunner.runWorkflow(workflowId)
   })
   ipcMain.handle(ipcRequestChannels.workflows.stop, async (_event, id) => {
+    const workflowId = assertString(id, 'Workflow ID')
     const [workflow, currentDevice, appSettingsSnapshot] = await Promise.all([
-      workflowRunner.getWorkflow(id),
+      workflowRunner.getWorkflow(workflowId),
       deviceStore.getCurrentDevice(),
       appSettingsStore.getSnapshot(),
     ])
@@ -190,7 +214,7 @@ export function registerWorkflowIpc(
       throw new Error('이 기기에서는 해당 Workflow를 중지할 수 없습니다.')
     }
 
-    return workflowRunner.stopWorkflow(id)
+    return workflowRunner.stopWorkflow(workflowId)
   })
   ipcMain.handle(ipcRequestChannels.workflows.listEvents, (_event, workflowId?: string) =>
     listWorkflowEvents(workflowId),
@@ -201,8 +225,49 @@ export function registerWorkflowIpc(
   ipcMain.handle(ipcRequestChannels.tasks.pruneEvents, () =>
     WorkflowRunEventStore.pruneEvents(),
   )
+  ipcMain.handle(ipcRequestChannels.workflows.pruneEvents, () =>
+    WorkflowRunEventStore.pruneEvents(),
+  )
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function assertRecord(
+  value: unknown,
+  label: string,
+): Record<string, unknown> {
+  if (!isRecord(value)) {
+    throw new Error(`${label}은 객체여야 합니다.`)
+  }
+
+  return value
+}
+
+function assertString(value: unknown, label: string): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`${label}가 필요합니다.`)
+  }
+
+  return value
+}
+
+function assertCreateActionInput(
+  value: unknown,
+): Parameters<WorkflowStore['createAction']>[0] {
+  const input = assertRecord(value, 'Action 생성 입력')
+  if (typeof input.name !== 'string' || !input.name.trim()) {
+    throw new Error('Action 이름이 필요합니다.')
+  }
+
+  if (typeof input.type !== 'string') {
+    throw new Error('Action type이 필요합니다.')
+  }
+
+  if (!('config' in input)) {
+    throw new Error('Action config가 필요합니다.')
+  }
+
+  return input as Parameters<WorkflowStore['createAction']>[0]
 }

@@ -18,7 +18,7 @@ export const browserAdapter: ActionAdapter<
   ActionRuntimeState
 > = {
   type: 'browser_action',
-  async validateAConfig(config) {
+  async validateConfig(config) {
     const normalizedConfig = normalizeBrowserTabGroupConfig(config)
 
     if (!normalizedConfig.profileId.trim()) {
@@ -41,7 +41,7 @@ export const browserAdapter: ActionAdapter<
 
     await assertExistingBrowserProfile(normalizedConfig)
   },
-  async run({ action, dataDir, appSettings, updateAConfig, updateState }) {
+  async run({ action, dataDir, appSettings, updateConfig, updateState }) {
     const config = normalizeBrowserTabGroupConfig(action.config)
 
     if (config.runMode === 'default_browser_deeplink') {
@@ -70,7 +70,7 @@ export const browserAdapter: ActionAdapter<
           return
         }
 
-        await updateAConfig(nextConfig)
+        await updateConfig(nextConfig)
         await updateState(nextState)
       },
     }).catch(async (error) => {
@@ -98,7 +98,7 @@ export const browserAdapter: ActionAdapter<
   async stop(actionId) {
     return stopBrowserActionGroup(actionId)
   },
-  async getAState(actionId) {
+  async getState(actionId) {
     return readBrowserActionState(actionId) ?? { status: 'idle' }
   },
 }

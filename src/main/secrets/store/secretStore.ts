@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type {
   CreateLocalSecretInput,
@@ -7,6 +6,7 @@ import type {
   SecretStorageStatus,
 } from '../../../shared/secrets'
 import { normalizeLocalSecretName } from '../../../shared/secrets'
+import { createAtomicJsonFile } from '../../storage/atomicJsonFile'
 
 export type SecretStore = {
   getStorageStatus(): Promise<SecretStorageStatus>
@@ -39,31 +39,18 @@ export function createSecretStore({
   encryptionAvailable,
 }: SecretStoreOptions): SecretStore {
   const secretsFilePath = path.join(dataDir, 'secrets.json')
+  const secretJsonFile = createAtomicJsonFile<SecretFile>({
+    filePath: secretsFilePath,
+    defaultValue: () => ({ secrets: [] }),
+    normalize: normalizeSecretFile,
+  })
 
   async function readSecretFile(): Promise<SecretFile> {
-    try {
-      const raw = await readFile(secretsFilePath, 'utf8')
-      const parsed = JSON.parse(raw) as Partial<SecretFile>
-
-      return {
-        secrets: Array.isArray(parsed.secrets) ? parsed.secrets : [],
-      }
-    } catch (error) {
-      if (isNodeError(error) && error.code === 'ENOENT') {
-        return { secrets: [] }
-      }
-
-      throw error
-    }
+    return secretJsonFile.read()
   }
 
   async function writeSecretFile(secretFile: SecretFile): Promise<void> {
-    await mkdir(dataDir, { recursive: true })
-    await writeFile(
-      secretsFilePath,
-      `${JSON.stringify(secretFile, null, 2)}\n`,
-      'utf8',
-    )
+    await secretJsonFile.write(secretFile)
   }
 
   async function readMigratedSecretFile(): Promise<SecretFile> {
@@ -73,27 +60,14 @@ export function createSecretStore({
       return secretFile
     }
 
-    let didMigrate = false
-    const secrets = secretFile.secrets.map((secret) => {
-      if (!secret.value || secret.encryptedValue) {
-        return secret
-      }
-
-      didMigrate = true
-      return {
-        ...secret,
-        value: undefined,
-        encryptedValue: encrypt(secret.value),
-        storage: 'electron_safe_storage' as const,
-        updatedAt: new Date().toISOString(),
-      }
-    })
+    const { didMigrate, secretFile: migratedSecretFile } =
+      migratePlaintextSecrets(secretFile, encrypt)
 
     if (didMigrate) {
-      await writeSecretFile({ secrets })
+      await writeSecretFile(migratedSecretFile)
     }
 
-    return { secrets }
+    return migratedSecretFile
   }
 
   return {
@@ -114,9 +88,9 @@ export function createSecretStore({
 
     async createSecret(input) {
       const name = normalizeLocalSecretName(input.name)
-      const value = input.value.trim()
+      const value = typeof input.value === 'string' ? input.value : ''
 
-      if (!name || !value) {
+      if (!name || value.length === 0) {
         throw new Error('Secret 이름과 값이 필요합니다.')
       }
 
@@ -136,20 +110,77 @@ export function createSecretStore({
         createdAt: now,
         updatedAt: now,
       }
-      const secretFile = await readMigratedSecretFile()
-      await writeSecretFile({
-        secrets: [...secretFile.secrets, secret],
+      await secretJsonFile.update((currentSecretFile) => {
+        const { secretFile } = migratePlaintextSecrets(
+          currentSecretFile,
+          encrypt,
+        )
+        if (secretFile.secrets.some((currentSecret) => currentSecret.name === name)) {
+          throw new Error('같은 이름의 Secret이 이미 있습니다.')
+        }
+
+        return {
+          nextValue: {
+            secrets: [...secretFile.secrets, secret],
+          },
+          result: undefined,
+        }
       })
 
       return toMetadata(secret)
     },
 
     async deleteSecret(id) {
-      const secretFile = await readMigratedSecretFile()
-      await writeSecretFile({
-        secrets: secretFile.secrets.filter((secret) => secret.id !== id),
+      await secretJsonFile.update((currentSecretFile) => {
+        const { secretFile } = migratePlaintextSecrets(
+          currentSecretFile,
+          encrypt,
+        )
+
+        return {
+          nextValue: {
+            secrets: secretFile.secrets.filter((secret) => secret.id !== id),
+          },
+          result: undefined,
+        }
       })
     },
+  }
+}
+
+function migratePlaintextSecrets(
+  secretFile: SecretFile,
+  encrypt: (value: string) => string,
+): {
+  didMigrate: boolean
+  secretFile: SecretFile
+} {
+  let didMigrate = false
+  const secrets = secretFile.secrets.map((secret) => {
+    if (!secret.value || secret.encryptedValue) {
+      return secret
+    }
+
+    didMigrate = true
+    return {
+      ...secret,
+      value: undefined,
+      encryptedValue: encrypt(secret.value),
+      storage: 'electron_safe_storage' as const,
+      updatedAt: new Date().toISOString(),
+    }
+  })
+
+  return {
+    didMigrate,
+    secretFile: { secrets },
+  }
+}
+
+function normalizeSecretFile(value: unknown): SecretFile {
+  const candidate = value as Partial<SecretFile>
+  return {
+    secrets: Array.isArray(candidate.secrets) ? candidate.secrets : [],
   }
 }
 
@@ -161,8 +192,4 @@ function toMetadata(secret: StoredLocalSecret): LocalSecretMetadata {
     createdAt: secret.createdAt,
     updatedAt: secret.updatedAt,
   }
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && 'code' in error
 }

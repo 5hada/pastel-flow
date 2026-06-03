@@ -90,11 +90,18 @@ function createWindowsLauncherScript(hostScriptPath: string): string {
 }
 
 const nativeHostScript = `
-import { stdin, stdout } from 'node:process'
+import { exit, stdin, stdout } from 'node:process'
+
+const MAX_MESSAGE_BYTES = 1024 * 1024
 
 let buffer = Buffer.alloc(0)
 
 stdin.on('data', (chunk) => {
+  if (buffer.length + chunk.length > MAX_MESSAGE_BYTES + 4) {
+    failAndExit('Native messaging payload is too large.')
+    return
+  }
+
   buffer = Buffer.concat([buffer, chunk])
   readMessages()
 })
@@ -102,6 +109,11 @@ stdin.on('data', (chunk) => {
 function readMessages() {
   while (buffer.length >= 4) {
     const bodyLength = buffer.readUInt32LE(0)
+    if (bodyLength > MAX_MESSAGE_BYTES) {
+      failAndExit('Native messaging payload is too large.')
+      return
+    }
+
     if (buffer.length < 4 + bodyLength) {
       return
     }
@@ -138,5 +150,14 @@ function writeMessage(message) {
   const header = Buffer.alloc(4)
   header.writeUInt32LE(body.length, 0)
   stdout.write(Buffer.concat([header, body]))
+}
+
+function failAndExit(error) {
+  writeMessage({
+    id: 'unknown',
+    ok: false,
+    error,
+  })
+  exit(1)
 }
 `

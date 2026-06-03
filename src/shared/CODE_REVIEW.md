@@ -50,7 +50,6 @@
 
 - location: `src/shared/settings/defaults.ts:260`
 - content: 함수명이 crypto-safe를 의미하지만 `Math.random()`을 사용한다.
-- effect: 보안 식별자는 아니더라도 이름이 오해를 만든다.
 - direction: renderer에서는 `crypto.randomUUID()`를 쓰거나 함수명을 `createFallbackProfileId`로 바꾼다.
 
 ### Browser URL normalize가 scheme 검증을 하지 않음
@@ -62,16 +61,8 @@
 
 ## Low
 
-### 빈 guards 파일
-
-- location: `src/shared/devices/guards.ts`
-- content: 0 byte 파일이다.
-- effect: device guard 책임이 예정되어 있었는지, defaults/policies에 흡수되었는지 불분명하다.
-- direction: 필요한 런타임 guard를 구현하거나 제거한다.
-
 ### 타입 import/export 경로가 일관되지 않음
 
 - location: `src/shared/actions/types.ts`, `src/shared/workflows/types.ts`, `src/shared/settings/types.ts`
 - content: 일부 파일은 세미콜론/따옴표/경로 스타일이 다르고, `../devices/`처럼 trailing slash import가 반복된다.
-- effect: 기능 버그는 아니지만 코드베이스 품질과 자동 정렬 일관성이 떨어진다.
 - direction: formatter/linter 규칙으로 import style을 통일한다.

@@ -10,6 +10,8 @@ import type {
 } from '../../../shared/tools'
 import type { ToolModuleStore } from '../store/toolModuleStore'
 
+const toolRunTimeoutMilliseconds = 30_000
+
 export type ToolModuleRunner = {
   runTool(
     toolId: string,
@@ -67,9 +69,12 @@ export function createToolModuleRunner({
         throw new Error('logic.mjs는 run(input, context) 함수를 export해야 합니다.')
       }
 
-      const output = await logicModule.run(
-        normalizedInput,
-        createToolContext(tool.sourcePath, tool.manifest),
+      const output = await runWithTimeout(
+        logicModule.run(
+          normalizedInput,
+          createToolContext(tool.sourcePath, tool.manifest),
+        ),
+        toolRunTimeoutMilliseconds,
       )
 
       if (!output || typeof output !== 'object' || Array.isArray(output)) {
@@ -182,11 +187,11 @@ function createToolContext(
         ? {
             async open(filePath) {
               assertPermission(permissions, 'file.read')
-              return readFile(filePath, 'utf8')
+              return readFile(resolveToolPath(toolPath, filePath), 'utf8')
             },
             async save(filePath, value) {
               assertPermission(permissions, 'file.write')
-              await writeFile(filePath, value, 'utf8')
+              await writeFile(resolveToolPath(toolPath, filePath), value, 'utf8')
             },
           }
         : undefined,
@@ -259,17 +264,51 @@ function getAssetPath(
 
   const rootPath = path.resolve(toolPath)
   const assetPath = path.resolve(rootPath, asset.path)
-  const relativePath = path.relative(rootPath, assetPath)
 
-  if (
-    relativePath === '..' ||
-    relativePath.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(relativePath)
-  ) {
+  if (!isPathInside(rootPath, assetPath)) {
     throw new Error(`asset 경로가 도구 폴더 밖을 가리킵니다: ${key}`)
   }
 
   return assetPath
+}
+
+function runWithTimeout<TValue>(
+  value: Promise<TValue> | TValue,
+  timeoutMilliseconds: number,
+): Promise<TValue> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error('도구 실행 시간이 너무 오래 걸려 중단했습니다.'))
+    }, timeoutMilliseconds)
+
+    Promise.resolve(value)
+      .then(resolve)
+      .catch(reject)
+      .finally(() => {
+        clearTimeout(timeoutId)
+      })
+  })
+}
+
+function resolveToolPath(toolPath: string, targetPath: string): string {
+  const rootPath = path.resolve(toolPath)
+  const resolvedPath = path.resolve(rootPath, targetPath)
+
+  if (!isPathInside(rootPath, resolvedPath)) {
+    throw new Error('도구 파일 권한은 등록된 Tool Module 폴더 안에서만 사용할 수 있습니다.')
+  }
+
+  return resolvedPath
+}
+
+function isPathInside(rootPath: string, targetPath: string): boolean {
+  const relativePath = path.relative(rootPath, targetPath)
+  return (
+    relativePath === '' ||
+    (!relativePath.startsWith(`..${path.sep}`) &&
+      relativePath !== '..' &&
+      !path.isAbsolute(relativePath))
+  )
 }
 
 function assertExternalHttpUrl(value: string): void {

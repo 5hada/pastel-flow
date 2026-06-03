@@ -50,6 +50,7 @@ export const ipcRequestChannels = {
     run: 'workflows:run',
     stop: 'workflows:stop',
     listEvents: 'workflows:list-events',
+    pruneEvents: 'workflows:prune-events',
   },
 } as const
 

@@ -97,11 +97,14 @@ app.whenReady().then(async () => {
   const appSettingsStore = createAppSettingsStore({
     dataDir,
   })
+  appSettingsStore.getSnapshot().then((snapshot) => {
+    applyLoginItemSettings(snapshot.settings.startAtLogin)
+  }).catch(() => undefined)
   const deviceStore = createDeviceStore({
     dataDir,
   })
   const currentDevice = await deviceStore.getCurrentDevice()
-  const workflowStore = createObservedworkflowStore(createWorkflowStore({
+  const workflowStore = createObservedWorkflowStore(createWorkflowStore({
     dataDir,
   }))
   await resetStaleRunningWorkflows(workflowStore)
@@ -153,7 +156,9 @@ app.whenReady().then(async () => {
     toolModuleRunner,
   })
 
-  registerAppSettingsIpc(ipcMain, appSettingsStore, deviceStore)
+  registerAppSettingsIpc(ipcMain, appSettingsStore, deviceStore, (settings) => {
+    applyLoginItemSettings(settings.startAtLogin)
+  })
   registerSecretIpc(ipcMain, secretStore)
   registerSyncIpc(ipcMain, mockSyncStore)
   registerToolModuleIpc(
@@ -179,7 +184,7 @@ app.whenReady().then(async () => {
   createWindow()
 })
 
-function createObservedworkflowStore(workflowStore: WorkflowStore): WorkflowStore {
+function createObservedWorkflowStore(workflowStore: WorkflowStore): WorkflowStore {
   function broadcast(channel: IpcEventChannel, payload: unknown) {
     BrowserWindow.getAllWindows().forEach((browserWindow) => {
       browserWindow.webContents.send(channel, payload)
@@ -217,6 +222,12 @@ function createObservedworkflowStore(workflowStore: WorkflowStore): WorkflowStor
       broadcast(ipcEventChannels.workflows.deleted, id)
     },
   }
+}
+
+function applyLoginItemSettings(openAtLogin: boolean): void {
+  app.setLoginItemSettings({
+    openAtLogin,
+  })
 }
 
 async function resetStaleRunningWorkflows(workflowStore: WorkflowStore): Promise<void> {

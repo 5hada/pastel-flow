@@ -1,4 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises'
+import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
 import path from 'node:path'
 import type { CrawlerConfig } from '../../../shared/actions'
@@ -7,7 +8,7 @@ import type { ActionAdapter } from './actionAdapter'
 
 export const crawlerAdapter: ActionAdapter<CrawlerConfig, WorkflowState> = {
   type: 'crawler_action',
-  validateAConfig(config) {
+  validateConfig(config) {
     const normalizedConfig = normalizeCrawlerConfig(config)
 
     if (normalizedConfig.urls.length === 0) {
@@ -16,11 +17,7 @@ export const crawlerAdapter: ActionAdapter<CrawlerConfig, WorkflowState> = {
   },
   async run({ dataDir, action }) {
     const config = normalizeCrawlerConfig(action.config)
-    const invalidUrl = config.urls.find((url) => !isCrawlableUrl(url))
-
-    if (invalidUrl) {
-      throw new Error(`Crawler URL 형식이 올바르지 않습니다: ${invalidUrl}`)
-    }
+    await Promise.all(config.urls.map(assertCrawlableUrl))
 
     const outputDirectory = path.join(dataDir, 'crawler-results')
     const outputPath = path.join(
@@ -103,9 +100,7 @@ async function fetchCrawlerUrl(
   }, 15_000)
 
   try {
-    const response = await fetch(url, {
-      signal: abortController.signal,
-    })
+    const response = await fetchCrawlerResponse(url, abortController.signal)
     const text = await readResponsePreview(response, maxBytes)
 
     return {
@@ -183,20 +178,60 @@ function stripHtml(html: string): string {
     .trim()
 }
 
-function isCrawlableUrl(value: string): boolean {
+async function fetchCrawlerResponse(
+  initialUrl: string,
+  signal: AbortSignal,
+): Promise<Response> {
+  let currentUrl = initialUrl
+
+  for (let redirectCount = 0; redirectCount <= 5; redirectCount += 1) {
+    await assertCrawlableUrl(currentUrl)
+    const response = await fetch(currentUrl, {
+      redirect: 'manual',
+      signal,
+    })
+
+    if (!isRedirectStatus(response.status)) {
+      return response
+    }
+
+    const location = response.headers.get('location')
+    if (!location) {
+      return response
+    }
+
+    currentUrl = new URL(location, currentUrl).toString()
+  }
+
+  throw new Error('Crawler redirect 횟수가 너무 많습니다.')
+}
+
+async function assertCrawlableUrl(value: string): Promise<void> {
   try {
     const url = new URL(value)
-    return (
-      (url.protocol === 'http:' || url.protocol === 'https:') &&
-      !isPrivateHostname(url.hostname)
-    )
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new Error('http/https URL만 허용됩니다.')
+    }
+
+    if (isPrivateHostname(url.hostname)) {
+      throw new Error('private URL은 허용되지 않습니다.')
+    }
+
+    const addresses = await lookup(url.hostname, { all: true, verbatim: true })
+    if (addresses.some((address) => isPrivateHostname(address.address))) {
+      throw new Error('private network로 해석되는 URL은 허용되지 않습니다.')
+    }
   } catch {
-    return false
+    throw new Error(`Crawler URL 형식이 올바르지 않습니다: ${value}`)
   }
 }
 
+function isRedirectStatus(status: number): boolean {
+  return status >= 300 && status < 400
+}
+
 function isPrivateHostname(hostname: string): boolean {
-  const normalizedHostname = hostname.toLowerCase()
+  const normalizedHostname = hostname.toLowerCase().replace(/^\[|\]$/g, '')
 
   if (
     normalizedHostname === 'localhost' ||

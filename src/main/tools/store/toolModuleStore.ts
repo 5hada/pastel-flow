@@ -1,5 +1,4 @@
-import { randomUUID } from 'node:crypto'
-import { cp, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
   type ToolModuleAsset,
@@ -59,11 +58,21 @@ const supportedPermissions: ToolModulePermission[] = [
   'network',
 ]
 
+const ignoredDirectoryNames = new Set([
+  '.git',
+  '.hg',
+  '.svn',
+  'dist',
+  'node_modules',
+  'out',
+])
+const maxToolScanDepth = 8
+const maxToolScanDirectories = 1000
+
 export function createToolModuleStore({
   dataDir,
 }: ToolModuleStoreOptions): ToolModuleStore {
   const toolsFilePath = path.join(dataDir, 'toolModules.json')
-  const toolModulesDir = path.join(dataDir, 'tool-modules')
 
   async function readToolModulesFile(): Promise<ToolModulesFile> {
     try {
@@ -160,7 +169,8 @@ export function createToolModuleStore({
     },
 
     async registerToolFromPath(sourcePath) {
-      const validation = await validateToolPath(sourcePath)
+      const resolvedSourcePath = path.resolve(sourcePath)
+      const validation = await validateToolPath(resolvedSourcePath)
 
       if (!validation.ok || !validation.manifest) {
         throw new Error(validation.errors.join('\n'))
@@ -168,16 +178,6 @@ export function createToolModuleStore({
 
       const now = new Date().toISOString()
       const toolId = validation.manifest.id
-      const destinationPath = path.join(
-        toolModulesDir,
-        `${toolId}-${validation.manifest.version}-${randomUUID()}`,
-      )
-      await mkdir(toolModulesDir, { recursive: true })
-      await cp(sourcePath, destinationPath, {
-        recursive: true,
-        force: true,
-      })
-
       const toolModulesFile = await readToolModulesFile()
       const existingTool = toolModulesFile.tools.find(
         (tool) => tool.id === toolId,
@@ -185,12 +185,12 @@ export function createToolModuleStore({
       const registeredTool: RegisteredToolModule = {
         id: toolId,
         manifest: validation.manifest,
-        sourcePath: destinationPath,
-        relativePath: path.basename(sourcePath),
+        sourcePath: resolvedSourcePath,
+        relativePath: path.basename(resolvedSourcePath),
         registeredAt: existingTool?.registeredAt ?? now,
         updatedAt: now,
-        hasCustomView: await pathExists(path.join(destinationPath, 'view.html')),
-        hasCustomStyle: await pathExists(path.join(destinationPath, 'style.css')),
+        hasCustomView: await pathExists(path.join(resolvedSourcePath, 'view.html')),
+        hasCustomStyle: await pathExists(path.join(resolvedSourcePath, 'style.css')),
       }
 
       await writeToolModulesFile({
@@ -819,10 +819,17 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
 
 async function findToolModulePaths(rootPath: string): Promise<string[]> {
   const results: string[] = []
+  let visitedDirectoryCount = 0
 
-  async function walk(currentPath: string): Promise<void> {
-    if (path.basename(currentPath) === 'node_modules') {
+  async function walk(currentPath: string, depth: number): Promise<void> {
+    const directoryName = path.basename(currentPath)
+    if (ignoredDirectoryNames.has(directoryName)) {
       return
+    }
+
+    visitedDirectoryCount += 1
+    if (visitedDirectoryCount > maxToolScanDirectories) {
+      throw new Error('Tool Module 검색 범위가 너무 큽니다. 더 하위 폴더를 선택하세요.')
     }
 
     if (
@@ -833,14 +840,30 @@ async function findToolModulePaths(rootPath: string): Promise<string[]> {
       return
     }
 
-    const entries = await readdir(currentPath, { withFileTypes: true })
+    if (depth >= maxToolScanDepth) {
+      return
+    }
+
+    const entries = await readDirectoryEntries(currentPath)
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        await walk(path.join(currentPath, entry.name))
+        await walk(path.join(currentPath, entry.name), depth + 1)
       }
     }
   }
 
-  await walk(rootPath)
+  await walk(rootPath, 0)
   return results
+}
+
+async function readDirectoryEntries(currentPath: string) {
+  try {
+    return await readdir(currentPath, { withFileTypes: true })
+  } catch (error) {
+    if (isNodeError(error) && (error.code === 'EACCES' || error.code === 'EPERM')) {
+      return []
+    }
+
+    throw error
+  }
 }

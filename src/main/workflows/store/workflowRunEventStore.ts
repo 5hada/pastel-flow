@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type {
   CreateWorkflowRunEventInput,
   WorkflowRunEvent
 } from '../../../shared/runStatus'
+import { createAtomicJsonFile } from '../../storage/atomicJsonFile'
 
 export type WorkflowRunEventStore = {
   listEvents(workflowId?: string, options?: ListWorkflowRunEventsOptions): Promise<WorkflowRunEvent[]>
@@ -31,31 +31,14 @@ export function createWorkflowRunEventStore({
   getRetentionLimit,
 }: WorkflowRunEventStoreOptions): WorkflowRunEventStore {
   const eventsFilePath = path.join(dataDir, 'workflowRunEvents.json')
+  const eventJsonFile = createAtomicJsonFile<WorkflowRunEventFile>({
+    filePath: eventsFilePath,
+    defaultValue: () => ({ events: [] }),
+    normalize: normalizeWorkflowRunEventFile,
+  })
 
   async function readEventFile(): Promise<WorkflowRunEventFile> {
-    try {
-      const raw = await readFile(eventsFilePath, 'utf8')
-      const parsed = JSON.parse(raw) as Partial<WorkflowRunEventFile>
-
-      return {
-        events: Array.isArray(parsed.events) ? parsed.events : [],
-      }
-    } catch (error) {
-      if (isNodeError(error) && error.code === 'ENOENT') {
-        return { events: [] }
-      }
-
-      throw error
-    }
-  }
-
-  async function writeEventFile(eventFile: WorkflowRunEventFile): Promise<void> {
-    await mkdir(dataDir, { recursive: true })
-    await writeFile(
-      eventsFilePath,
-      `${JSON.stringify(eventFile, null, 2)}\n`,
-      'utf8',
-    )
+    return eventJsonFile.read()
   }
 
   return {
@@ -77,54 +60,64 @@ export function createWorkflowRunEventStore({
         message: input.message,
         createdAt: new Date().toISOString(),
       }
-      const eventFile = await readEventFile()
       const retentionLimit = await getRetentionLimit()
-      await writeEventFile({
-        events: [...eventFile.events, event].slice(-retentionLimit),
-      })
+      await eventJsonFile.update((eventFile) => ({
+        nextValue: {
+          events: [...eventFile.events, event].slice(-retentionLimit),
+        },
+        result: undefined,
+      }))
 
       return event
     },
 
     async importEvents(events) {
-      const eventFile = await readEventFile()
-      const existingIds = new Set(eventFile.events.map((event) => event.id))
-      const incomingEvents = events.filter((event) => !existingIds.has(event.id))
       const retentionLimit = await getRetentionLimit()
 
-      if (incomingEvents.length === 0) {
-        return 0
-      }
+      return eventJsonFile.update((eventFile) => {
+        const existingIds = new Set(eventFile.events.map((event) => event.id))
+        const incomingEvents = events.filter((event) => !existingIds.has(event.id))
 
-      await writeEventFile({
-        events: [...eventFile.events, ...incomingEvents]
-          .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
-          .slice(-retentionLimit),
+        if (incomingEvents.length === 0) {
+          return {
+            nextValue: eventFile,
+            result: 0,
+          }
+        }
+
+        return {
+          nextValue: {
+            events: [...eventFile.events, ...incomingEvents]
+              .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+              .slice(-retentionLimit),
+          },
+          result: incomingEvents.length,
+        }
       })
-
-      return incomingEvents.length
     },
 
     async pruneEvents() {
-      const eventFile = await readEventFile()
       const retentionLimit = await getRetentionLimit()
-      const prunedEvents = eventFile.events
-        .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
-        .slice(-retentionLimit)
 
-      if (prunedEvents.length === eventFile.events.length) {
-        return 0
-      }
+      return eventJsonFile.update((eventFile) => {
+        const prunedEvents = eventFile.events
+          .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+          .slice(-retentionLimit)
 
-      await writeEventFile({
-        events: prunedEvents,
+        return {
+          nextValue: {
+            events: prunedEvents,
+          },
+          result: eventFile.events.length - prunedEvents.length,
+        }
       })
-
-      return eventFile.events.length - prunedEvents.length
     },
   }
 }
 
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && 'code' in error
+function normalizeWorkflowRunEventFile(value: unknown): WorkflowRunEventFile {
+  const candidate = value as Partial<WorkflowRunEventFile>
+  return {
+    events: Array.isArray(candidate.events) ? candidate.events : [],
+  }
 }

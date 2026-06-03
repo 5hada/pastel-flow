@@ -197,7 +197,7 @@ async function runActionWorkflow(
         const adapter = context.adapterRegistry.getAdapter(action.type)
         const actionRunId = randomUUID()
         const actionStartedAt = new Date().toISOString()
-        await adapter.validateAConfig(action.config)
+        await adapter.validateConfig(action.config)
         await context.workflowStore.updateWorkflow(workflow.id, {
           state: mergeWorkflowState(
             await getLatestWorkflowState(context.workflowStore, workflow.id),
@@ -215,7 +215,7 @@ async function runActionWorkflow(
           deviceId: context.deviceId,
           dataDir: context.dataDir,
           appSettings: appSettingsSnapshot.settings,
-          async updateAConfig(config) {
+          async updateConfig(config) {
             await context.workflowStore.updateAction(action.id, { config })
           },
           async updateState(state) {

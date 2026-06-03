@@ -157,7 +157,7 @@ const pastelFlowApi = {
       return invoke(ipcRequestChannels.workflows.listEvents, workflowId)
     },
     pruneEvents() {
-      return invoke(ipcRequestChannels.tasks.pruneEvents)
+      return invoke(ipcRequestChannels.workflows.pruneEvents)
     },
     onChanged(listener: (workflow: unknown) => void) {
       return subscribe(ipcEventChannels.workflows.changed, listener)

@@ -1,20 +1,19 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
-    defaultDevicePolicy,
-    normalizeDevicePolicy,
-    type DevicePolicy
- } from '../../../shared/devices/'
-import  {
-    normalizeWorkflowSchedule,
-    defaultWorkflowState,
-    type WorkflowSchedule,
-    type WorkflowDefinition,
-    type WorkflowState
+  defaultDevicePolicy,
+  normalizeDevicePolicy,
+  type DevicePolicy
+} from '../../../shared/devices/'
+import {
+  normalizeWorkflowSchedule,
+  defaultWorkflowState,
+  type WorkflowSchedule,
+  type WorkflowDefinition,
+  type WorkflowState
 } from '../../../shared/workflows'
 import type { ActionDefinition } from '../../../shared/actions'
-
+import { createAtomicJsonFile } from '../../storage/atomicJsonFile'
 
 
 export type WorkflowStore = {
@@ -66,10 +65,7 @@ export type ReplaceWorkflowsInput = {
   actions?: ActionDefinition[]
   workflows?: WorkflowDefinition[]
 }
-export type ReplaceWorkflowDataInput = {
-  actions?: ActionDefinition[]
-  workflows?: WorkflowDefinition[]
-}
+export type ReplaceWorkflowDataInput = ReplaceWorkflowsInput
 
 export type WorkflowStoreOptions = {
   dataDir: string
@@ -82,37 +78,23 @@ type TaskFile = {
 
 export function createWorkflowStore({ dataDir }: WorkflowStoreOptions): WorkflowStore {
   const tasksFilePath = path.join(dataDir, 'tasks.json')
+  const taskFileStore = createAtomicJsonFile<TaskFile>({
+    filePath: tasksFilePath,
+    defaultValue: () => ({ actions: [], workflows: [] }),
+    normalize: normalizeTaskFile,
+  })
 
   async function readTaskFile(): Promise<TaskFile> {
-    try {
-      const raw = await readFile(tasksFilePath, 'utf8')
-      const parsed = JSON.parse(raw) as Partial<TaskFile>
-
-      return {
-        actions: Array.isArray(parsed.actions) ? parsed.actions : [],
-        workflows: Array.isArray(parsed.workflows) ? parsed.workflows : [],
-      }
-    } catch (error) {
-      if (isNodeError(error) && error.code === 'ENOENT') {
-        return { actions: [], workflows: [] }
-      }
-
-      throw error
-    }
+    return taskFileStore.read()
   }
 
   async function writeTaskFile(taskFile: TaskFile): Promise<void> {
-    await mkdir(dataDir, { recursive: true })
-    await writeFile(
-      tasksFilePath,
-      `${JSON.stringify(taskFile, null, 2)}\n`,
-      'utf8',
-    )
+    await taskFileStore.write(taskFile)
   }
 
   return {
     async getAction(id) {
-      const taskFile = ensureLegacyWorkflowData(await readTaskFile())
+      const taskFile = await readTaskFile()
       const action = taskFile.actions.find((currentAction) => currentAction.id === id)
 
       if (!action) {
@@ -124,12 +106,12 @@ export function createWorkflowStore({ dataDir }: WorkflowStoreOptions): Workflow
 
     async listActions() {
       const taskFile = await readTaskFile()
-      return ensureLegacyWorkflowData(taskFile).actions
+      return taskFile.actions
     },
 
     async listWorkflows() {
       const taskFile = await readTaskFile()
-      return ensureLegacyWorkflowData(taskFile).workflows
+      return taskFile.workflows
     },
 
     async createAction(input) {
@@ -145,165 +127,209 @@ export function createWorkflowStore({ dataDir }: WorkflowStoreOptions): Workflow
         createdAt: now,
         updatedAt: now,
       }
-      const taskFile = ensureLegacyWorkflowData(await readTaskFile())
-
-      await writeTaskFile({
-        ...taskFile,
-        actions: [...taskFile.actions, action],
-      })
+      await taskFileStore.update((taskFile) => ({
+        nextValue: {
+          ...taskFile,
+          actions: [...taskFile.actions, action],
+        },
+        result: undefined,
+      }))
 
       return action
     },
 
     async updateAction(id, input) {
-      const taskFile = ensureLegacyWorkflowData(await readTaskFile())
-      const actionIndex = taskFile.actions.findIndex(
-        (action) => action.id === id,
-      )
+      return taskFileStore.update((taskFile) => {
+        const actionIndex = taskFile.actions.findIndex(
+          (action) => action.id === id,
+        )
 
-      if (actionIndex === -1) {
-        throw new Error(`Action not found: ${id}`)
-      }
+        if (actionIndex === -1) {
+          throw new Error(`Action not found: ${id}`)
+        }
 
-      const currentAction = taskFile.actions[actionIndex]
-      const updatedAction: ActionDefinition = {
-        ...currentAction,
-        ...input,
-        name: input.name?.trim() ?? currentAction.name,
-        updatedAt: new Date().toISOString(),
-      }
-      const actions = [...taskFile.actions]
-      actions[actionIndex] = updatedAction
+        const currentAction = taskFile.actions[actionIndex]
+        const updatedAction: ActionDefinition = {
+          ...currentAction,
+          ...input,
+          name: input.name?.trim() ?? currentAction.name,
+          updatedAt: new Date().toISOString(),
+        }
+        const actions = [...taskFile.actions]
+        actions[actionIndex] = updatedAction
 
-      await writeTaskFile({
-        actions,
-        workflows: taskFile.workflows,
+        return {
+          nextValue: {
+            actions,
+            workflows: taskFile.workflows,
+          },
+          result: updatedAction,
+        }
       })
-
-      return updatedAction
     },
 
     async deleteAction(id) {
-      const taskFile = ensureLegacyWorkflowData(await readTaskFile())
-
-      await writeTaskFile({
-        actions: taskFile.actions.filter((action) => action.id !== id),
-        workflows: taskFile.workflows.map((workflow) => ({
-          ...workflow,
-          actionRefs: workflow.actionRefs.filter(
-            (actionRef) => actionRef.actionId !== id,
-          ),
-          updatedAt: new Date().toISOString(),
-        })),
-      })
+      await taskFileStore.update((taskFile) => ({
+        nextValue: {
+          actions: taskFile.actions.filter((action) => action.id !== id),
+          workflows: taskFile.workflows.map((workflow) => ({
+            ...workflow,
+            actionRefs: workflow.actionRefs.filter(
+              (actionRef) => actionRef.actionId !== id,
+            ),
+            updatedAt: new Date().toISOString(),
+          })),
+        },
+        result: undefined,
+      }))
     },
 
     async createWorkflow(input) {
       const now = new Date().toISOString()
-      const workflow: WorkflowDefinition = {
-        id: randomUUID(),
-        name: input.name.trim(),
-        actionRefs: normalizeWorkflowActionRefs(input.actionRefs ?? []),
-        permissions: normalizeDevicePolicy(
-          input.permissions ?? defaultDevicePolicy,
-        ),
-        schedule: normalizeWorkflowSchedule(input.schedule),
-        state: input.state ?? defaultWorkflowState,
-        createdAt: now,
-        updatedAt: now,
-      }
-      const taskFile = ensureLegacyWorkflowData(await readTaskFile())
+      return taskFileStore.update((taskFile) => {
+        const actionRefs = normalizeWorkflowActionRefs(input.actionRefs ?? [])
+        assertWorkflowActionRefsExist(actionRefs, taskFile.actions)
 
-      await writeTaskFile({
-        actions: taskFile.actions,
-        workflows: [...taskFile.workflows, workflow],
+        const workflow: WorkflowDefinition = {
+          id: randomUUID(),
+          name: input.name.trim(),
+          actionRefs,
+          permissions: normalizeDevicePolicy(
+            input.permissions ?? defaultDevicePolicy,
+          ),
+          schedule: normalizeWorkflowSchedule(input.schedule),
+          state: input.state ?? defaultWorkflowState,
+          createdAt: now,
+          updatedAt: now,
+        }
+
+        return {
+          nextValue: {
+            actions: taskFile.actions,
+            workflows: [...taskFile.workflows, workflow],
+          },
+          result: workflow,
+        }
       })
-
-      return workflow
     },
 
     async updateWorkflow(id, input) {
-      const taskFile = ensureLegacyWorkflowData(await readTaskFile())
-      const workflowIndex = taskFile.workflows.findIndex(
-        (workflow) => workflow.id === id,
-      )
+      return taskFileStore.update((taskFile) => {
+        const workflowIndex = taskFile.workflows.findIndex(
+          (workflow) => workflow.id === id,
+        )
 
-      if (workflowIndex === -1) {
-        throw new Error(`Workflow not found: ${id}`)
-      }
+        if (workflowIndex === -1) {
+          throw new Error(`Workflow not found: ${id}`)
+        }
 
-      const currentWorkflow = taskFile.workflows[workflowIndex]
-      const updatedWorkflow: WorkflowDefinition = {
-        ...currentWorkflow,
-        ...input,
-        name: input.name?.trim() ?? currentWorkflow.name,
-        actionRefs:
+        const currentWorkflow = taskFile.workflows[workflowIndex]
+        const actionRefs =
           input.actionRefs === undefined
             ? currentWorkflow.actionRefs
-            : normalizeWorkflowActionRefs(input.actionRefs),
-        permissions: input.permissions
-          ? normalizeDevicePolicy(input.permissions)
-          : currentWorkflow.permissions,
-        schedule:
-          input.schedule === undefined
-            ? currentWorkflow.schedule
-            : normalizeWorkflowSchedule(input.schedule),
-        updatedAt: new Date().toISOString(),
-      }
-      const workflows = [...taskFile.workflows]
-      workflows[workflowIndex] = updatedWorkflow
+            : normalizeWorkflowActionRefs(input.actionRefs)
+        assertWorkflowActionRefsExist(actionRefs, taskFile.actions)
 
-      await writeTaskFile({
-        ...taskFile,
-        workflows,
+        const updatedWorkflow: WorkflowDefinition = {
+          ...currentWorkflow,
+          ...input,
+          name: input.name?.trim() ?? currentWorkflow.name,
+          actionRefs,
+          permissions: input.permissions
+            ? normalizeDevicePolicy(input.permissions)
+            : currentWorkflow.permissions,
+          schedule:
+            input.schedule === undefined
+              ? currentWorkflow.schedule
+              : normalizeWorkflowSchedule(input.schedule),
+          updatedAt: new Date().toISOString(),
+        }
+        const workflows = [...taskFile.workflows]
+        workflows[workflowIndex] = updatedWorkflow
+
+        return {
+          nextValue: {
+            ...taskFile,
+            workflows,
+          },
+          result: updatedWorkflow,
+        }
       })
-
-      return updatedWorkflow
     },
 
     async replaceWorkflows(input){
-      await writeTaskFile({
-          actions: input.actions ?? [],
-          workflows: input.workflows ?? [],
-        },
-      )
+      await replaceWorkflowFile(input)
     },
 
     async replaceWorkflowData(input){
-      await writeTaskFile({
-          actions: input.actions ?? [],
-          workflows: input.workflows ?? [],
-        },
-      )
+      await replaceWorkflowFile(input)
     },
 
     async deleteWorkflow(id) {
-      const taskFile = ensureLegacyWorkflowData(await readTaskFile())
-      const workflow = taskFile.workflows.find(
-        (currentWorkflow) => currentWorkflow.id === id,
-      )
+      await taskFileStore.update((taskFile) => {
+        const workflow = taskFile.workflows.find(
+          (currentWorkflow) => currentWorkflow.id === id,
+        )
 
-      if (!workflow) {
-        throw new Error(`Workflow not found: ${id}`)
-      }
+        if (!workflow) {
+          throw new Error(`Workflow not found: ${id}`)
+        }
 
-      await writeTaskFile({
-        actions: taskFile.actions,
-        workflows: taskFile.workflows.filter(
-          (currentWorkflow) => currentWorkflow.id !== id,
-        ),
+        return {
+          nextValue: {
+            actions: taskFile.actions,
+            workflows: taskFile.workflows.filter(
+              (currentWorkflow) => currentWorkflow.id !== id,
+            ),
+          },
+          result: undefined,
+        }
       })
     },
   }
-}
 
-function ensureLegacyWorkflowData(taskFile: TaskFile): TaskFile {
-  return {
-    actions: taskFile.actions,
-    workflows: taskFile.workflows,
+  async function replaceWorkflowFile(input: ReplaceWorkflowsInput): Promise<void> {
+    const nextFile = normalizeTaskFile({
+      actions: input.actions ?? [],
+      workflows: input.workflows ?? [],
+    })
+    for (const workflow of nextFile.workflows) {
+      assertWorkflowActionRefsExist(workflow.actionRefs, nextFile.actions)
+    }
+    await writeTaskFile(nextFile)
   }
 }
 
+function normalizeTaskFile(value: unknown): TaskFile {
+  const candidate = value as Partial<TaskFile>
+  const actions = Array.isArray(candidate.actions) ? candidate.actions : []
+  const workflows = Array.isArray(candidate.workflows)
+    ? candidate.workflows.map(normalizeStoredWorkflow)
+    : []
+
+  return {
+    actions,
+    workflows,
+  }
+}
+
+function normalizeStoredWorkflow(
+  workflow: WorkflowDefinition,
+): WorkflowDefinition {
+  return {
+    ...workflow,
+    name:
+      typeof workflow.name === 'string' && workflow.name.trim()
+        ? workflow.name.trim()
+        : 'Untitled Workflow',
+    actionRefs: normalizeWorkflowActionRefs(
+      Array.isArray(workflow.actionRefs) ? workflow.actionRefs : [],
+    ),
+    permissions: normalizeDevicePolicy(workflow.permissions),
+    schedule: normalizeWorkflowSchedule(workflow.schedule),
+    state: workflow.state ?? defaultWorkflowState,
+  }
+}
 
 function normalizeWorkflowActionRefs(
   actionRefs: WorkflowDefinition['actionRefs'],
@@ -324,6 +350,16 @@ function normalizeWorkflowActionRefs(
     }))
 }
 
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && 'code' in error
+function assertWorkflowActionRefsExist(
+  actionRefs: WorkflowDefinition['actionRefs'],
+  actions: ActionDefinition[],
+): void {
+  const actionIds = new Set(actions.map((action) => action.id))
+  const missingActionRef = actionRefs.find(
+    (actionRef) => !actionIds.has(actionRef.actionId),
+  )
+
+  if (missingActionRef) {
+    throw new Error(`Workflow Action 참조를 찾지 못했습니다: ${missingActionRef.actionId}`)
+  }
 }

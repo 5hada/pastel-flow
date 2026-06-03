@@ -6,7 +6,7 @@ export type ActionRunContext<AConfig = unknown, AState = unknown> = {
   deviceId: string
   dataDir: string
   appSettings: AppSettings
-  updateAConfig(Aconfig: AConfig): Promise<void>
+  updateConfig(config: AConfig): Promise<void>
   updateState(state: Partial<AState>): Promise<void>
 }
 
@@ -23,10 +23,10 @@ export type ActionStopResult<AConfig = unknown, AState = unknown> = {
 
 export type ActionAdapter<AConfig = unknown, AState = unknown> = {
   type: ActionType
-  validateAConfig(Aconfig: AConfig): Promise<void> | void
+  validateConfig(config: AConfig): Promise<void> | void
   run(
     context: ActionRunContext<AConfig, AState>,
   ): Promise<ActionRunResult<AState>>
   stop?(actionId: string): Promise<ActionStopResult<AConfig, AState> | void>
-  getAState?(actionId: string): Promise<AState>
+  getState?(actionId: string): Promise<AState>
 }

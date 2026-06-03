@@ -1,9 +1,0 @@
-@import "tailwindcss";
-@import "@heroui/styles"; 
-@import "./renderer/styles/tokens.css";
-@import "./renderer/styles/layout.css";
-@import "./renderer/styles/forms.css";
-@import "./renderer/styles/tasks.css";
-@import "./renderer/styles/tools.css";
-@import "./renderer/styles/settings.css";
-@import "./renderer/styles/responsive.css";

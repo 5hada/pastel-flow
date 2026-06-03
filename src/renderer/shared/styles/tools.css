@@ -1,0 +1,49 @@
+.tool-panel,
+.tool-module-detail,
+.tool-runner,
+.tool-output-list,
+.tool-list-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.tool-output,
+.tool-output-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface);
+}
+
+.tool-output {
+  overflow: auto;
+}
+
+.tool-output-image,
+.tool-output-gallery img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+.tool-output-gallery,
+.option-swatch-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tool-list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.palette-chip,
+.option-swatch span {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 10px;
+}

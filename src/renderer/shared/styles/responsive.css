@@ -1,0 +1,54 @@
+@media (max-width: 920px) {
+  .app-header {
+    grid-template-columns: minmax(150px, 1fr) 48px;
+    grid-auto-rows: auto;
+    min-height: 116px;
+    align-content: center;
+  }
+
+  .app-header-meta {
+    display: none;
+  }
+
+  .top-mode-bar {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+  }
+
+  .app-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace-sidebar {
+    display: none;
+  }
+
+  .workspace-grid,
+  .editor-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .task-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .workspace-content {
+    padding: 14px;
+  }
+
+  .mode-panel,
+  .task-section,
+  .detail-panel,
+  .create-panel {
+    padding: 14px;
+  }
+
+  .panel-heading,
+  .section-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

@@ -1,0 +1,245 @@
+.task-list,
+.workflow-run-group,
+.workflow-run-group-items,
+.editor-list,
+.editor-detail,
+.workflow-action-list,
+.run-event-list {
+  display: grid;
+  gap: 12px;
+}
+
+.workflow-run-group h3 {
+  margin: 4px 0 0;
+  color: var(--muted, var(--text-muted));
+  font-size: 0.86rem;
+}
+
+.workflow-run-group-items.task-list-grid,
+.task-list-grid {
+  grid-template-columns: repeat(var(--workflow-grid-columns, 5), minmax(0, 1fr));
+}
+
+.workflow-run-card,
+.task-row,
+.workflow-action-row,
+.action-picker-row,
+.run-event-row,
+.editor-list-item,
+.task-picker {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface);
+}
+
+.workflow-run-card {
+  min-height: 110px;
+  align-content: space-between;
+}
+
+.workflow-run-card div,
+.task-row-summary,
+.workflow-action-row div,
+.action-picker-row div,
+.run-event-row div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.workflow-run-card strong,
+.task-row-title,
+.task-card-title strong,
+.editor-list-item strong {
+  color: var(--foreground, var(--text));
+  overflow-wrap: anywhere;
+}
+
+.workflow-run-card small,
+.task-row-meta,
+.workflow-action-row small,
+.action-picker-row small,
+.run-event-row small,
+.field-help,
+.editor-list-item span {
+  color: var(--muted, var(--text-muted));
+  font-size: 0.8rem;
+}
+
+.task-row {
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+  align-items: center;
+}
+
+.workflow-action-row,
+.tool-list-row {
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
+  align-items: center;
+}
+
+.workflow-action-row {
+  cursor: grab;
+}
+
+.display-toggle,
+.grid-column-stepper {
+  display: inline-grid;
+  align-items: center;
+  gap: 4px;
+}
+
+.display-toggle {
+  grid-template-columns: repeat(2, 34px);
+}
+
+.grid-column-stepper {
+  grid-template-columns: 34px 34px 34px;
+}
+
+.grid-column-stepper span {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+}
+
+.display-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 4px);
+  grid-template-rows: repeat(3, 4px);
+  gap: 2px;
+}
+
+.display-icon-grid i,
+.display-icon-list i {
+  display: block;
+  background: currentColor;
+}
+
+.display-icon-grid i {
+  width: 4px;
+  height: 4px;
+  border-radius: 1px;
+}
+
+.display-icon-list {
+  display: grid;
+  width: 16px;
+  gap: 3px;
+}
+
+.display-icon-list i {
+  width: 16px;
+  height: 2px;
+  border-radius: 999px;
+}
+
+.action-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(16, 24, 36, 0.42);
+}
+
+.action-picker-dialog {
+  display: grid;
+  width: min(760px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px;
+  background: var(--surface);
+}
+
+.action-picker-controls,
+.run-event-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.35fr);
+  gap: 8px;
+}
+
+.action-picker-list {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.action-picker-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.toggle-switch {
+  display: inline-grid;
+  width: 44px;
+  min-width: 44px;
+  align-items: center;
+}
+
+.toggle-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toggle-switch span {
+  position: relative;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.toggle-switch span::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--surface);
+  content: '';
+}
+
+.toggle-switch input:checked + span {
+  background: var(--accent);
+}
+
+.toggle-switch input:checked + span::after {
+  transform: translateX(20px);
+}
+
+.detail-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0 0;
+}
+
+.detail-list dt {
+  color: var(--muted, var(--text-muted));
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.detail-list dd {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.url-section,
+.last-error,
+.run-events,
+.danger-zone {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}

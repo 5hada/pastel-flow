@@ -1,23 +1,21 @@
 import type { CurrentDevice, LinkedDevice } from './devices'
-import type { TaskRunEvent } from './taskRunEvents'
-import type { ActionDefinition, TaskTemplate, WorkflowDefinition } from './tasks'
+import type { WorkflowRunEvent } from './runStatus'
+import type { ActionDefinition } from './actions'
+import type { WorkflowDefinition } from './workflows'
 
 export type SyncExportSnapshot = {
   schemaVersion: 1
   exportedAt: string
   sourceDevice: CurrentDevice
-  tasks: TaskTemplate[]
   actions: ActionDefinition[]
   workflows: WorkflowDefinition[]
-  taskRunEvents: TaskRunEvent[]
+  workflowRunEvents: WorkflowRunEvent[]
   linkedDevices: LinkedDevice[]
 }
 
 export type SyncImportResult = {
   importedAt: string
-  tasksCreated: number
-  tasksUpdated: number
-  taskRunEventsAdded: number
+  workflowRunEventsAdded: number
   linkedDevicesMerged: number
 }
 
@@ -48,8 +46,7 @@ export function normalizeSyncExportSnapshot(
     !candidate.sourceDevice ||
     typeof candidate.sourceDevice.id !== 'string' ||
     typeof candidate.sourceDevice.name !== 'string' ||
-    !Array.isArray(candidate.tasks) ||
-    !Array.isArray(candidate.taskRunEvents) ||
+    !Array.isArray(candidate.workflowRunEvents) ||
     !Array.isArray(candidate.linkedDevices)
   ) {
     throw new Error('동기화 스냅샷 필수 필드가 누락되었습니다.')

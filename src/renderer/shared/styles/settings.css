@@ -1,0 +1,72 @@
+.settings-subsection,
+.linked-device-list,
+.profile-preset-list,
+.secret-list,
+.secret-form {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-subsection {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.settings-fieldset {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.segmented-control {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.theme-preview,
+.secret-storage-status,
+.linked-device-row,
+.profile-preset-row,
+.secret-row {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface);
+}
+
+.linked-device-row,
+.profile-preset-row,
+.secret-form,
+.secret-row {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  align-items: end;
+}
+
+.secret-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.theme-preview-swatches,
+.color-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.theme-preview-swatches i {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.color-input {
+  width: 44px;
+  min-width: 44px;
+  padding: 2px;
+}

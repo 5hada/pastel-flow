@@ -1,0 +1,117 @@
+.task-form {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.task-form label,
+.tool-field {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  color: var(--muted, var(--text-muted));
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.task-form .inline-check,
+.inline-check,
+.tool-field.toggle-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.form-grid,
+.theme-color-grid,
+.shortcut-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--foreground, var(--text));
+  background: var(--field-background, var(--control-bg));
+  font: inherit;
+}
+
+input,
+select {
+  min-height: 42px;
+}
+
+input[type='checkbox'],
+input[type='radio'],
+.inline-check input {
+  width: auto;
+  min-height: auto;
+}
+
+textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.form-actions,
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.error-message,
+.panel-error,
+.panel-success {
+  margin: 0;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.error-message {
+  position: fixed;
+  top: 76px;
+  left: 50%;
+  z-index: 10;
+  width: min(720px, calc(100vw - 32px));
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  background: var(--danger-soft);
+  transform: translateX(-50%);
+}
+
+.panel-error {
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.panel-success {
+  border: 1px solid var(--success);
+  color: var(--success);
+  background: var(--success-soft);
+}
+
+.empty-state,
+.muted-text,
+.danger-zone p {
+  margin: 0;
+  color: var(--muted, var(--text-muted));
+}
+
+.empty-state-action {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+}

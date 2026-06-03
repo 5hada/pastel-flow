@@ -1,5 +1,5 @@
-import type { RunStatus } from "../runStatus";
-import type { SecretRef } from "../secrets";
+import type { RunStatus } from '../runStatus'
+import type { SecretRef } from '../secrets'
 
 export type ActionType =
   | 'browser_action'

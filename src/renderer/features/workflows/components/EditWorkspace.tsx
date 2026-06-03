@@ -1,58 +1,33 @@
 import { Button, Card } from '@heroui/react'
-import type { FormEvent } from 'react'
-import type { CurrentDevice } from '../../../../shared/devices'
-import type { LocalSecretMetadata } from '../../../../shared/secrets'
 import type {
   BrowserProfilePreset,
   DeveloperVisibilitySettings,
 } from '../../../../shared/settings'
-import {
-  getBrowserRunModeLabel,
-  normalizeBrowserTabGroupConfig,
-  type BrowserTabGroupConfig,
-} from '../../../../shared/browsers'
 import {
   getDeviceExecutionPolicyLabel,
   getDeviceVisibilityPolicyLabel,
 } from '../../../../shared/devices'
 import type { ActionDefinition } from '../../../../shared/actions'
 import type { WorkflowDefinition } from '../../../../shared/workflows'
-import type { TaskTemplate } from '../../../shared/state/taskTypes'
-import type { TaskRunEvent } from '../../../../shared/taskRunEvents'
-import type { BrowserTaskFormState } from '../../../shared/state/taskFormState'
-import { TaskEditPanel } from './TaskEditPanel'
-import { TaskRunEventsPanel } from './TaskRunEventsPanel'
-import { WorkflowActionList } from '../../actions/components/ActionWorkspacePanel'
+import type { WorkflowRunEvent } from '../../../../shared/runStatus'
+import { WorkflowRunEventsPanel } from './WorkflowRunEventsPanel'
+import { WorkflowActionList } from './WorkflowActionList'
 import {
   formatDate,
-  getBrowserKindLabel,
-  getBrowserProfileSourceLabel,
-  getTabGroupSnapshotLabel,
-  getTaskConfigSummary,
   getTaskScheduleLabel,
   getTaskStatusLabel,
-  getTaskTypeLabel,
 } from '../../../shared/utils/viewLabels'
 
 export type EditWorkspaceProps = {
   actions: ActionDefinition[]
-  confirmDeleteTaskId: string | null
-  currentDevice: CurrentDevice
-  editForm: BrowserTaskFormState
   developerVisibility: DeveloperVisibilitySettings
   isLoading: boolean
   profilePresets: BrowserProfilePreset[]
-  secrets: LocalSecretMetadata[]
-  selectedTask: TaskTemplate | null
   selectedWorkflowId: string | null
-  taskRunEvents: TaskRunEvent[]
+  workflowRunEvents: WorkflowRunEvent[]
   workflows: WorkflowDefinition[]
   onCreateWorkflow(): Promise<void>
-  onChange(value: BrowserTaskFormState): void
-  onConfirmDelete(taskId: string): Promise<void>
   onConfirmDeleteWorkflow(workflowId: string): Promise<void>
-  onDeleteRequest(taskId: string | null): void
-  onSubmit(event: FormEvent<HTMLFormElement>): void
   onUpdateWorkflow(
     workflowId: string,
     input: Partial<WorkflowDefinition>,
@@ -61,23 +36,13 @@ export type EditWorkspaceProps = {
 
 export function EditWorkspace({
   actions,
-  confirmDeleteTaskId,
-  currentDevice,
-  editForm,
   developerVisibility,
   isLoading,
-  onChange,
-  onConfirmDelete,
   onConfirmDeleteWorkflow,
   onCreateWorkflow,
-  onDeleteRequest,
-  onSubmit,
   onUpdateWorkflow,
-  profilePresets,
-  secrets,
   selectedWorkflowId,
-  selectedTask,
-  taskRunEvents,
+  workflowRunEvents,
   workflows,
 }: EditWorkspaceProps) {
   const selectedWorkflow =
@@ -90,15 +55,6 @@ export function EditWorkspace({
       </Card>
     )
   }
-
-  const config =
-    selectedTask?.type === 'browser_tab_group'
-      ? normalizeBrowserTabGroupConfig(
-          selectedTask.config as Partial<BrowserTabGroupConfig>,
-        )
-      : null
-  const isConfirmingDelete = confirmDeleteTaskId === selectedTask?.id
-  const isConfirmingWorkflowDelete = confirmDeleteTaskId === selectedWorkflow?.id
 
   if (!selectedWorkflow) {
     return (
@@ -206,148 +162,52 @@ export function EditWorkspace({
               }}
             />
             <Card className="danger-zone" aria-label="Workflow 삭제">
-              {isConfirmingWorkflowDelete ? (
-                <>
-                  <p>이 Workflow를 삭제할까요? 연결된 Action은 유지됩니다.</p>
-                  <div className="form-actions">
-                    <Button
-                      className="danger-button"
-                      variant="danger"
-                      type="button"
-                      onClick={() => void onConfirmDeleteWorkflow(selectedWorkflow.id)}
-                    >
-                      삭제 확정
-                    </Button>
-                    <Button
-                      className="ghost-button"
-                      variant="ghost"
-                      type="button"
-                      onClick={() => onDeleteRequest(null)}
-                    >
-                      취소
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <Button
-                  className="danger-button"
-                  variant="danger"
-                  type="button"
-                  onClick={() => onDeleteRequest(selectedWorkflow.id)}
-                >
-                  Workflow 삭제
-                </Button>
-              )}
+              <Button
+                className="danger-button"
+                variant="danger"
+                type="button"
+                onClick={() => void onConfirmDeleteWorkflow(selectedWorkflow.id)}
+              >
+                Workflow 삭제
+              </Button>
             </Card>
         </div>
       </Card>
-      {selectedTask ? (
-      <Card className="mode-panel" aria-label="선택한 작업 수정">
-        <TaskEditPanel
-          currentDevice={currentDevice}
-          editForm={editForm}
-          profilePresets={profilePresets}
-          onChange={onChange}
-          onSubmit={onSubmit}
-          secrets={secrets}
-        />
 
+      <Card className="mode-panel" aria-label="선택한 Workflow 상세">
         <dl className="detail-list">
-          <DetailItem label="작업 타입" value={getTaskTypeLabel(selectedTask.type)} />
-          <DetailItem label="설정 요약" value={getTaskConfigSummary(selectedTask)} />
-          {config ? (
-            <>
-              <DetailItem label="브라우저" value={getBrowserKindLabel(config.browserKind)} />
-              <DetailItem label="실행 방식" value={getBrowserRunModeLabel(config.runMode)} />
-              <DetailItem
-                label="프로필 소스"
-                value={getBrowserProfileSourceLabel(config.profileSource)}
-              />
-              <DetailItem
-                label="동적 업데이트"
-                value={config.dynamicTemplateUpdates ? '사용' : '사용 안 함'}
-              />
-              <DetailItem
-                label="탭 그룹 스냅샷"
-                value={getTabGroupSnapshotLabel(config)}
-              />
-              {developerVisibility.showIds ? (
-                <DetailItem label="프로필 ID" value={config.profileId || '없음'} />
-              ) : null}
-            </>
+          {developerVisibility.showIds ? (
+            <DetailItem label="Workflow ID" value={selectedWorkflow.id} />
           ) : null}
-          <DetailItem label="예약" value={getTaskScheduleLabel(selectedTask.schedule)} />
-          <DetailItem label="상태" value={getTaskStatusLabel(selectedTask.state.status)} />
-          <DetailItem label="마지막 실행" value={formatDate(selectedTask.state.endedAt)} />
+          <DetailItem label="Action" value={`${selectedWorkflow.actionRefs.length}개`} />
+          <DetailItem label="예약" value={getTaskScheduleLabel(selectedWorkflow.schedule)} />
+          <DetailItem label="상태" value={getTaskStatusLabel(selectedWorkflow.state.status)} />
+          <DetailItem label="마지막 실행" value={formatDate(selectedWorkflow.state.endedAt)} />
           <DetailItem
             label="마지막 메시지"
-            value={selectedTask.state.lastMessage ?? '아직 없음'}
+            value={selectedWorkflow.state.lastMessage ?? '아직 없음'}
           />
-          {developerVisibility.showPaths ? (
-            <DetailItem
-              label="출력 경로"
-              value={
-                '아직 없음'
-              }
-            />
-          ) : null}
-          <DetailItem label="생성 시간" value={formatDate(selectedTask.createdAt)} />
-          <DetailItem label="수정 시간" value={formatDate(selectedTask.updatedAt)} />
+          <DetailItem label="생성 시간" value={formatDate(selectedWorkflow.createdAt)} />
+          <DetailItem label="수정 시간" value={formatDate(selectedWorkflow.updatedAt)} />
           <DetailItem
             label="표시 정책"
-            value={getDeviceVisibilityPolicyLabel(selectedTask.permissions.visibility)}
+            value={getDeviceVisibilityPolicyLabel(selectedWorkflow.permissions.visibility)}
           />
           <DetailItem
             label="실행 정책"
-            value={getDeviceExecutionPolicyLabel(selectedTask.permissions.execution)}
+            value={getDeviceExecutionPolicyLabel(selectedWorkflow.permissions.execution)}
           />
         </dl>
 
-        {selectedTask.state.lastError ? (
+        {selectedWorkflow.state.lastError ? (
           <Card className="last-error" aria-label="마지막 오류">
             <h3>마지막 오류</h3>
-            <p>{selectedTask.state.lastError}</p>
+            <p>{selectedWorkflow.state.lastError}</p>
           </Card>
         ) : null}
 
-        <TaskRunEventsPanel events={taskRunEvents} />
-
-        <Card className="danger-zone" aria-label="작업 삭제">
-          {isConfirmingDelete ? (
-            <>
-              <p>이 작업을 삭제할까요? 저장된 템플릿 설정이 목록에서 사라집니다.</p>
-              <div className="form-actions">
-                <Button
-                  className="danger-button"
-                  variant="danger"
-                  type="button"
-                  onClick={() => void onConfirmDelete(selectedTask.id)}
-                >
-                  삭제 확정
-                </Button>
-                <Button
-                  className="ghost-button"
-                  variant="ghost"
-                  type="button"
-                  onClick={() => onDeleteRequest(null)}
-                >
-                  취소
-                </Button>
-              </div>
-            </>
-          ) : (
-            <Button
-              className="danger-button"
-              variant="danger"
-              type="button"
-              onClick={() => onDeleteRequest(selectedTask.id)}
-            >
-              삭제
-            </Button>
-          )}
-        </Card>
+        <WorkflowRunEventsPanel events={workflowRunEvents} />
       </Card>
-      ) : null}
     </section>
   )
 }
@@ -393,12 +253,17 @@ function reorderWorkflowActionRefs(
   const actionRefMap = new Map(
     actionRefs.map((actionRef) => [actionRef.id, actionRef]),
   )
-
-  return actionRefIds
+  const reorderedActionRefs = actionRefIds
     .map((actionRefId) => actionRefMap.get(actionRefId))
     .filter((actionRef): actionRef is WorkflowDefinition['actionRefs'][number] =>
       Boolean(actionRef),
     )
+  const reorderedIds = new Set(reorderedActionRefs.map((actionRef) => actionRef.id))
+  const retainedActionRefs = [...actionRefs]
+    .sort((left, right) => left.order - right.order)
+    .filter((actionRef) => !reorderedIds.has(actionRef.id))
+
+  return [...reorderedActionRefs, ...retainedActionRefs]
     .map((actionRef, index) => ({
       ...actionRef,
       order: index,

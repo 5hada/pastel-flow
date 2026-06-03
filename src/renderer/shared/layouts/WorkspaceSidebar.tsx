@@ -5,7 +5,6 @@ import {
 } from '../../../shared/actions'
 import { isRestrictedDevicePolicy } from '../../../shared/devices'
 import type { WorkflowDefinition } from '../../../shared/workflows'
-import type { TaskTemplate } from '../state/taskTypes'
 import type { RegisteredToolModule } from '../../../shared/tools'
 import type { NavigationCategory, SettingsCategory, WorkspaceMode } from '../state/taskFormState'
 import { getActionTypeLabel } from '../utils/viewLabels'
@@ -18,7 +17,6 @@ export type WorkspaceSidebarProps = {
   selectedToolId: string | null
   selectedWorkflowId: string | null
   actions: ActionDefinition[]
-  tasks: TaskTemplate[]
   toolModules: RegisteredToolModule[]
   workflows: WorkflowDefinition[]
   onCategorySelect(category: NavigationCategory): void
@@ -31,7 +29,6 @@ export type WorkspaceSidebarProps = {
 }
 
 export function WorkspaceSidebar({
-  tasks,
   toolModules,
   actions,
   workflows,
@@ -52,16 +49,18 @@ export function WorkspaceSidebar({
   const [actionTypeFilter, setActionTypeFilter] = useState<
     ActionDefinition['type'] | 'all'
   >('all')
-  const restrictedCount = tasks.filter((task) =>
-    isRestrictedDevicePolicy(task.permissions),
+  const restrictedCount = workflows.filter((workflow) =>
+    isRestrictedDevicePolicy(workflow.permissions),
   ).length
-  const runningCount = tasks.filter(
-    (task) => task.state.status === 'running',
+  const runningCount = workflows.filter(
+    (workflow) => workflow.state.status === 'running',
   ).length
-  const scheduledCount = tasks.filter((task) => task.schedule?.enabled).length
-  const failedCount = tasks.filter((task) => task.state.status === 'failed').length
-  const secretCount = tasks.filter(
-    (task) => (task.permissions.secretRefs?.length ?? 0) > 0,
+  const scheduledCount = workflows.filter((workflow) => workflow.schedule?.enabled).length
+  const failedCount = workflows.filter(
+    (workflow) => workflow.state.status === 'failed',
+  ).length
+  const secretCount = workflows.filter(
+    (workflow) => (workflow.permissions.secretRefs?.length ?? 0) > 0,
   ).length
   const runCategories: {
     id: NavigationCategory
@@ -69,7 +68,7 @@ export function WorkspaceSidebar({
     label: string
     count: number
   }[] = [
-    { id: 'all', icon: '□', label: '전체', count: tasks.length },
+    { id: 'all', icon: '□', label: '전체', count: workflows.length },
     { id: 'running', icon: '●', label: '실행 중', count: runningCount },
     { id: 'scheduled', icon: '◷', label: '예약됨', count: scheduledCount },
     { id: 'failed', icon: '!', label: '실패', count: failedCount },

@@ -1,20 +1,18 @@
-import type { CurrentDevice, LinkedDevice } from "../devices"
+import type { CurrentDevice, LinkedDevice } from '../devices'
 import type {
   BrowserKind,
-  BrowserProfileSource,
-  BrowserRunMode,
-  BrowserProfilePreset,
   BrowserExecutablePaths,
-} from "../browsers"
+  BrowserProfileSource,
+  BrowserProfilePreset,
+  BrowserRunMode,
+} from '../browsers'
 
-export type { BrowserExecutablePaths, BrowserProfilePreset } from "../browsers"
+export type { BrowserExecutablePaths, BrowserProfilePreset } from '../browsers'
 
 export type ThemeMode = 'system' | 'light' | 'dark' | 'custom'
 
 export type InitialUrlInputMode = 'line'
 export type WorkflowListDisplayMode = 'grid' | 'list'
-
-
 
 export type ThemeColorKey =
   | 'appBg'

@@ -266,20 +266,10 @@ function groupWorkflows(
   workflows: WorkflowDefinition[],
   workflowHierarchy: string[],
 ): { name: string; workflows: WorkflowDefinition[] }[] {
-  const fallbackGroup = workflowHierarchy[0] ?? '기본'
-  const groups = workflowHierarchy.map((name) => ({
-    name,
-    workflows: [] as WorkflowDefinition[],
-  }))
-
-  workflows.forEach((workflow) => {
-    const group =
-      groups.find((currentGroup) =>
-        workflow.name.toLowerCase().startsWith(currentGroup.name.toLowerCase()),
-      ) ?? groups[0]
-
-    ;(group ?? { name: fallbackGroup, workflows: [] }).workflows.push(workflow)
-  })
-
-  return groups.filter((group) => group.workflows.length > 0)
+  return [
+    {
+      name: workflowHierarchy[0] ?? '전체 Workflow',
+      workflows,
+    },
+  ]
 }

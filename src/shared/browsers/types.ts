@@ -1,10 +1,14 @@
-export type BrowserExecutablePaths = Partial<Record<BrowserKind, string>>
+export type LocalOnly<TValue> = TValue & {
+  readonly __localOnlyBrand?: 'local_only'
+}
+
+export type BrowserExecutablePaths = Partial<Record<BrowserKind, LocalOnly<string>>>
 
 export type BrowserProfilePreset = {
   id: string
   name: string
   browserKind: BrowserKind
-  profilePath: string
+  profilePath: LocalOnly<string>
 }
 
 
@@ -63,7 +67,7 @@ export type BrowserTabGroupConfig = {
   restorePolicy: RestorePolicy
   runMode: BrowserRunMode
   profileSource: BrowserProfileSource
-  existingProfilePath?: string
+  existingProfilePath?: LocalOnly<string>
   dynamicTemplateUpdates: boolean
   tabGroupSnapshot?: BrowserTabGroupStateSnapshot
 }

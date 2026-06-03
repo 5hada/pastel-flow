@@ -46,7 +46,6 @@ export default function App() {
         {app.isSidebarOpen ? (
           <WorkspaceSidebar
             actions={app.actions}
-            tasks={app.tasks}
             toolModules={app.toolModules}
             workflows={app.workflows}
             currentMode={app.workspaceMode}
@@ -59,7 +58,6 @@ export default function App() {
             onCreateAction={() => app.setSelectedActionId(null)}
             onCreateWorkflow={() => {
               app.setSelectedWorkflowId(null)
-              app.setSelectedTaskId(null)
             }}
             onSelectAction={app.setSelectedActionId}
             onSelectSettingsCategory={app.setSelectedSettingsCategory}

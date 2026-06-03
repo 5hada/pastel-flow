@@ -6,12 +6,14 @@ import type { DeviceStore } from '../../devices/store/deviceStore'
 import type { WorkflowStore, WorkflowRunEventStore } from '../../workflows/store'
 import {
   normalizeSyncExportSnapshot,
+  sanitizeActionsForSyncExport,
+  sanitizeWorkflowsForSyncExport,
   type SyncExportSnapshot,
   type SyncImportResult,
   type SyncStatus,
 } from '../../../shared/sync'
 
-import type { ActionDefinition, ActionType } from '../../../shared/actions'
+import type { ActionDefinition } from '../../../shared/actions'
 import type { WorkflowDefinition } from '../../../shared/workflows'
 
 export type MockSyncStore = {
@@ -70,8 +72,8 @@ export function createMockSyncStore({
         schemaVersion: 1,
         exportedAt: new Date().toISOString(),
         sourceDevice: currentDevice,
-        actions: sanitizeActionsForExport(actions),
-        workflows: stripLocalWorkflowState(workflows),
+        actions: sanitizeActionsForSyncExport(actions),
+        workflows: sanitizeWorkflowsForSyncExport(workflows),
         workflowRunEvents,
         linkedDevices: settingsSnapshot.settings.linkedDevices,
       }
@@ -156,79 +158,6 @@ async function readSnapshot(exportPath: string): Promise<SyncExportSnapshot> {
   return normalizeSyncExportSnapshot(JSON.parse(raw))
 }
 
-function stripLocalWorkflowState(
-  workflows: SyncExportSnapshot['workflows'],
-): SyncExportSnapshot['workflows'] {
-  return workflows.map((workflow) => ({
-    ...workflow,
-    state: {
-      ...workflow.state,
-      localProfilePath: undefined,
-    },
-  }))
-}
-
-function sanitizeActionsForExport(
-  actions: ActionDefinition[],
-): ActionDefinition[] {
-  return actions.map((action) => ({
-    ...action,
-    config: sanitizeActionConfig(action.type, action.config),
-  }))
-}
-
-function sanitizeActionConfig(
-  actionType: ActionType,
-  config: unknown,
-): unknown {
-  if (!isRecord(config)) {
-    return config
-  }
-
-  switch (actionType) {
-    case 'browser_action':
-      return sanitizeBrowserActionConfig(config)
-    case 'tool_action':
-      return sanitizeToolActionConfig(config)
-    case 'crawler_action':
-    case 'discord_dry_run_action':
-    case 'notion_dry_run_action':
-    case 'trading_dry_run_action':
-      return config
-  }
-}
-
-function sanitizeBrowserActionConfig(
-  config: Record<string, unknown>,
-): Record<string, unknown> {
-  const syncSafeConfig = { ...config }
-  delete syncSafeConfig.existingProfilePath
-  delete syncSafeConfig.tabGroupSnapshot
-
-  return syncSafeConfig
-}
-
-function sanitizeToolActionConfig(
-  config: Record<string, unknown>,
-): Record<string, unknown> {
-  if (!isRecord(config.inputDefaults)) {
-    return config
-  }
-
-  return {
-    ...config,
-    inputDefaults: Object.fromEntries(
-      Object.entries(config.inputDefaults).filter(
-        ([key]) => !isSensitiveConfigKey(key),
-      ),
-    ),
-  }
-}
-
-function isSensitiveConfigKey(key: string): boolean {
-  return /secret|password|token|api[_-]?key|credential/i.test(key)
-}
-
 function mergeDefinitions<TDefinition extends ActionDefinition | WorkflowDefinition>(
   currentDefinitions: TDefinition[],
   incomingDefinitions: TDefinition[],
@@ -270,8 +199,4 @@ function mergeLinkedDevices(
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && 'code' in error
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }

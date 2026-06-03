@@ -1,10 +1,10 @@
-import type { 
-  DevicePolicy,
+import type {
   DeviceAccessLevel,
-  DeviceVisibilityPolicy,
   DeviceExecutionPolicy,
-  LinkedDevice
-} from "./types"
+  DevicePolicy,
+  DeviceVisibilityPolicy,
+  LinkedDevice,
+} from './types'
 
 export const defaultDevicePolicy: DevicePolicy = {
   visibility: 'local_only',
@@ -14,6 +14,32 @@ export const defaultDevicePolicy: DevicePolicy = {
 export function normalizeDevicePolicy(
   policy: Partial<DevicePolicy> | null | undefined,
 ): DevicePolicy {
+  const allowedDeviceIds = Array.isArray(policy?.allowedDeviceIds)
+    ? [
+        ...new Set(
+          policy.allowedDeviceIds
+            .map((deviceId) =>
+              typeof deviceId === 'string' ? deviceId.trim() : '',
+            )
+            .filter(Boolean),
+        ),
+      ]
+    : undefined
+  const secretRefs = Array.isArray(policy?.secretRefs)
+    ? policy.secretRefs
+        .filter(
+          (secretRef) =>
+            typeof secretRef.id === 'string' &&
+            secretRef.id.trim() &&
+            (secretRef.scope === 'local_device' ||
+              secretRef.scope === 'trusted_devices'),
+        )
+        .map((secretRef) => ({
+          ...secretRef,
+          id: secretRef.id.trim(),
+        }))
+    : undefined
+
   return {
     visibility: isDeviceVisibilityPolicy(policy?.visibility)
       ? policy.visibility
@@ -21,22 +47,11 @@ export function normalizeDevicePolicy(
     execution: isDeviceExecutionPolicy(policy?.execution)
       ? policy.execution
       : defaultDevicePolicy.execution,
-    allowedDeviceIds: Array.isArray(policy?.allowedDeviceIds)
-      ? policy.allowedDeviceIds
-          .map((deviceId) =>
-            typeof deviceId === 'string' ? deviceId.trim() : '',
-          )
-          .filter(Boolean)
-      : undefined,
-    secretRefs: Array.isArray(policy?.secretRefs)
-      ? policy.secretRefs.filter(
-          (secretRef) =>
-            typeof secretRef.id === 'string' &&
-            secretRef.id.trim() &&
-            (secretRef.scope === 'local_device' ||
-              secretRef.scope === 'trusted_devices'),
-        )
-      : undefined,
+    allowedDeviceIds:
+      allowedDeviceIds && allowedDeviceIds.length > 0
+        ? allowedDeviceIds
+        : undefined,
+    secretRefs: secretRefs && secretRefs.length > 0 ? secretRefs : undefined,
   }
 }
 
@@ -105,7 +120,9 @@ export function normalizeLinkedDevices(value: unknown): LinkedDevice[] {
     return []
   }
 
-  return value
+  const deviceMap = new Map<string, LinkedDevice>()
+
+  value
     .map((device): LinkedDevice | null => {
       if (!device || typeof device !== 'object') {
         return null
@@ -128,6 +145,11 @@ export function normalizeLinkedDevices(value: unknown): LinkedDevice[] {
       }
     })
     .filter((device): device is LinkedDevice => Boolean(device))
+    .forEach((device) => {
+      deviceMap.set(device.id, device)
+    })
+
+  return [...deviceMap.values()]
 }
 
 export function getDeviceAccessLevelLabel(

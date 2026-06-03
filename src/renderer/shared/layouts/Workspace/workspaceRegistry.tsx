@@ -46,7 +46,7 @@ export const workspaceTemplates: WorkspaceTemplate[] = [
         onChange: context.setCreateForm,
         onDeleteAction: context.handleDeleteAction,
         onSelectAction: context.setSelectedActionId,
-        onSubmit: context.handleCreateTask,
+        onSubmit: context.handleCreateAction,
         onUpdateAction: context.handleUpdateAction,
       }
 
@@ -58,23 +58,14 @@ export const workspaceTemplates: WorkspaceTemplate[] = [
     render(context: WorkspaceContext) {
       const props = {
         actions: context.actions,
-        confirmDeleteTaskId: context.confirmDeleteTaskId,
-        currentDevice: context.currentDevice,
-        editForm: context.editForm,
         profilePresets: context.appSettings.browserProfilePresets,
         developerVisibility: context.appSettings.developerVisibility,
         isLoading: context.isLoading,
-        secrets: context.secrets,
         selectedWorkflowId: context.selectedWorkflowId,
-        onChange: context.setEditForm,
-        onConfirmDelete: context.handleDeleteTask,
         onConfirmDeleteWorkflow: context.handleDeleteWorkflow,
-        onDeleteRequest: context.setConfirmDeleteTaskId,
-        onSubmit: context.handleUpdateTask,
         onCreateWorkflow: context.handleCreateWorkflow,
         onUpdateWorkflow: context.handleUpdateWorkflow,
-        selectedTask: context.selectedTask,
-        taskRunEvents: context.taskRunEvents,
+        workflowRunEvents: context.workflowRunEvents,
         workflows: context.workflows,
       }
 
@@ -132,7 +123,7 @@ export const workspaceTemplates: WorkspaceTemplate[] = [
         onExportSyncSnapshotFile: context.handleExportSyncSnapshotFile,
         onImportSyncSnapshot: context.handleImportSyncSnapshot,
         onImportSyncSnapshotFile: context.handleImportSyncSnapshotFile,
-        onPruneTaskRunEvents: context.handlePruneTaskRunEvents,
+        onPruneWorkflowRunEvents: context.handlePruneWorkflowRunEvents,
         onRegisterToolModule: context.handleRegisterToolModule,
       }
 

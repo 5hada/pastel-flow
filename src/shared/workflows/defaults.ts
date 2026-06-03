@@ -1,15 +1,13 @@
 import type {
-    WorkflowState,
-    WorkflowSchedule,
-    WorkflowScheduleMode,
-    DayOfWeek
-} from "./types"
-
+  DayOfWeek,
+  WorkflowSchedule,
+  WorkflowScheduleMode,
+  WorkflowState,
+} from './types'
 
 export const defaultWorkflowState: WorkflowState = {
-  status: 'idle'
+  status: 'idle',
 }
-
 
 export const defaultWorkflowSchedule: WorkflowSchedule = {
   enabled: false,

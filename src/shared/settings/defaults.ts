@@ -1,23 +1,20 @@
 import type {
-    AppSettings,
-    ThemeColorKey,
-    ThemeMode,
-    WorkflowListDisplayMode,
-    BrowserExecutablePaths,
-    BrowserProfilePreset,
-    DeveloperVisibilitySettings,
-    CustomThemeColors,
-    ShortcutSettings
-} from "./types"
-
+  AppSettings,
+  BrowserExecutablePaths,
+  BrowserProfilePreset,
+  CustomThemeColors,
+  DeveloperVisibilitySettings,
+  ShortcutSettings,
+  ThemeColorKey,
+  ThemeMode,
+  WorkflowListDisplayMode,
+} from './types'
 import type {
-    BrowserKind,
-    BrowserProfileSource,
-    BrowserRunMode
-}from '../browsers'
-
-import { normalizeLinkedDevices } from "../devices"
-
+  BrowserKind,
+  BrowserProfileSource,
+  BrowserRunMode,
+} from '../browsers'
+import { normalizeLinkedDevices } from '../devices'
 
 export const defaultAppSettings: AppSettings = {
   themeMode: 'light',
@@ -224,7 +221,7 @@ function normalizeBrowserProfilePresets(value: unknown): BrowserProfilePreset[] 
   return value
     .map((profile): BrowserProfilePreset | null => {
       const candidate = profile as Partial<BrowserProfilePreset>
-      const id = normalizeOptionalPath(candidate.id) ?? cryptoSafeId()
+      const id = normalizeOptionalPath(candidate.id) ?? createFallbackProfileId()
       const name = normalizeOptionalPath(candidate.name)
       const profilePath = normalizeOptionalPath(candidate.profilePath)
       const browserKind = isBrowserKind(candidate.browserKind)
@@ -334,6 +331,10 @@ function isBrowserProfileSource(value: unknown): value is BrowserProfileSource {
   return value === 'action_profile' || value === 'existing_profile'
 }
 
-function cryptoSafeId(): string {
+function createFallbackProfileId(): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return `profile_${globalThis.crypto.randomUUID()}`
+  }
+
   return `profile_${Math.random().toString(36).slice(2, 10)}`
 }

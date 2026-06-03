@@ -9,6 +9,7 @@ import type {
     BrowserProfileSource,
     RestorePolicy
 } from './types'
+import { normalizeBrowserNavigationUrls } from './urlFilters'
 
 export const defaultBrowserRunMode: BrowserRunMode = 'dedicated_profile'
 
@@ -38,7 +39,9 @@ export function normalizeBrowserTabGroupConfig(
         ? config.browserGroupId.trim()
         : `browser-group-${config.profileId ?? 'default'}`,
     profileId: config.profileId ?? '',
-    initialUrls: Array.isArray(config.initialUrls) ? config.initialUrls : [],
+    initialUrls: Array.isArray(config.initialUrls)
+      ? normalizeBrowserNavigationUrls(config.initialUrls)
+      : [],
     browserKind: isBrowserKind(config.browserKind)
       ? config.browserKind
       : 'chrome',

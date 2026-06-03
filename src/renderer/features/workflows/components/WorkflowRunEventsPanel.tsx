@@ -1,15 +1,15 @@
 import { Input, Label, ListBox, Select } from '@heroui/react'
 import { useState } from 'react'
-import type { TaskRunEvent, TaskRunEventStatus } from '../../../../shared/taskRunEvents'
+import type { RunStatus, WorkflowRunEvent } from '../../../../shared/runStatus'
 import { formatDate, getTaskStatusLabel } from '../../../shared/utils/viewLabels'
 
-export type TaskRunEventsPanelProps = {
-  events: TaskRunEvent[]
+export type WorkflowRunEventsPanelProps = {
+  events: WorkflowRunEvent[]
 }
 
-export function TaskRunEventsPanel({ events }: TaskRunEventsPanelProps) {
+export function WorkflowRunEventsPanel({ events }: WorkflowRunEventsPanelProps) {
   const [query, setQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<TaskRunEventStatus | 'all'>(
+  const [statusFilter, setStatusFilter] = useState<RunStatus | 'all'>(
     'all',
   )
   const filteredEvents = events.filter((event) => {
@@ -19,7 +19,7 @@ export function TaskRunEventsPanel({ events }: TaskRunEventsPanelProps) {
     const matchesQuery =
       !normalizedQuery ||
       (event.message ?? '').toLowerCase().includes(normalizedQuery) ||
-      event.deviceId.toLowerCase().includes(normalizedQuery)
+      (event.deviceId ?? '').toLowerCase().includes(normalizedQuery)
 
     return matchesStatus && matchesQuery
   })
@@ -36,7 +36,7 @@ export function TaskRunEventsPanel({ events }: TaskRunEventsPanelProps) {
         <Select
           selectedKey={statusFilter}
           onSelectionChange={(key) =>
-            setStatusFilter(String(key) as TaskRunEventStatus | 'all')
+            setStatusFilter(String(key) as RunStatus | 'all')
           }
         >
           <Label>상태</Label>
@@ -71,7 +71,7 @@ export function TaskRunEventsPanel({ events }: TaskRunEventsPanelProps) {
       ) : (
         <div className="run-event-list">
           {filteredEvents.slice(0, 8).map((event) => (
-            <div className="run-event-row" key={event.id}>
+            <div className="run-event-row" key={event.id || event.createdAt}>
               <span className={`status-pill status-${event.status}`}>
                 {getTaskStatusLabel(event.status)}
               </span>

@@ -199,18 +199,24 @@ function ToolOutputValue({
   }
 
   if (view === 'image' && typeof value === 'string') {
-    return <img className="tool-output-image" alt={field.key} src={value} />
+    return isSafeDisplayUrl(value) ? (
+      <img className="tool-output-image" alt={field.key} src={value} />
+    ) : (
+      <p className="empty-state">표시할 수 없는 이미지 URL입니다.</p>
+    )
   }
 
   if (view === 'gallery' && Array.isArray(value)) {
     return (
       <div className="tool-output-gallery">
         {value.map((item, index) => (
-          <img
-            alt={`${field.key}-${index + 1}`}
-            key={`${field.key}-${index}`}
-            src={String(item)}
-          />
+          isSafeDisplayUrl(String(item)) ? (
+            <img
+              alt={`${field.key}-${index + 1}`}
+              key={`${field.key}-${index}`}
+              src={String(item)}
+            />
+          ) : null
         ))}
       </div>
     )
@@ -233,10 +239,12 @@ function ToolOutputValue({
   }
 
   if (view === 'link' && typeof value === 'string') {
-    return (
+    return isSafeLinkUrl(value) ? (
       <a href={value} rel="noreferrer" target="_blank">
         {value}
       </a>
+    ) : (
+      <p className="empty-state">열 수 없는 링크입니다.</p>
     )
   }
 
@@ -437,11 +445,10 @@ function ToolListInputField({ field, onChange, value }: ToolInputFieldProps) {
     ? value.map(String)
     : String(value ?? '')
         .split('\n')
-        .filter(Boolean)
   const label = field.ui?.label ?? field.key
 
   function updateValue(nextValues: string[]) {
-    onChange(nextValues.join('\n'))
+    onChange(nextValues)
   }
 
   return (
@@ -493,6 +500,29 @@ function ToolListInputField({ field, onChange, value }: ToolInputFieldProps) {
       </Button>
     </fieldset>
   )
+}
+
+function isSafeDisplayUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return (
+      url.protocol === 'https:' ||
+      url.protocol === 'http:' ||
+      url.protocol === 'data:' ||
+      url.protocol === 'blob:'
+    )
+  } catch {
+    return false
+  }
+}
+
+function isSafeLinkUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' || url.protocol === 'http:'
+  } catch {
+    return false
+  }
 }
 
 function DetailItem({ label, value }: { label: string; value: string }) {

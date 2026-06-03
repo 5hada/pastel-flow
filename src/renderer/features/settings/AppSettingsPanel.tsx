@@ -51,7 +51,7 @@ export type AppSettingsPanelProps = {
   onExportSyncSnapshotFile(): Promise<void>
   onImportSyncSnapshot(): Promise<void>
   onImportSyncSnapshotFile(): Promise<void>
-  onPruneTaskRunEvents(): Promise<void>
+  onPruneWorkflowRunEvents(): Promise<void>
   onRegisterToolModule(): Promise<void>
   onSecretFormChange(value: SecretFormState): void
   onSubmit(event: FormEvent<HTMLFormElement>): Promise<void>
@@ -72,7 +72,7 @@ export function AppSettingsPanel({
   onExportSyncSnapshotFile,
   onImportSyncSnapshot,
   onImportSyncSnapshotFile,
-  onPruneTaskRunEvents,
+  onPruneWorkflowRunEvents,
   onRegisterToolModule,
   onSecretFormChange,
   onSubmit,
@@ -776,7 +776,7 @@ export function AppSettingsPanel({
                 className="ghost-button"
                 variant="ghost"
                 type="button"
-                onPress={() => void onPruneTaskRunEvents()}
+                onPress={() => void onPruneWorkflowRunEvents()}
               >
                 보존 개수 적용
               </Button>

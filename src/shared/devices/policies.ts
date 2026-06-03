@@ -1,10 +1,9 @@
-import type { 
-    CurrentDevice,
-    DeviceAccessLevel,
-    LinkedDevice,
-    DevicePolicy
+import type {
+  CurrentDevice,
+  DeviceAccessLevel,
+  DevicePolicy,
+  LinkedDevice,
 } from './types'
-
 import type { WorkflowDefinition } from '../workflows/types'
 
 export function canViewWorkflowOnDevice(
@@ -93,7 +92,7 @@ function getCurrentDeviceAccessLevel(
 ): DeviceAccessLevel {
   return (
     linkedDevices.find((device) => device.id === currentDevice.id)
-      ?.accessLevel ?? 'trusted'
+      ?.accessLevel ?? 'executable'
   )
 }
 
@@ -108,8 +107,11 @@ function isLocalDeviceAllowed(
   permissions: DevicePolicy,
   deviceId: string,
 ): boolean {
-  if (!permissions.allowedDeviceIds || permissions.allowedDeviceIds.length === 0) {
-    return true
+  if (
+    !permissions.allowedDeviceIds ||
+    permissions.allowedDeviceIds.length === 0
+  ) {
+    return false
   }
 
   return permissions.allowedDeviceIds.includes(deviceId)

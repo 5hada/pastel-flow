@@ -1,5 +1,5 @@
 import type { WorkflowDefinition } from "../../../shared/workflows"
-import type { TaskRunEvent } from "../../../shared/taskRunEvents"
+import type { WorkflowRunEvent } from "../../../shared/runStatus"
 
 
 export type WorkflowsApi = {
@@ -12,7 +12,7 @@ export type WorkflowsApi = {
   delete(id: string): Promise<void>
   run(id: string): Promise<WorkflowDefinition>
   stop(id: string): Promise<WorkflowDefinition>
-  listEvents(workflowId?: string): Promise<TaskRunEvent[]>
+  listEvents(workflowId?: string): Promise<WorkflowRunEvent[]>
   pruneEvents(): Promise<number>
   onChanged(listener: (workflow: WorkflowDefinition) => void): () => void
   onDeleted(listener: (workflowId: string) => void): () => void

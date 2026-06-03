@@ -5,17 +5,17 @@ import { getErrorMessage } from '../../../shared/utils/viewLabels'
 
 type UseSyncDataOptions = {
   loadAppSettings(): Promise<void>
-  loadTaskRunEvents(taskId: string): Promise<void>
-  loadTasks(): Promise<void>
-  selectedTaskId: string | null
+  loadWorkflowRunEvents(workflowId: string): Promise<void>
+  loadWorkspaceData(): Promise<void>
+  selectedWorkflowId: string | null
   setErrorMessage(message: string | null): void
 }
 
 export function useSyncData({
   loadAppSettings,
-  loadTaskRunEvents,
-  loadTasks,
-  selectedTaskId,
+  loadWorkflowRunEvents,
+  loadWorkspaceData,
+  selectedWorkflowId,
   setErrorMessage,
 }: UseSyncDataOptions) {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(defaultSyncStatus)
@@ -84,7 +84,7 @@ export function useSyncData({
       setErrorMessage(null)
       setSyncMessage(null)
       setSyncResult(await window.pastelFlow.sync.import())
-      await Promise.all([loadTasks(), loadAppSettings(), loadSyncStatus()])
+      await Promise.all([loadWorkspaceData(), loadAppSettings(), loadSyncStatus()])
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     }
@@ -104,13 +104,13 @@ export function useSyncData({
       }
 
       setSyncResult(result)
-      await Promise.all([loadTasks(), loadAppSettings(), loadSyncStatus()])
+      await Promise.all([loadWorkspaceData(), loadAppSettings(), loadSyncStatus()])
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     }
   }
 
-  async function handlePruneTaskRunEvents() {
+  async function handlePruneWorkflowRunEvents() {
     if (!window.pastelFlow) {
       return
     }
@@ -119,8 +119,8 @@ export function useSyncData({
       setErrorMessage(null)
       const removedCount = await window.pastelFlow.workflows.pruneEvents()
       setPruneMessage(`${removedCount}개 실행 이벤트를 정리했습니다.`)
-      if (selectedTaskId) {
-        await loadTaskRunEvents(selectedTaskId)
+      if (selectedWorkflowId) {
+        await loadWorkflowRunEvents(selectedWorkflowId)
       }
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
@@ -136,7 +136,7 @@ export function useSyncData({
     handleExportSyncSnapshotFile,
     handleImportSyncSnapshot,
     handleImportSyncSnapshotFile,
-    handlePruneTaskRunEvents,
+    handlePruneWorkflowRunEvents,
     loadSyncStatus,
   }
 }

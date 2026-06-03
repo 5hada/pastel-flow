@@ -1,6 +1,6 @@
-import type { RunStatus } from "../runStatus"
-import type { ActionRuntimeState } from "../actions"
-import type { DevicePolicy } from "../devices/"
+import type { ActionRuntimeState } from '../actions'
+import type { DevicePolicy } from '../devices'
+import type { RunStatus } from '../runStatus'
 
 export type WorkflowScheduleMode = 'interval' | 'daily' | 'weekly'
 
@@ -34,8 +34,6 @@ export type WorkflowDefinition = {
   createdAt: string
   updatedAt: string
 }
-
-
 
 export type WorkflowState = {
   status: RunStatus

@@ -1,3 +1,4 @@
+import { shell } from 'electron'
 import { type ChildProcess, spawn } from 'node:child_process'
 import { normalizeTemplateUrls } from './browserUrlFilters'
 
@@ -30,23 +31,5 @@ export async function openDefaultBrowserUrls(urls: string[]): Promise<void> {
 }
 
 async function openDefaultBrowserUrl(url: string): Promise<void> {
-  const command =
-    process.platform === 'win32'
-      ? 'cmd'
-      : process.platform === 'darwin'
-        ? 'open'
-        : 'xdg-open'
-  const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url]
-  const browserProcess = spawn(command, args, {
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: true,
-  })
-
-  await new Promise<void>((resolve, reject) => {
-    browserProcess.once('error', reject)
-    browserProcess.once('spawn', resolve)
-  })
-
-  browserProcess.unref()
+  await shell.openExternal(url)
 }

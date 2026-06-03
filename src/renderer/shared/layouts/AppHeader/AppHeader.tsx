@@ -1,3 +1,4 @@
+import { Button } from '@heroui/react'
 import { getWorkspaceModeLabel } from '../../utils/viewLabels'
 import {
   ModeToggles,
@@ -7,7 +8,6 @@ import {
   InfoLabels ,
   type InfoLabelsProps
 } from './InfoLabels'
-import { IconButton } from '../../components/IconButton'
 
 export type AppHeaderProps = {
   infoLabelProps: InfoLabelsProps
@@ -43,13 +43,16 @@ export function AppHeader({
 
       {InfoLabels(infoLabelProps)}
 
-      <IconButton
+      <Button
         aria-label="작업 목록 새로고침"
         className="topbar-button"
-        icon={isLoading ? '...' : '↻'}
+        isIconOnly
         isDisabled={isLoading}
+        variant="ghost"
         onClick={() => void onRefresh()}
-      />
+      >
+        {isLoading ? '...' : '↻'}
+      </Button>
     </header>
   )
 }

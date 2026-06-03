@@ -1,4 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises'
+import { isIP } from 'node:net'
 import path from 'node:path'
 import type { CrawlerConfig } from '../../../shared/actions'
 import type { WorkflowState } from '../../../shared/workflows'
@@ -15,7 +16,7 @@ export const crawlerAdapter: ActionAdapter<CrawlerConfig, WorkflowState> = {
   },
   async run({ dataDir, action }) {
     const config = normalizeCrawlerConfig(action.config)
-    const invalidUrl = config.urls.find((url) => !isHttpUrl(url))
+    const invalidUrl = config.urls.find((url) => !isCrawlableUrl(url))
 
     if (invalidUrl) {
       throw new Error(`Crawler URL 형식이 올바르지 않습니다: ${invalidUrl}`)
@@ -96,9 +97,16 @@ async function fetchCrawlerUrl(
   url: string,
   maxBytes: number,
 ): Promise<CrawlerResult> {
+  const abortController = new AbortController()
+  const timeoutId = setTimeout(() => {
+    abortController.abort()
+  }, 15_000)
+
   try {
-    const response = await fetch(url)
-    const text = (await response.text()).slice(0, maxBytes)
+    const response = await fetch(url, {
+      signal: abortController.signal,
+    })
+    const text = await readResponsePreview(response, maxBytes)
 
     return {
       url,
@@ -114,7 +122,51 @@ async function fetchCrawlerUrl(
       status: 'failed',
       error: error instanceof Error ? error.message : 'Unknown crawler error',
     }
+  } finally {
+    clearTimeout(timeoutId)
   }
+}
+
+async function readResponsePreview(
+  response: Response,
+  maxBytes: number,
+): Promise<string> {
+  if (!response.body) {
+    return ''
+  }
+
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let receivedBytes = 0
+
+  while (receivedBytes < maxBytes) {
+    const { done, value } = await reader.read()
+    if (done || !value) {
+      break
+    }
+
+    const remainingBytes = maxBytes - receivedBytes
+    const chunk =
+      value.byteLength > remainingBytes
+        ? value.slice(0, remainingBytes)
+        : value
+    chunks.push(chunk)
+    receivedBytes += chunk.byteLength
+
+    if (value.byteLength > remainingBytes) {
+      await reader.cancel()
+      break
+    }
+  }
+
+  const bytes = new Uint8Array(receivedBytes)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+
+  return new TextDecoder().decode(bytes)
 }
 
 function getTitle(html: string): string | undefined {
@@ -131,11 +183,52 @@ function stripHtml(html: string): string {
     .trim()
 }
 
-function isHttpUrl(value: string): boolean {
+function isCrawlableUrl(value: string): boolean {
   try {
     const url = new URL(value)
-    return url.protocol === 'http:' || url.protocol === 'https:'
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      !isPrivateHostname(url.hostname)
+    )
   } catch {
     return false
   }
+}
+
+function isPrivateHostname(hostname: string): boolean {
+  const normalizedHostname = hostname.toLowerCase()
+
+  if (
+    normalizedHostname === 'localhost' ||
+    normalizedHostname.endsWith('.localhost') ||
+    normalizedHostname.endsWith('.local')
+  ) {
+    return true
+  }
+
+  const ipVersion = isIP(normalizedHostname)
+  if (ipVersion === 4) {
+    const [first = 0, second = 0] = normalizedHostname
+      .split('.')
+      .map((part) => Number(part))
+
+    return (
+      first === 10 ||
+      first === 127 ||
+      (first === 169 && second === 254) ||
+      (first === 172 && second >= 16 && second <= 31) ||
+      (first === 192 && second === 168)
+    )
+  }
+
+  if (ipVersion === 6) {
+    return (
+      normalizedHostname === '::1' ||
+      normalizedHostname.startsWith('fc') ||
+      normalizedHostname.startsWith('fd') ||
+      normalizedHostname.startsWith('fe80')
+    )
+  }
+
+  return false
 }

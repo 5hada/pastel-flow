@@ -1,13 +1,10 @@
-import { Card, Input, TextArea } from '@heroui/react'
+import { Button, Card, Checkbox, Input, Label, ListBox, Radio, RadioGroup, Select, TextArea } from '@heroui/react'
 import type {
   RegisteredToolModule,
   ToolModuleField,
   ToolModuleOutputField,
   ToolModuleRunResult,
 } from '../../../shared/tools'
-import { Button } from '../../shared/components/button'
-import { IconButton } from '../../shared/components/IconButton'
-import { DetailItem } from '../../shared/components/DetailItem'
 
 export type ToolsPanelProps = {
   selectedToolId: string | null
@@ -46,7 +43,7 @@ export function ToolsPanel({
         </div>
         {toolModules.length > 0 ? (
           <Button
-            intent="secondary"
+            variant="secondary"
             type="button"
             onClick={() => void onCreateToolAction()}
           >
@@ -59,7 +56,7 @@ export function ToolsPanel({
           <Card className="empty-state-action">
             <p className="empty-state">등록된 도구 모듈이 없습니다.</p>
             <Button
-              intent="primary"
+              variant="primary"
               type="button"
               onClick={() => void onRegisterToolModule()}
             >
@@ -88,7 +85,7 @@ export function ToolsPanel({
                   )}
                   <div className="form-actions">
                     <Button
-                      intent="primary"
+                      variant="primary"
                       type="button"
                       onClick={() => void onRunToolModule()}
                     >
@@ -151,7 +148,7 @@ export function ToolsPanel({
           <Card className="empty-state-action">
             <p className="empty-state">좌측 패널에서 실행할 도구를 선택하세요.</p>
             <Button
-              intent="primary"
+              variant="primary"
               type="button"
               onClick={() => void onRegisterToolModule()}
             >
@@ -290,14 +287,15 @@ function ToolInputField({ field, onChange, value }: ToolInputFieldProps) {
           {label}
           {field.required ? ' *' : ''}
         </span>
-        <span className="toggle-switch">
-        <input
-          checked={value === true || value === 'true'}
-          type="checkbox"
-          onChange={(event) => onChange(event.target.checked)}
-        />
-          <span />
-        </span>
+        <Checkbox
+          className="toggle-switch"
+          isSelected={value === true || value === 'true'}
+          onChange={onChange}
+        >
+          <Checkbox.Control>
+            <Checkbox.Indicator />
+          </Checkbox.Control>
+        </Checkbox>
       </label>
     )
   }
@@ -307,16 +305,29 @@ function ToolInputField({ field, onChange, value }: ToolInputFieldProps) {
       <label>
         {label}
         {field.required ? ' *' : ''}
-        <select
-          value={String(value ?? '')}
-          onChange={(event) => onChange(event.target.value)}
+        <Select
+          selectedKey={String(value ?? '')}
+          onSelectionChange={(key) => onChange(String(key))}
         >
-          {field.ui.options.map((option) => (
-            <option key={String(option.value)} value={String(option.value)}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          <Select.Trigger>
+            <Select.Value />
+            <Select.Indicator />
+          </Select.Trigger>
+          <Select.Popover>
+            <ListBox>
+              {field.ui.options.map((option) => (
+                <ListBox.Item
+                  id={String(option.value)}
+                  key={String(option.value)}
+                  textValue={option.label}
+                >
+                  {option.label}
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+              ))}
+            </ListBox>
+          </Select.Popover>
+        </Select>
       </label>
     )
   }
@@ -328,20 +339,25 @@ function ToolInputField({ field, onChange, value }: ToolInputFieldProps) {
           {label}
           {field.required ? ' *' : ''}
         </legend>
-        <div className="option-swatch-list">
+        <RadioGroup
+          className="option-swatch-list"
+          name={`tool-${field.key}`}
+          value={String(value ?? '')}
+          onChange={onChange}
+        >
           {field.ui.options.map((option) => (
-            <label className="option-swatch" key={String(option.value)}>
-              <input
-                checked={String(value ?? '') === String(option.value)}
-                name={`tool-${field.key}`}
-                type="radio"
-                value={String(option.value)}
-                onChange={() => onChange(option.value)}
-              />
-              <span style={{ backgroundColor: option.color }}>{option.label}</span>
-            </label>
+            <Radio className="option-swatch" key={String(option.value)} value={String(option.value)}>
+              <Radio.Control>
+                <Radio.Indicator />
+              </Radio.Control>
+              <Radio.Content>
+                <Label>
+                  <span style={{ backgroundColor: option.color }}>{option.label}</span>
+                </Label>
+              </Radio.Content>
+            </Radio>
           ))}
-        </div>
+        </RadioGroup>
       </fieldset>
     )
   }
@@ -450,28 +466,40 @@ function ToolListInputField({ field, onChange, value }: ToolInputFieldProps) {
                   )
                 }
               />
-              <IconButton
+              <Button
                 className="icon-button"
-                icon="×"
+                isIconOnly
+                variant="ghost"
                 type="button"
                 onClick={() =>
                   updateValue(
                     values.filter((_item, currentIndex) => currentIndex !== index),
                   )
                 }
-              />
+              >
+                ×
+              </Button>
             </div>
           ))
         )}
       </div>
       <Button
         className="ghost-button"
-        intent="ghost"
+        variant="ghost"
         type="button"
         onClick={() => updateValue([...values, ''])}
       >
         항목 추가
       </Button>
     </fieldset>
+  )
+}
+
+function DetailItem({ label, value }: { label: string; value: string }) {
+  return (
+    <Card className="detail-item">
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </Card>
   )
 }

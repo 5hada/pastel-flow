@@ -10,9 +10,12 @@ Never modify this file.
 One responsibility per file.
 Prefer new modules.
 
-Read, modify, or create ONLY under /src.
+Modify, or create ONLY under /src.
+Generally read file under /src, you can read also ./.heroui-doc whenever ONLY needed.
 
 Use PowerShell only for file read/list/search.
+
+All document must be written by English, include ONLY neccessary information. be short.
 
 ## Validation
 

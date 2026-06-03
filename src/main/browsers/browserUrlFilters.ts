@@ -1,13 +1,12 @@
 export function isTemplateUrl(value: string): boolean {
-  return (
-    Boolean(value) &&
-    !value.startsWith('devtools://') &&
-    !value.startsWith('chrome://') &&
-    !value.startsWith('edge://') &&
-    value !== 'about:blank'
-  )
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
 }
 
 export function normalizeTemplateUrls(values: string[]): string[] {
-  return [...new Set(values.filter(isTemplateUrl))]
+  return [...new Set(values.map((value) => value.trim()).filter(isTemplateUrl))]
 }

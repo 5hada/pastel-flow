@@ -193,6 +193,7 @@ function createToolContext(
     network: permissions.includes('network')
       ? {
           async fetch(input, init) {
+            assertExternalHttpUrl(input)
             const response = await fetch(input, init)
             const contentType = response.headers.get('content-type') ?? ''
             return contentType.includes('application/json')
@@ -255,7 +256,34 @@ function getAssetPath(
   if (!asset) {
     throw new Error(`asset을 찾을 수 없습니다: ${key}`)
   }
-  return path.join(toolPath, asset.path)
+
+  const rootPath = path.resolve(toolPath)
+  const assetPath = path.resolve(rootPath, asset.path)
+  const relativePath = path.relative(rootPath, assetPath)
+
+  if (
+    relativePath === '..' ||
+    relativePath.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativePath)
+  ) {
+    throw new Error(`asset 경로가 도구 폴더 밖을 가리킵니다: ${key}`)
+  }
+
+  return assetPath
+}
+
+function assertExternalHttpUrl(value: string): void {
+  let url: URL
+
+  try {
+    url = new URL(value)
+  } catch {
+    throw new Error(`network.fetch URL 형식이 올바르지 않습니다: ${value}`)
+  }
+
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error(`network.fetch는 http/https URL만 허용합니다: ${value}`)
+  }
 }
 
 function validateOutputKeys(

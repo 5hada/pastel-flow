@@ -1,4 +1,4 @@
-import { Card } from '@heroui/react'
+import { Button, Card } from '@heroui/react'
 import type { FormEvent } from 'react'
 import type { CurrentDevice } from '../../../../shared/devices'
 import type { LocalSecretMetadata } from '../../../../shared/secrets'
@@ -20,9 +20,6 @@ import type { WorkflowDefinition } from '../../../../shared/workflows'
 import type { TaskTemplate } from '../../../shared/state/taskTypes'
 import type { TaskRunEvent } from '../../../../shared/taskRunEvents'
 import type { BrowserTaskFormState } from '../../../shared/state/taskFormState'
-import { Button } from '../../../shared/components/button'
-import { IconButton } from '../../../shared/components/IconButton'
-import { DetailItem } from '../../../shared/components/DetailItem'
 import { TaskEditPanel } from './TaskEditPanel'
 import { TaskRunEventsPanel } from './TaskRunEventsPanel'
 import { WorkflowActionList } from '../../actions/components/ActionWorkspacePanel'
@@ -113,7 +110,7 @@ export function EditWorkspace({
           </div>
           <p>좌측 패널에서 Workflow를 선택하거나 새 Workflow를 만드세요.</p>
           <Button
-            intent="primary"
+            variant="primary"
             type="button"
             onClick={() => void onCreateWorkflow()}
           >
@@ -132,12 +129,15 @@ export function EditWorkspace({
             <p className="eyebrow">Workflows</p>
             <h2>{selectedWorkflow.name}</h2>
           </div>
-          <IconButton
+          <Button
             aria-label="새 Workflow"
-            icon="+"
+            isIconOnly
+            variant="ghost"
             type="button"
             onClick={() => void onCreateWorkflow()}
-          />
+          >
+            +
+          </Button>
         </div>
         <div className="editor-detail">
             <WorkflowActionList
@@ -212,7 +212,7 @@ export function EditWorkspace({
                   <div className="form-actions">
                     <Button
                       className="danger-button"
-                      intent="danger"
+                      variant="danger"
                       type="button"
                       onClick={() => void onConfirmDeleteWorkflow(selectedWorkflow.id)}
                     >
@@ -220,7 +220,7 @@ export function EditWorkspace({
                     </Button>
                     <Button
                       className="ghost-button"
-                      intent="ghost"
+                      variant="ghost"
                       type="button"
                       onClick={() => onDeleteRequest(null)}
                     >
@@ -231,7 +231,7 @@ export function EditWorkspace({
               ) : (
                 <Button
                   className="danger-button"
-                  intent="danger"
+                  variant="danger"
                   type="button"
                   onClick={() => onDeleteRequest(selectedWorkflow.id)}
                 >
@@ -319,7 +319,7 @@ export function EditWorkspace({
               <div className="form-actions">
                 <Button
                   className="danger-button"
-                  intent="danger"
+                  variant="danger"
                   type="button"
                   onClick={() => void onConfirmDelete(selectedTask.id)}
                 >
@@ -327,7 +327,7 @@ export function EditWorkspace({
                 </Button>
                 <Button
                   className="ghost-button"
-                  intent="ghost"
+                  variant="ghost"
                   type="button"
                   onClick={() => onDeleteRequest(null)}
                 >
@@ -338,7 +338,7 @@ export function EditWorkspace({
           ) : (
             <Button
               className="danger-button"
-              intent="danger"
+              variant="danger"
               type="button"
               onClick={() => onDeleteRequest(selectedTask.id)}
             >
@@ -403,4 +403,13 @@ function reorderWorkflowActionRefs(
       ...actionRef,
       order: index,
     }))
+}
+
+function DetailItem({ label, value }: { label: string; value: string }) {
+  return (
+    <Card className="detail-item">
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </Card>
+  )
 }

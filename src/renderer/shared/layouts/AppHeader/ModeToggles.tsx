@@ -1,6 +1,5 @@
-import { ButtonGroup } from '@heroui/react'
+import { Button, ButtonGroup } from '@heroui/react'
 import type { WorkspaceMode } from '../../state/taskFormState'
-import { Button } from '../../components/button'
 
 export type ModeTogglesProps = {
   currentMode: WorkspaceMode
@@ -43,7 +42,7 @@ export function ModeToggles({
         <Button
           aria-label={mode.label}
           className={currentMode === mode.id ? 'is-active' : ''}
-          intent={currentMode === mode.id ? 'secondary' : 'ghost'}
+          variant={currentMode === mode.id ? 'secondary' : 'ghost'}
           key={mode.id}
           type="button"
           onClick={mode.onClick}

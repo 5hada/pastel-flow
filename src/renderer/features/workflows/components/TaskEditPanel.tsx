@@ -1,4 +1,4 @@
-import { Input } from '@heroui/react'
+import { Button, Input } from '@heroui/react'
 import type { FormEvent } from 'react'
 import type { CurrentDevice } from '../../../../shared/devices'
 import type { BrowserProfilePreset } from '../../../../shared/settings'
@@ -8,8 +8,7 @@ import {
   PolicyFields,
   ScheduleFields,
   TaskTypeConfigFields,
-} from '../../../shared/components/TaskFormFields'
-import { Button } from '../../../shared/components/button'
+} from '../../../shared/task-fields'
 
 export type TaskEditPanelProps = {
   currentDevice: CurrentDevice
@@ -62,7 +61,7 @@ export function TaskEditPanel({
           secrets={secrets}
         />
         <div className="form-actions">
-          <Button intent="primary" type="submit">저장</Button>
+          <Button variant="primary" type="submit">저장</Button>
         </div>
       </form>
     </>

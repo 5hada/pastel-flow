@@ -1,3 +1,4 @@
+import { Input, Label, ListBox, Select } from '@heroui/react'
 import { useState } from 'react'
 import type { TaskRunEvent, TaskRunEventStatus } from '../../../../shared/taskRunEvents'
 import { formatDate, getTaskStatusLabel } from '../../../shared/utils/viewLabels'
@@ -27,22 +28,43 @@ export function TaskRunEventsPanel({ events }: TaskRunEventsPanelProps) {
     <section className="run-events" aria-label="최근 실행 이벤트">
       <h3>최근 실행 이벤트</h3>
       <div className="run-event-filters">
-        <input
+        <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="이벤트 검색"
         />
-        <select
-          value={statusFilter}
-          onChange={(event) =>
-            setStatusFilter(event.target.value as TaskRunEventStatus | 'all')
+        <Select
+          selectedKey={statusFilter}
+          onSelectionChange={(key) =>
+            setStatusFilter(String(key) as TaskRunEventStatus | 'all')
           }
         >
-          <option value="all">전체 상태</option>
-          <option value="running">실행 중</option>
-          <option value="idle">대기</option>
-          <option value="failed">실패</option>
-        </select>
+          <Label>상태</Label>
+          <Select.Trigger>
+            <Select.Value />
+            <Select.Indicator />
+          </Select.Trigger>
+          <Select.Popover>
+            <ListBox>
+              <ListBox.Item id="all" textValue="전체 상태">
+                전체 상태
+                <ListBox.ItemIndicator />
+              </ListBox.Item>
+              <ListBox.Item id="running" textValue="실행 중">
+                실행 중
+                <ListBox.ItemIndicator />
+              </ListBox.Item>
+              <ListBox.Item id="idle" textValue="대기">
+                대기
+                <ListBox.ItemIndicator />
+              </ListBox.Item>
+              <ListBox.Item id="failed" textValue="실패">
+                실패
+                <ListBox.ItemIndicator />
+              </ListBox.Item>
+            </ListBox>
+          </Select.Popover>
+        </Select>
       </div>
       {filteredEvents.length === 0 ? (
         <p className="muted-text">아직 실행 이벤트가 없습니다.</p>

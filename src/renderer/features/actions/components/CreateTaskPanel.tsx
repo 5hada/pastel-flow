@@ -1,13 +1,11 @@
-import { Input } from '@heroui/react'
+import { Button, Checkbox, Input, Label, ListBox, Select } from '@heroui/react'
 import type { FormEvent } from 'react'
 import type { CurrentDevice } from '../../../../shared/devices'
 import type { BrowserProfilePreset } from '../../../../shared/settings'
 import type { LocalSecretMetadata } from '../../../../shared/secrets'
 import { taskTypeOptions, type BrowserTaskFormState } from '../../../shared/state/taskFormState'
 import { getTaskTypeLabel } from '../../../shared/utils/viewLabels'
-import { Button } from '../../../shared/components/button'
-import { SimpleSelect } from '../../../shared/components/SimpleSelect'
-import { TaskTypeConfigFields, ScheduleFields, PolicyFields } from '../../../shared/components/TaskFormFields'
+import { TaskTypeConfigFields, ScheduleFields, PolicyFields } from '../../../shared/task-fields'
 
 export type CreateTaskPanelProps = {
   createForm: BrowserTaskFormState
@@ -43,7 +41,7 @@ export function CreateTaskPanel({
           </div>
           <Button
             className="ghost-button"
-            intent="ghost"
+            variant="ghost"
             type="button"
             onClick={onCancel}
           >
@@ -55,20 +53,34 @@ export function CreateTaskPanel({
         <div className="form-grid">
           <label>
             작업 타입
-            <SimpleSelect
-              aria-label="작업 타입"
-              options={taskTypeOptions.map((taskType) => ({
-                label: getTaskTypeLabel(taskType),
-                value: taskType,
-              }))}
-              value={createForm.taskType}
-              onChange={(taskType) =>
+            <Select
+              selectedKey={createForm.taskType}
+              onSelectionChange={(key) =>
                 onChange({
                   ...createForm,
-                  taskType,
+                  taskType: String(key) as typeof createForm.taskType,
                 })
               }
-            />
+            >
+              <Select.Trigger>
+                <Select.Value />
+                <Select.Indicator />
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox>
+                  {taskTypeOptions.map((taskType) => (
+                    <ListBox.Item
+                      id={taskType}
+                      key={taskType}
+                      textValue={getTaskTypeLabel(taskType)}
+                    >
+                      {getTaskTypeLabel(taskType)}
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>
+                  ))}
+                </ListBox>
+              </Select.Popover>
+            </Select>
           </label>
           <label>
             이름
@@ -89,19 +101,23 @@ export function CreateTaskPanel({
           profilePresets={profilePresets}
           onChange={onChange}
         />
-        <label className="inline-check">
-          <input
-            checked={createForm.createSingleActionWorkflow}
-            type="checkbox"
-            onChange={(event) =>
-              onChange({
-                ...createForm,
-                createSingleActionWorkflow: event.target.checked,
-              })
-            }
-          />
-          단일 Action Workflow로 함께 생성
-        </label>
+        <Checkbox
+          className="inline-check"
+          isSelected={createForm.createSingleActionWorkflow}
+          onChange={(createSingleActionWorkflow) =>
+            onChange({
+              ...createForm,
+              createSingleActionWorkflow,
+            })
+          }
+        >
+          <Checkbox.Control>
+            <Checkbox.Indicator />
+          </Checkbox.Control>
+          <Checkbox.Content>
+            <Label>단일 Action Workflow로 함께 생성</Label>
+          </Checkbox.Content>
+        </Checkbox>
         {createForm.createSingleActionWorkflow ? (
           <>
             <ScheduleFields form={createForm} onChange={onChange} />
@@ -114,7 +130,7 @@ export function CreateTaskPanel({
           </>
         ) : null}
         <div className="form-actions">
-          <Button intent="primary" type="submit">Action 생성</Button>
+          <Button variant="primary" type="submit">Action 생성</Button>
         </div>
       </form>
     </section>

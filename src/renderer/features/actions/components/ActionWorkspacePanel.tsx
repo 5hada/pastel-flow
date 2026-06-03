@@ -1,4 +1,4 @@
-import { Card, Input } from '@heroui/react'
+import { Button, Card, Checkbox, Input, Label, ListBox, Select } from '@heroui/react'
 import { useEffect, useState, type FormEvent } from 'react'
 import type { CurrentDevice } from '../../../../shared/devices'
 import type { LocalSecretMetadata } from '../../../../shared/secrets'
@@ -19,11 +19,7 @@ import {
   parseLines,
 } from '../../../shared/utils/taskFormTransforms'
 import { CreateTaskPanel } from './CreateTaskPanel'
-import { Button } from '../../../shared/components/button'
-import { IconButton } from '../../../shared/components/IconButton'
-import { SimpleSelect } from '../../../shared/components/SimpleSelect'
-import { DetailItem } from '../../../shared/components/DetailItem'
-import { TaskTypeConfigFields } from '../../../shared/components/TaskFormFields'
+import { TaskTypeConfigFields } from '../../../shared/task-fields'
 import { getActionTypeLabel, formatDate } from '../../../shared/utils/viewLabels'
 
 export type ActionWorkspacePanelProps = {
@@ -76,12 +72,15 @@ export function ActionWorkspacePanel({
           <p className="eyebrow">Actions</p>
           <h2>{selectedAction ? selectedAction.name : '새 Action'}</h2>
         </div>
-        <IconButton
+        <Button
           aria-label="새 Action"
-          icon="+"
+          isIconOnly
+          variant="ghost"
           type="button"
           onClick={() => onSelectAction(null)}
-        />
+        >
+          +
+        </Button>
       </div>
       <div className="editor-detail">
           {selectedAction ? (
@@ -126,25 +125,44 @@ export function ActionWorkspacePanel({
                     {editableTaskType ? (
                       <label>
                         Action 타입
-                        <SimpleSelect
-                          aria-label="Action 타입"
-                          options={taskTypeOptions.map((taskType) => ({
-                            label: getActionTypeLabel(
-                              createActionUpdateInputFromForm(
-                                { ...editForm, taskType },
-                                selectedAction,
-                              ).type ?? selectedAction.type,
-                            ),
-                            value: taskType,
-                          }))}
-                          value={editForm.taskType}
-                          onChange={(taskType) =>
+                        <Select
+                          selectedKey={editForm.taskType}
+                          onSelectionChange={(key) =>
                             setEditForm({
                               ...editForm,
-                              taskType,
+                              taskType: String(key) as typeof editForm.taskType,
                             })
                           }
-                        />
+                        >
+                          <Select.Trigger>
+                            <Select.Value />
+                            <Select.Indicator />
+                          </Select.Trigger>
+                          <Select.Popover>
+                            <ListBox>
+                              {taskTypeOptions.map((taskType) => (
+                                <ListBox.Item
+                                  id={taskType}
+                                  key={taskType}
+                                  textValue={getActionTypeLabel(
+                                    createActionUpdateInputFromForm(
+                                      { ...editForm, taskType },
+                                      selectedAction,
+                                    ).type ?? selectedAction.type,
+                                  )}
+                                >
+                                  {getActionTypeLabel(
+                                    createActionUpdateInputFromForm(
+                                      { ...editForm, taskType },
+                                      selectedAction,
+                                    ).type ?? selectedAction.type,
+                                  )}
+                                  <ListBox.ItemIndicator />
+                                </ListBox.Item>
+                              ))}
+                            </ListBox>
+                          </Select.Popover>
+                        </Select>
                       </label>
                     ) : null}
                   </div>
@@ -161,30 +179,41 @@ export function ActionWorkspacePanel({
                   )}
                   <label>
                     Secret 참조
-                    <select
-                      multiple
+                    <Select
+                      selectionMode="multiple"
                       value={parseLines(editForm.secretRefIds)}
-                      onChange={(event) =>
+                      onChange={(keys) =>
                         setEditForm({
                           ...editForm,
-                          secretRefIds: Array.from(event.target.selectedOptions)
-                            .map((option) => option.value)
-                            .join('\n'),
+                          secretRefIds: Array.from(keys).map(String).join('\n'),
                         })
                       }
                     >
-                      {secrets.map((secret) => (
-                        <option key={secret.id} value={secret.id}>
-                          {secret.name}
-                        </option>
-                      ))}
-                    </select>
+                      <Select.Trigger>
+                        <Select.Value />
+                        <Select.Indicator />
+                      </Select.Trigger>
+                      <Select.Popover>
+                        <ListBox selectionMode="multiple">
+                          {secrets.map((secret) => (
+                            <ListBox.Item
+                              id={secret.id}
+                              key={secret.id}
+                              textValue={secret.name}
+                            >
+                              {secret.name}
+                              <ListBox.ItemIndicator />
+                            </ListBox.Item>
+                          ))}
+                        </ListBox>
+                      </Select.Popover>
+                    </Select>
                   </label>
                   <div className="form-actions">
-                    <Button intent="primary" type="submit">저장</Button>
+                    <Button variant="primary" type="submit">저장</Button>
                     <Button
                       className="danger-button"
-                      intent="danger"
+                      variant="danger"
                       type="button"
                       onClick={() => void onDeleteAction(selectedAction.id)}
                     >
@@ -307,7 +336,7 @@ export function WorkflowActionList({
   return (
     <div className="workflow-action-list">
       <div className="detail-actions">
-        <Button intent="secondary" type="button" onClick={() => setIsPickerOpen(true)}>
+        <Button variant="secondary" type="button" onClick={() => setIsPickerOpen(true)}>
           Action 추가
         </Button>
       </div>
@@ -349,35 +378,45 @@ export function WorkflowActionList({
                   {action ? getActionTypeLabel(action.type) : '연결 끊김'}
                 </small>
               </div>
-              <label className="toggle-switch">
-                <input
-                  checked={actionRef.enabled}
-                  type="checkbox"
-                  onChange={() => onToggleAction(actionRef.id)}
-                />
-                <span />
-              </label>
-              <IconButton
+              <Checkbox
+                aria-label="Action 활성화"
+                className="toggle-switch"
+                isSelected={actionRef.enabled}
+                onChange={() => onToggleAction(actionRef.id)}
+              >
+                <Checkbox.Control>
+                  <Checkbox.Indicator />
+                </Checkbox.Control>
+              </Checkbox>
+              <Button
                 className="icon-button"
-                icon="⇤"
                 isDisabled={index === 0}
+                isIconOnly
+                variant="ghost"
                 type="button"
                 onClick={() => onMoveAction(actionRef.id, 'top')}
-              />
-              <IconButton
+              >
+                ⇤
+              </Button>
+              <Button
                 className="icon-button"
-                icon="⇥"
                 isDisabled={index === sortedActionRefs.length - 1}
+                isIconOnly
+                variant="ghost"
                 type="button"
                 onClick={() => onMoveAction(actionRef.id, 'bottom')}
-              />
-              <IconButton
+              >
+                ⇥
+              </Button>
+              <Button
                 className="icon-button danger-button"
-                icon="×"
-                intent="danger"
+                isIconOnly
+                variant="danger"
                 type="button"
                 onClick={() => onRemoveAction(actionRef.id)}
-              />
+              >
+                ×
+              </Button>
             </div>
           )
         })
@@ -395,13 +434,16 @@ export function WorkflowActionList({
                 <p className="eyebrow">Add actions</p>
                 <h2>Action 추가</h2>
               </div>
-              <IconButton
+              <Button
                 aria-label="닫기"
                 className="icon-button"
-                icon="×"
+                isIconOnly
+                variant="ghost"
                 type="button"
                 onClick={() => setIsPickerOpen(false)}
-              />
+              >
+                ×
+              </Button>
             </div>
             <div className="action-picker-controls">
                 <Input
@@ -410,20 +452,36 @@ export function WorkflowActionList({
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
-              <SimpleSelect
-                aria-label="Action 타입 필터"
-                options={[
-                  { label: '전체', value: 'all' },
-                  ...actionTypes.map((actionType) => ({
-                    label: getActionTypeLabel(actionType),
-                    value: actionType,
-                  })),
-                ]}
-                value={actionTypeFilter}
-                onChange={(nextActionTypeFilter) =>
-                  setActionTypeFilter(nextActionTypeFilter)
+              <Select
+                selectedKey={actionTypeFilter}
+                onSelectionChange={(key) =>
+                  setActionTypeFilter(String(key) as typeof actionTypeFilter)
                 }
-              />
+              >
+                <Label>Action 타입 필터</Label>
+                <Select.Trigger>
+                  <Select.Value />
+                  <Select.Indicator />
+                </Select.Trigger>
+                <Select.Popover>
+                  <ListBox>
+                    <ListBox.Item id="all" textValue="전체">
+                      전체
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>
+                    {actionTypes.map((actionType) => (
+                      <ListBox.Item
+                        id={actionType}
+                        key={actionType}
+                        textValue={getActionTypeLabel(actionType)}
+                      >
+                        {getActionTypeLabel(actionType)}
+                        <ListBox.ItemIndicator />
+                      </ListBox.Item>
+                    ))}
+                  </ListBox>
+                </Select.Popover>
+              </Select>
             </div>
             <div className="action-picker-list">
               {filteredActions.map((action) => (
@@ -432,7 +490,7 @@ export function WorkflowActionList({
                     <strong>{action.name}</strong>
                     <small>{getActionTypeLabel(action.type)}</small>
                   </div>
-                  <Button intent="secondary" type="button" onClick={() => onAddAction(action.id)}>
+                  <Button variant="secondary" type="button" onClick={() => onAddAction(action.id)}>
                     추가
                   </Button>
                 </div>
@@ -462,4 +520,13 @@ function moveActionRefByDrop(
 
   nextIds.splice(targetIndex, 0, sourceId)
   return nextIds
+}
+
+function DetailItem({ label, value }: { label: string; value: string }) {
+  return (
+    <Card className="detail-item">
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </Card>
+  )
 }

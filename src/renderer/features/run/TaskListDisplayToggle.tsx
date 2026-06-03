@@ -1,5 +1,5 @@
+import { Button } from '@heroui/react'
 import type { WorkflowListDisplayMode } from '../../../shared/settings'
-import { SegmentedControl } from '../../shared/components/SegmentedControl'
 
 export type TaskListDisplayToggleProps = {
   value: WorkflowListDisplayMode
@@ -11,12 +11,16 @@ export function TaskListDisplayToggle({
   value,
 }: TaskListDisplayToggleProps) {
   return (
-    <SegmentedControl
-      ariaLabel="목록 표시 형식"
-      options={(['grid', 'list'] as WorkflowListDisplayMode[]).map(
-        (displayMode) => ({
-          ariaLabel: displayMode === 'grid' ? '그리드 형식' : '목록 형식',
-          content: (
+    <div aria-label="목록 표시 형식" className="display-toggle">
+      {(['grid', 'list'] as WorkflowListDisplayMode[]).map((displayMode) => (
+        <Button
+          aria-label={displayMode === 'grid' ? '그리드 형식' : '목록 형식'}
+          className={value === displayMode ? 'is-active' : ''}
+          isIconOnly
+          key={displayMode}
+          variant="ghost"
+          onClick={() => onChange(displayMode)}
+        >
           <span
             aria-hidden="true"
             className={
@@ -37,12 +41,8 @@ export function TaskListDisplayToggle({
               </>
             )}
           </span>
-          ),
-          value: displayMode,
-        }),
-      )}
-      value={value}
-      onChange={onChange}
-    />
+        </Button>
+      ))}
+    </div>
   )
 }

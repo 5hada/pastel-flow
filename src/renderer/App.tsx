@@ -1,9 +1,9 @@
+import { Button } from '@heroui/react'
 import { usePastelFlowApp } from './shared/hooks/usePastelFlowApp'
 import { createToolInputDefaults } from './shared/utils/viewLabels'
 import { AppHeader } from './shared/layouts/AppHeader'
 import { Workspace } from './shared/layouts/Workspace'
 import { WorkspaceSidebar } from './shared/layouts/WorkspaceSidebar'
-import { IconButton } from './shared/components/IconButton'
 import './shared/styles/index.css'
 
 export default function App() {
@@ -32,13 +32,16 @@ export default function App() {
       {app.errorMessage ? <p className="error-message">{app.errorMessage}</p> : null}
 
       <div className={`app-workspace${app.isSidebarOpen ? '' : ' is-sidebar-collapsed'}`}>
-        <IconButton
+        <Button
           aria-label={app.isSidebarOpen ? '좌측 패널 닫기' : '좌측 패널 열기'}
           className="sidebar-toggle workspace-sidebar-toggle"
-          icon="☰"
+          isIconOnly
+          variant="ghost"
           type="button"
           onClick={() => app.setIsSidebarOpen(!app.isSidebarOpen)}
-        />
+        >
+          ☰
+        </Button>
 
         {app.isSidebarOpen ? (
           <WorkspaceSidebar

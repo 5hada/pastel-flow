@@ -16,7 +16,7 @@ export type ActionRunResult<AState = unknown> = {
 }
 
 export type ActionStopResult<AConfig = unknown, AState = unknown> = {
-  Aconfig?: AConfig
+  config?: AConfig
   state?: Partial<AState>
   message?: string
 }

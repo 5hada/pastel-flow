@@ -1,4 +1,15 @@
-import { Card, Input, TextArea } from '@heroui/react'
+import {
+  Button,
+  Card,
+  Checkbox,
+  Input,
+  Label,
+  ListBox,
+  Radio,
+  RadioGroup,
+  Select,
+  TextArea,
+} from '@heroui/react'
 import type { CSSProperties, FormEvent } from 'react'
 import { getDeviceAccessLevelLabel, type CurrentDevice, type LinkedDevice } from '../../../shared/devices'
 import type {
@@ -17,9 +28,6 @@ import {
   getSyncModeLabel,
   getThemeModeLabel,
 } from '../../shared/utils/viewLabels'
-import { Button } from '../../shared/components/button'
-import { DetailItem } from '../../shared/components/DetailItem'
-import { SimpleSelect } from '../../shared/components/SimpleSelect'
 
 export type AppSettingsPanelProps = {
   currentDevice: CurrentDevice
@@ -83,7 +91,7 @@ export function AppSettingsPanel({
           <p className="eyebrow">App settings</p>
           <h2>앱 설정</h2>
         </div>
-        <Button className="ghost-button" intent="ghost" type="button" onClick={onClose}>
+        <Button variant="ghost" onPress={onClose}>
           닫기
         </Button>
       </div>
@@ -91,19 +99,23 @@ export function AppSettingsPanel({
       <form className="task-form" onSubmit={onSubmit}>
         {selectedCategory === 'general' ? (
           <>
-            <label className="inline-check">
-              <input
-                checked={form.startAtLogin}
-                type="checkbox"
-                onChange={(event) =>
-                  onChange({
-                    ...form,
-                    startAtLogin: event.target.checked,
-                  })
-                }
-              />
-              시작 프로그램으로 설정
-            </label>
+            <Checkbox
+              className="inline-check"
+              isSelected={form.startAtLogin}
+              onChange={(startAtLogin) =>
+                onChange({
+                  ...form,
+                  startAtLogin,
+                })
+              }
+            >
+              <Checkbox.Control>
+                <Checkbox.Indicator />
+              </Checkbox.Control>
+              <Checkbox.Content>
+                <Label>시작 프로그램으로 설정</Label>
+              </Checkbox.Content>
+            </Checkbox>
 
             <label>
               새 Action 기본 이름
@@ -138,9 +150,9 @@ export function AppSettingsPanel({
                   <h3>도구 폴더 등록</h3>
                 </div>
                 <Button
-                  intent="secondary"
+                  variant="secondary"
                   type="button"
-                  onClick={() => void onRegisterToolModule()}
+                  onPress={() => void onRegisterToolModule()}
                 >
                   폴더 등록
                 </Button>
@@ -153,25 +165,28 @@ export function AppSettingsPanel({
           <>
             <fieldset className="settings-fieldset">
               <legend>테마</legend>
-              <div className="segmented-control">
+              <RadioGroup
+                className="segmented-control"
+                name="themeMode"
+                value={form.themeMode}
+                onChange={(themeMode) =>
+                  onChange({
+                    ...form,
+                    themeMode: themeMode as ThemeMode,
+                  })
+                }
+              >
                 {(['system', 'light', 'dark', 'custom'] as ThemeMode[]).map((themeMode) => (
-                  <label key={themeMode}>
-                    <input
-                      checked={form.themeMode === themeMode}
-                      name="themeMode"
-                      type="radio"
-                      value={themeMode}
-                      onChange={() =>
-                        onChange({
-                          ...form,
-                          themeMode,
-                        })
-                      }
-                    />
-                    <span>{getThemeModeLabel(themeMode)}</span>
-                  </label>
+                  <Radio key={themeMode} value={themeMode}>
+                    <Radio.Control>
+                      <Radio.Indicator />
+                    </Radio.Control>
+                    <Radio.Content>
+                      <Label>{getThemeModeLabel(themeMode)}</Label>
+                    </Radio.Content>
+                  </Radio>
                 ))}
-              </div>
+              </RadioGroup>
             </fieldset>
 
             <Card
@@ -202,7 +217,7 @@ export function AppSettingsPanel({
                     <label key={key}>
                       {themeColorLabels[key]}
                       <span className="color-input-row">
-                        <input
+                        <Input
                           className="color-input"
                           type="color"
                           value={form.customThemeColors[key]}
@@ -216,7 +231,7 @@ export function AppSettingsPanel({
                             })
                           }
                         />
-                        <input
+                        <Input
                           value={form.customThemeColors[key]}
                           onChange={(event) =>
                             onChange({
@@ -237,20 +252,32 @@ export function AppSettingsPanel({
 
             <label>
               작업 목록 표시 형식
-              <SimpleSelect
-                aria-label="작업 목록 표시 형식"
-                options={[
-                  { label: '그리드', value: 'grid' },
-                  { label: '목록', value: 'list' },
-                ]}
-                value={form.workflowListDisplayMode}
-                onChange={(workflowListDisplayMode) =>
+              <Select
+                selectedKey={form.workflowListDisplayMode}
+                onSelectionChange={(key) =>
                   onChange({
                     ...form,
-                    workflowListDisplayMode,
+                    workflowListDisplayMode: String(key) as typeof form.workflowListDisplayMode,
                   })
                 }
-              />
+              >
+                <Select.Trigger>
+                  <Select.Value />
+                  <Select.Indicator />
+                </Select.Trigger>
+                <Select.Popover>
+                  <ListBox>
+                    <ListBox.Item id="grid" textValue="그리드">
+                      그리드
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>
+                    <ListBox.Item id="list" textValue="목록">
+                      목록
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>
+                  </ListBox>
+                </Select.Popover>
+              </Select>
             </label>
 
             <label>
@@ -328,59 +355,93 @@ export function AppSettingsPanel({
             </div>
             <label>
               기본 브라우저
-              <SimpleSelect
-                aria-label="기본 브라우저"
-                options={[
-                  { label: 'Chrome', value: 'chrome' },
-                  { label: 'Edge', value: 'edge' },
-                  { label: 'Chromium', value: 'chromium' },
-                ]}
-                value={form.defaultBrowserKind}
-                onChange={(defaultBrowserKind) =>
+              <Select
+                selectedKey={form.defaultBrowserKind}
+                onSelectionChange={(key) =>
                   onChange({
                     ...form,
-                    defaultBrowserKind,
+                    defaultBrowserKind: String(key) as typeof form.defaultBrowserKind,
                   })
                 }
-              />
+              >
+                <Select.Trigger>
+                  <Select.Value />
+                  <Select.Indicator />
+                </Select.Trigger>
+                <Select.Popover>
+                  <ListBox>
+                    {(['chrome', 'edge', 'chromium'] as const).map((browserKind) => (
+                      <ListBox.Item id={browserKind} key={browserKind} textValue={browserKind}>
+                        {browserKind === 'chrome' ? 'Chrome' : browserKind === 'edge' ? 'Edge' : 'Chromium'}
+                        <ListBox.ItemIndicator />
+                      </ListBox.Item>
+                    ))}
+                  </ListBox>
+                </Select.Popover>
+              </Select>
             </label>
             <div className="form-grid">
               <label>
                 기본 실행 방식
-                <SimpleSelect
-                  aria-label="기본 실행 방식"
-                  options={[
-                    { label: '전용 프로필', value: 'dedicated_profile' },
-                    { label: '확장 프로그램 제어', value: 'extension_controlled' },
-                    { label: '기본 브라우저 연결', value: 'default_browser_deeplink' },
-                  ]}
-                  value={form.defaultBrowserRunMode}
-                  onChange={(defaultBrowserRunMode) =>
+                <Select
+                  selectedKey={form.defaultBrowserRunMode}
+                  onSelectionChange={(key) =>
                     onChange({
                       ...form,
-                      defaultBrowserRunMode,
+                      defaultBrowserRunMode: String(key) as typeof form.defaultBrowserRunMode,
                     })
                   }
-                />
+                >
+                  <Select.Trigger>
+                    <Select.Value />
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox>
+                      {[
+                        ['dedicated_profile', '전용 프로필'],
+                        ['extension_controlled', '확장 프로그램 제어'],
+                        ['default_browser_deeplink', '기본 브라우저 연결'],
+                      ].map(([value, label]) => (
+                        <ListBox.Item id={value} key={value} textValue={label}>
+                          {label}
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
               </label>
               <label>
                 기본 프로필 소스
-                <SimpleSelect
-                  aria-label="기본 프로필 소스"
-                  options={(['action_profile', 'existing_profile'] as const).map(
-                    (profileSource) => ({
-                      label: getBrowserProfileSourceLabel(profileSource),
-                      value: profileSource,
-                    }),
-                  )}
-                  value={form.defaultBrowserProfileSource}
-                  onChange={(defaultBrowserProfileSource) =>
+                <Select
+                  selectedKey={form.defaultBrowserProfileSource}
+                  onSelectionChange={(key) =>
                     onChange({
                       ...form,
-                      defaultBrowserProfileSource,
+                      defaultBrowserProfileSource: String(key) as typeof form.defaultBrowserProfileSource,
                     })
                   }
-                />
+                >
+                  <Select.Trigger>
+                    <Select.Value />
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox>
+                      {(['action_profile', 'existing_profile'] as const).map((profileSource) => (
+                        <ListBox.Item
+                          id={profileSource}
+                          key={profileSource}
+                          textValue={getBrowserProfileSourceLabel(profileSource)}
+                        >
+                          {getBrowserProfileSourceLabel(profileSource)}
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
               </label>
             </div>
 
@@ -448,9 +509,9 @@ export function AppSettingsPanel({
             </div>
             <Button
               className="ghost-button"
-              intent="ghost"
+              variant="ghost"
               type="button"
-              onClick={() =>
+              onPress={() =>
                 onChange({
                   ...form,
                   linkedDevices: [
@@ -567,9 +628,9 @@ export function AppSettingsPanel({
               />
             </label>
             <Button
-              intent="secondary"
+              variant="secondary"
               type="button"
-              onClick={() => void onCreateSecret()}
+              onPress={() => void onCreateSecret()}
             >
               추가
             </Button>
@@ -587,9 +648,9 @@ export function AppSettingsPanel({
                   </div>
                   <Button
                     className="danger-button"
-                    intent="danger"
+                    variant="danger"
                     type="button"
-                    onClick={() => void onDeleteSecret(secret.id)}
+                    onPress={() => void onDeleteSecret(secret.id)}
                   >
                     삭제
                   </Button>
@@ -631,33 +692,33 @@ export function AppSettingsPanel({
             ) : null}
             <div className="form-actions">
               <Button
-                intent="secondary"
+                variant="secondary"
                 type="button"
-                onClick={() => void onExportSyncSnapshot()}
+                onPress={() => void onExportSyncSnapshot()}
               >
                 내보내기
               </Button>
               <Button
                 className="ghost-button"
-                intent="ghost"
+                variant="ghost"
                 type="button"
-                onClick={() => void onExportSyncSnapshotFile()}
+                onPress={() => void onExportSyncSnapshotFile()}
               >
                 파일로 내보내기
               </Button>
               <Button
                 className="ghost-button"
-                intent="ghost"
+                variant="ghost"
                 type="button"
-                onClick={() => void onImportSyncSnapshot()}
+                onPress={() => void onImportSyncSnapshot()}
               >
                 가져오기
               </Button>
               <Button
                 className="ghost-button"
-                intent="ghost"
+                variant="ghost"
                 type="button"
-                onClick={() => void onImportSyncSnapshotFile()}
+                onPress={() => void onImportSyncSnapshotFile()}
               >
                 파일에서 가져오기
               </Button>
@@ -713,9 +774,9 @@ export function AppSettingsPanel({
             <div className="form-actions">
               <Button
                 className="ghost-button"
-                intent="ghost"
+                variant="ghost"
                 type="button"
-                onClick={() => void onPruneTaskRunEvents()}
+                onPress={() => void onPruneTaskRunEvents()}
               >
                 보존 개수 적용
               </Button>
@@ -760,26 +821,31 @@ export function AppSettingsPanel({
               ['showPaths', '세부 위치 경로 표시'],
               ['showToolMetadata', '도구 메타데이터 표시'],
             ].map(([key, label]) => (
-              <label className="inline-check" key={key}>
-                <input
-                  checked={
-                    form.developerVisibility[
-                      key as keyof typeof form.developerVisibility
-                    ]
-                  }
-                  type="checkbox"
-                  onChange={(event) =>
-                    onChange({
-                      ...form,
-                      developerVisibility: {
-                        ...form.developerVisibility,
-                        [key]: event.target.checked,
-                      },
-                    })
-                  }
-                />
-                {label}
-              </label>
+              <Checkbox
+                className="inline-check"
+                isSelected={
+                  form.developerVisibility[
+                    key as keyof typeof form.developerVisibility
+                  ]
+                }
+                key={key}
+                onChange={(isSelected) =>
+                  onChange({
+                    ...form,
+                    developerVisibility: {
+                      ...form.developerVisibility,
+                      [key]: isSelected,
+                    },
+                  })
+                }
+              >
+                <Checkbox.Control>
+                  <Checkbox.Indicator />
+                </Checkbox.Control>
+                <Checkbox.Content>
+                  <Label>{label}</Label>
+                </Checkbox.Content>
+              </Checkbox>
             ))}
           </Card>
         ) : null}
@@ -792,7 +858,7 @@ export function AppSettingsPanel({
         ) : null}
 
         <div className="form-actions">
-          <Button intent="primary" type="submit">저장</Button>
+          <Button variant="primary" type="submit">저장</Button>
         </div>
       </form>
     </>
@@ -838,28 +904,40 @@ export function LinkedDeviceEditor({
       </label>
       <label>
         허용 수준
-        <SimpleSelect
-          aria-label="허용 수준"
-          options={(['blocked', 'visible', 'executable', 'trusted'] as const).map(
-            (accessLevel) => ({
-              label: getDeviceAccessLevelLabel(accessLevel),
-              value: accessLevel,
-            }),
-          )}
-          value={device.accessLevel}
-          onChange={(accessLevel) =>
+        <Select
+          selectedKey={device.accessLevel}
+          onSelectionChange={(key) =>
             onChange({
               ...device,
-              accessLevel,
+              accessLevel: String(key) as typeof device.accessLevel,
             })
           }
-        />
+        >
+          <Select.Trigger>
+            <Select.Value />
+            <Select.Indicator />
+          </Select.Trigger>
+          <Select.Popover>
+            <ListBox>
+              {(['blocked', 'visible', 'executable', 'trusted'] as const).map((accessLevel) => (
+                <ListBox.Item
+                  id={accessLevel}
+                  key={accessLevel}
+                  textValue={getDeviceAccessLevelLabel(accessLevel)}
+                >
+                  {getDeviceAccessLevelLabel(accessLevel)}
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+              ))}
+            </ListBox>
+          </Select.Popover>
+        </Select>
       </label>
       <Button
         className="danger-button"
-        intent="danger"
+        variant="danger"
         type="button"
-        onClick={onRemove}
+        onPress={onRemove}
       >
         제거
       </Button>
@@ -946,9 +1024,9 @@ function ProfilePresetEditor({
         </div>
         <Button
           className="ghost-button"
-          intent="ghost"
+          variant="ghost"
           type="button"
-          onClick={() =>
+          onPress={() =>
             onChange({
               ...form,
               browserProfilePresets: [
@@ -986,21 +1064,30 @@ function ProfilePresetEditor({
               </label>
               <label>
                 브라우저
-                <SimpleSelect
-                  aria-label="브라우저"
-                  options={[
-                    { label: 'Chrome', value: 'chrome' },
-                    { label: 'Edge', value: 'edge' },
-                    { label: 'Chromium', value: 'chromium' },
-                  ]}
-                  value={profile.browserKind}
-                  onChange={(browserKind) =>
+                <Select
+                  selectedKey={profile.browserKind}
+                  onSelectionChange={(key) =>
                     updateProfile(index, {
                       ...profile,
-                      browserKind,
+                      browserKind: String(key) as typeof profile.browserKind,
                     })
                   }
-                />
+                >
+                  <Select.Trigger>
+                    <Select.Value />
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox>
+                      {(['chrome', 'edge', 'chromium'] as const).map((browserKind) => (
+                        <ListBox.Item id={browserKind} key={browserKind} textValue={browserKind}>
+                          {browserKind === 'chrome' ? 'Chrome' : browserKind === 'edge' ? 'Edge' : 'Chromium'}
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
               </label>
               <label>
                 프로필 경로
@@ -1016,9 +1103,9 @@ function ProfilePresetEditor({
               </label>
               <Button
                 className="danger-button"
-                intent="danger"
+                variant="danger"
                 type="button"
-                onClick={() =>
+                onPress={() =>
                   onChange({
                     ...form,
                     browserProfilePresets: form.browserProfilePresets.filter(
@@ -1033,6 +1120,15 @@ function ProfilePresetEditor({
           ))}
         </div>
       )}
+    </Card>
+  )
+}
+
+function DetailItem({ label, value }: { label: string; value: string }) {
+  return (
+    <Card className="detail-item">
+      <dt>{label}</dt>
+      <dd>{value}</dd>
     </Card>
   )
 }

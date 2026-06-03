@@ -1,3 +1,4 @@
+import { Button } from '@heroui/react'
 import { useState } from 'react'
 import {
   type ActionDefinition,
@@ -8,8 +9,6 @@ import type { TaskTemplate } from '../state/taskTypes'
 import type { RegisteredToolModule } from '../../../shared/tools'
 import type { NavigationCategory, SettingsCategory, WorkspaceMode } from '../state/taskFormState'
 import { getActionTypeLabel } from '../utils/viewLabels'
-import { Button } from '../components/button'
-import { IconButton } from '../components/IconButton'
 
 export type WorkspaceSidebarProps = {
   currentMode: WorkspaceMode
@@ -109,7 +108,7 @@ export function WorkspaceSidebar({
                 className={`sidebar-item${
                   selectedCategory === category.id ? ' is-active' : ''
                 }`}
-                intent={selectedCategory === category.id ? 'secondary' : 'ghost'}
+                variant={selectedCategory === category.id ? 'secondary' : 'ghost'}
                 key={category.id}
                 type="button"
                 onClick={() => onCategorySelect(category.id)}
@@ -125,13 +124,16 @@ export function WorkspaceSidebar({
           <>
             <div className="sidebar-heading compact-sidebar-heading">
               <p className="sidebar-label">Action 목록</p>
-              <IconButton
+              <Button
                 aria-label="새 Action"
                 className="sidebar-mini-button"
-                icon="+"
+                isIconOnly
+                variant="ghost"
                 type="button"
                 onClick={onCreateAction}
-              />
+              >
+                +
+              </Button>
             </div>
             {actions.length === 0 ? (
               <div className="sidebar-empty">
@@ -143,7 +145,7 @@ export function WorkspaceSidebar({
                 <div className="sidebar-filter-bar">
                   <Button
                     className={actionTypeFilter === 'all' ? 'is-active' : ''}
-                    intent={actionTypeFilter === 'all' ? 'secondary' : 'ghost'}
+                    variant={actionTypeFilter === 'all' ? 'secondary' : 'ghost'}
                     type="button"
                     onClick={() => setActionTypeFilter('all')}
                   >
@@ -154,7 +156,7 @@ export function WorkspaceSidebar({
                       className={
                         actionTypeFilter === actionType ? 'is-active' : ''
                       }
-                      intent={actionTypeFilter === actionType ? 'secondary' : 'ghost'}
+                      variant={actionTypeFilter === actionType ? 'secondary' : 'ghost'}
                       key={actionType}
                       type="button"
                       onClick={() => setActionTypeFilter(actionType)}
@@ -168,7 +170,7 @@ export function WorkspaceSidebar({
                     className={`sidebar-item task-sidebar-item${
                       selectedActionId === action.id ? ' is-active' : ''
                     }`}
-                    intent={selectedActionId === action.id ? 'secondary' : 'ghost'}
+                    variant={selectedActionId === action.id ? 'secondary' : 'ghost'}
                     key={action.id}
                     type="button"
                     onClick={() => onSelectAction(action.id)}
@@ -187,13 +189,16 @@ export function WorkspaceSidebar({
           <>
             <div className="sidebar-heading compact-sidebar-heading">
               <p className="sidebar-label">Workflow 목록</p>
-              <IconButton
+              <Button
                 aria-label="새 Workflow"
                 className="sidebar-mini-button"
-                icon="+"
+                isIconOnly
+                variant="ghost"
                 type="button"
                 onClick={onCreateWorkflow}
-              />
+              >
+                +
+              </Button>
             </div>
             {workflows.length === 0 ? (
               <div className="sidebar-empty">
@@ -206,7 +211,7 @@ export function WorkspaceSidebar({
                   className={`sidebar-item task-sidebar-item${
                     selectedWorkflowId === workflow.id ? ' is-active' : ''
                   }`}
-                  intent={selectedWorkflowId === workflow.id ? 'secondary' : 'ghost'}
+                  variant={selectedWorkflowId === workflow.id ? 'secondary' : 'ghost'}
                   key={workflow.id}
                   type="button"
                   onClick={() => onSelectWorkflow(workflow)}
@@ -232,7 +237,7 @@ export function WorkspaceSidebar({
                 className={`sidebar-item task-sidebar-item${
                   selectedToolId === tool.id ? ' is-active' : ''
                 }`}
-                intent={selectedToolId === tool.id ? 'secondary' : 'ghost'}
+                variant={selectedToolId === tool.id ? 'secondary' : 'ghost'}
                 key={tool.id}
                 type="button"
                 onClick={() => onSelectTool(tool)}
@@ -251,7 +256,7 @@ export function WorkspaceSidebar({
                 className={`sidebar-item${
                   selectedSettingsCategory === category.id ? ' is-active' : ''
                 }`}
-                intent={selectedSettingsCategory === category.id ? 'secondary' : 'ghost'}
+                variant={selectedSettingsCategory === category.id ? 'secondary' : 'ghost'}
                 key={category.id}
                 type="button"
                 onClick={() => onSelectSettingsCategory(category.id)}

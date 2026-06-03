@@ -1,5 +1,5 @@
-import { Card, Chip } from '@heroui/react'
-import type { CSSProperties } from 'react'
+import { Button, Card, Chip } from '@heroui/react'
+import type { CSSProperties, ReactNode } from 'react'
 import type { WorkflowListDisplayMode } from '../../../shared/settings'
 import { isRestrictedDevicePolicy } from '../../../shared/devices'
 import type { WorkflowDefinition } from '../../../shared/workflows'
@@ -9,9 +9,6 @@ import {
   getTaskScheduleLabel,
   getTaskStatusLabel,
 } from '../../shared/utils/viewLabels'
-import { Button } from '../../shared/components/button'
-import { RunCard } from '../../shared/components/RunCard'
-import { Stepper } from '../../shared/components/Stepper'
 
 const statusChipColor = {
   failed: 'danger',
@@ -64,17 +61,31 @@ export function TaskLaunchPanel({
         </div>
         <div className="section-actions">
           {displayMode === 'grid' ? (
-            <Stepper
-              ariaLabel="그리드 열 수"
-              decrementLabel="그리드 열 수 줄이기"
-              incrementLabel="그리드 열 수 늘리기"
-              max={8}
-              min={2}
-              value={gridColumnCount}
-              onChange={(nextColumnCount) =>
-                void onGridColumnCountChange(nextColumnCount)
-              }
-            />
+            <div aria-label="그리드 열 수" className="grid-column-stepper">
+              <Button
+                aria-label="그리드 열 수 줄이기"
+                isDisabled={gridColumnCount <= 2}
+                isIconOnly
+                variant="ghost"
+                onClick={() =>
+                  void onGridColumnCountChange(Math.max(2, gridColumnCount - 1))
+                }
+              >
+                -
+              </Button>
+              <span aria-label={`${gridColumnCount}열`}>{gridColumnCount}</span>
+              <Button
+                aria-label="그리드 열 수 늘리기"
+                isDisabled={gridColumnCount >= 8}
+                isIconOnly
+                variant="ghost"
+                onClick={() =>
+                  void onGridColumnCountChange(Math.min(8, gridColumnCount + 1))
+                }
+              >
+                +
+              </Button>
+            </div>
           ) : null}
           <TaskListDisplayToggle
             value={displayMode}
@@ -88,7 +99,7 @@ export function TaskLaunchPanel({
       ) : workflows.length === 0 ? (
         <div className="empty-state empty-state-action">
           <p>아직 저장된 Workflow가 없습니다.</p>
-          <Button intent="primary" type="button" onClick={onCreate}>
+          <Button variant="primary" type="button" onClick={onCreate}>
             Workflow 만들기
           </Button>
         </div>
@@ -115,18 +126,7 @@ export function TaskLaunchPanel({
 
             if (displayMode === 'grid') {
               return (
-                <RunCard
-                  actionIntent={canStop || isStopping ? 'danger' : 'primary'}
-                  actionLabel={
-                    isStopping
-                      ? '중지 중'
-                      : canStop
-                        ? '중지'
-                        : isRunning
-                          ? '실행 중'
-                          : '실행'
-                  }
-                  isActionDisabled={isRunning || isStopping}
+                <WorkflowRunCard
                   key={workflow.id}
                   status={workflow.state.status}
                   subtitle={
@@ -139,6 +139,17 @@ export function TaskLaunchPanel({
                       : undefined
                   }
                   title={workflow.name}
+                  actionLabel={
+                    isStopping
+                      ? '중지 중'
+                      : canStop
+                        ? '중지'
+                        : isRunning
+                          ? '실행 중'
+                          : '실행'
+                  }
+                  actionVariant={canStop || isStopping ? 'danger' : 'primary'}
+                  isActionDisabled={isRunning || isStopping}
                   onAction={() =>
                     void (canStop ? onStop(workflow.id) : onRun(workflow.id))
                   }
@@ -178,7 +189,7 @@ export function TaskLaunchPanel({
                   </Chip>
                 ) : null}
                 <Button
-                  intent={isSelected ? 'secondary' : 'ghost'}
+                  variant={isSelected ? 'secondary' : 'ghost'}
                   type="button"
                   onClick={() => onSelect(workflow)}
                 >
@@ -187,7 +198,7 @@ export function TaskLaunchPanel({
                 {displayMode === 'list' ? (
                   <Button
                     type="button"
-                    intent={canStop || isStopping ? 'danger' : 'primary'}
+                    variant={canStop || isStopping ? 'danger' : 'primary'}
                     isDisabled={isRunning || isStopping}
                     onClick={() =>
                       void (canStop ? onStop(workflow.id) : onRun(workflow.id))
@@ -210,6 +221,43 @@ export function TaskLaunchPanel({
           ))}
         </div>
       )}
+    </Card>
+  )
+}
+
+function WorkflowRunCard({
+  actionLabel,
+  actionVariant,
+  isActionDisabled,
+  onAction,
+  status,
+  subtitle,
+  title,
+}: {
+  actionLabel: ReactNode
+  actionVariant: 'danger' | 'primary'
+  isActionDisabled: boolean
+  status: string
+  subtitle?: ReactNode
+  title: ReactNode
+  onAction(): void
+}) {
+  return (
+    <Card className={`workflow-run-card status-${status}`}>
+      <Card.Header>
+        <Card.Title>{title}</Card.Title>
+        {subtitle ? <small>{subtitle}</small> : null}
+      </Card.Header>
+      <Card.Footer>
+        <Button
+          isDisabled={isActionDisabled}
+          type="button"
+          variant={actionVariant}
+          onClick={onAction}
+        >
+          {actionLabel}
+        </Button>
+      </Card.Footer>
     </Card>
   )
 }

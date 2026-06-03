@@ -4,7 +4,7 @@ This document apply to all files and directories under `src/renderer`.
 
 ## Layout
 
-- left side panel, right working area are using independent vertical scroll
+- left side panel, right workspace are using independent vertical scroll
 - horizontal scroll is banned
 
 ### Top bar
@@ -16,11 +16,11 @@ This document apply to all files and directories under `src/renderer`.
 
 - 너비 유지, 프로그램 비율 축소 시 자동으로 패널 접기
 
-### Right Working Area
+### Right Workspace
 
 ## Pages
 
-Describe left side panel, right working area's initial feature sequently.
+Describe left side panel, right workspace's initial feature sequently.
 - Run: workflows hierarchy view, luncher for workflows
 - Action: actions hierarchy view, modify selected action
 - Workflow: workflows hierarchy view, modify selected workflow

@@ -7,6 +7,7 @@ import type { WorkflowRunEventStore } from './store/workflowRunEventStore'
 import type { WorkflowStore } from './store/workflowStore'
 import type { ToolModuleRunner } from '../tools/runner/toolModuleRunner'
 
+const workflowRunLocks = new Set<string>()
 
 export type WorkflowRunner = {
   getWorkflow(id: string): Promise<WorkflowDefinition>
@@ -60,20 +61,29 @@ export function createWorkflowRunner({
   return {
     getWorkflow,
     async runWorkflow(id) {
-      const workflow = await getWorkflow(id)
-      if (workflow.state.status === 'running') {
-        return workflow
+      if (workflowRunLocks.has(id)) {
+        return getWorkflow(id)
       }
-      getRunnableActionRefs(workflow)
-      return runActionWorkflow(workflow, await workflowStore.listActions(), {
-        adapterRegistry,
-        dataDir,
-        deviceId,
-        appSettingsStore,
-        workflowRunEventStore,
-        workflowStore,
-        toolModuleRunner,
-      })
+
+      workflowRunLocks.add(id)
+      try {
+        const workflow = await getWorkflow(id)
+        if (workflow.state.status === 'running') {
+          return workflow
+        }
+        getRunnableActionRefs(workflow)
+        return await runActionWorkflow(workflow, await workflowStore.listActions(), {
+          adapterRegistry,
+          dataDir,
+          deviceId,
+          appSettingsStore,
+          workflowRunEventStore,
+          workflowStore,
+          toolModuleRunner,
+        })
+      } finally {
+        workflowRunLocks.delete(id)
+      }
     },
     async stopWorkflow(id) {
       const workflow = await getWorkflow(id)

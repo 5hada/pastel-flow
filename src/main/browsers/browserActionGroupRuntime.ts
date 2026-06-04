@@ -6,24 +6,20 @@ import {
   type BrowserActionGroupBridge,
   type BrowserStateSnapshot,
 } from './browserActionGroupBridge'
-import {
-  createBrowserNativeBridgeBroker,
-  type BrowserNativeBridgeBroker,
-} from './browserNativeBridgeBroker'
+import { createBrowserNativeBridgeBroker } from './browserNativeBridgeBroker'
 
-export type BrowserSessionRunResult = {
-  localProfilePath: string
+export type BrowserActionGroupRunResult = {
   message: string
-  sessionId: string
+  runtimeId: string
 }
 
-export type BrowserSessionStopResult = {
+export type BrowserActionGroupStopResult = {
   config: BrowserTabGroupConfig
   state: Partial<ActionRuntimeState>
   message: string
 }
 
-type RunningBrowserSession = {
+type RunningBrowserActionGroup = {
   actionConfigs: Map<string, BrowserTabGroupConfig>
   actionIds: Set<string>
   actionSnapshotHandlers: Map<
@@ -31,16 +27,14 @@ type RunningBrowserSession = {
     (config: BrowserTabGroupConfig, state: Partial<ActionRuntimeState>) => Promise<void>
   >
   bridge: BrowserActionGroupBridge
-  dataDir: string
-  sessionId: string
+  runtimeId: string
 }
 
 type InstalledBrowserBridge = {
   bridge: BrowserActionGroupBridge
-  broker: BrowserNativeBridgeBroker
 }
 
-type BrowserSessionManagerOptions = {
+type BrowserActionGroupRuntimeOptions = {
   dataDir: string
   onActionSnapshot(
     actionId: string,
@@ -50,39 +44,41 @@ type BrowserSessionManagerOptions = {
 }
 
 const installedBridgesByDataDir = new Map<string, Promise<InstalledBrowserBridge>>()
-const sessionsByActionId = new Map<string, RunningBrowserSession>()
+const actionGroupsByActionId = new Map<string, RunningBrowserActionGroup>()
 
 export async function startOrAttachBrowserActionGroup(
   actionId: string,
   config: BrowserTabGroupConfig,
-  options: BrowserSessionManagerOptions,
-): Promise<BrowserSessionRunResult> {
+  options: BrowserActionGroupRuntimeOptions,
+): Promise<BrowserActionGroupRunResult> {
   const installedBridge = await getInstalledBrowserBridge(options.dataDir)
-  const session = getOrCreateSession(options.dataDir, installedBridge.bridge)
+  const actionGroup = createActionGroupRuntime(
+    options.dataDir,
+    installedBridge.bridge,
+  )
 
-  attachAction(session, actionId, config, options.onActionSnapshot)
-  await session.bridge.ensureGroup(config.browserGroupId, config.initialUrls)
+  attachAction(actionGroup, actionId, config, options.onActionSnapshot)
+  await actionGroup.bridge.ensureGroup(config.browserGroupId, config.initialUrls)
 
   return {
-    localProfilePath: '',
-    sessionId: session.sessionId,
-    message: '설치된 Pastel Flow 확장 프로그램으로 브라우저 Action 그룹을 열었습니다.',
+    runtimeId: actionGroup.runtimeId,
+    message: '압축해제된 Pastel Flow 확장 프로그램으로 브라우저 Action 그룹을 열었습니다.',
   }
 }
 
 export async function stopBrowserActionGroup(
   actionId: string,
-): Promise<BrowserSessionStopResult> {
-  const session = sessionsByActionId.get(actionId)
-  const config = session?.actionConfigs.get(actionId)
+): Promise<BrowserActionGroupStopResult> {
+  const actionGroup = actionGroupsByActionId.get(actionId)
+  const config = actionGroup?.actionConfigs.get(actionId)
 
-  if (!session || !config) {
+  if (!actionGroup || !config) {
     throw new Error('관리 중인 브라우저 Action 그룹을 찾지 못했습니다.')
   }
 
-  const snapshot = await captureBestEffort(session, config.browserGroupId)
-  await session.bridge.closeGroup(config.browserGroupId)
-  detachAction(session, actionId)
+  const snapshot = await captureBestEffort(actionGroup, config.browserGroupId)
+  await actionGroup.bridge.closeGroup(config.browserGroupId)
+  detachAction(actionGroup, actionId)
 
   return {
     config: applySnapshotToConfig(config, snapshot),
@@ -97,7 +93,7 @@ export async function stopBrowserActionGroup(
 export function readBrowserActionState(
   actionId: string,
 ): ActionRuntimeState | undefined {
-  return sessionsByActionId.has(actionId)
+  return actionGroupsByActionId.has(actionId)
     ? {
         status: 'running',
         lastError: undefined,
@@ -127,58 +123,59 @@ async function createInstalledBrowserBridge(
 
   return {
     bridge,
-    broker,
   }
 }
 
-function getOrCreateSession(
+function createActionGroupRuntime(
   dataDir: string,
   bridge: BrowserActionGroupBridge,
-): RunningBrowserSession {
+): RunningBrowserActionGroup {
   return {
     actionConfigs: new Map(),
     actionIds: new Set(),
     actionSnapshotHandlers: new Map(),
     bridge,
-    dataDir,
-    sessionId: `installed-extension:${dataDir}`,
+    runtimeId: `installed-extension:${dataDir}`,
   }
 }
 
 function attachAction(
-  session: RunningBrowserSession,
+  actionGroup: RunningBrowserActionGroup,
   actionId: string,
   config: BrowserTabGroupConfig,
-  onActionSnapshot: BrowserSessionManagerOptions['onActionSnapshot'],
+  onActionSnapshot: BrowserActionGroupRuntimeOptions['onActionSnapshot'],
 ): void {
-  session.actionIds.add(actionId)
-  session.actionConfigs.set(actionId, config)
-  session.actionSnapshotHandlers.set(actionId, (nextConfig, state) =>
+  actionGroup.actionIds.add(actionId)
+  actionGroup.actionConfigs.set(actionId, config)
+  actionGroup.actionSnapshotHandlers.set(actionId, (nextConfig, state) =>
     onActionSnapshot(actionId, nextConfig, state),
   )
-  session.bridge.trackGroup(config.browserGroupId)
-  sessionsByActionId.set(actionId, session)
+  actionGroup.bridge.trackGroup(config.browserGroupId)
+  actionGroupsByActionId.set(actionId, actionGroup)
 }
 
-function detachAction(session: RunningBrowserSession, actionId: string): void {
-  const config = session.actionConfigs.get(actionId)
-  session.actionIds.delete(actionId)
-  session.actionConfigs.delete(actionId)
-  session.actionSnapshotHandlers.delete(actionId)
-  sessionsByActionId.delete(actionId)
+function detachAction(
+  actionGroup: RunningBrowserActionGroup,
+  actionId: string,
+): void {
+  const config = actionGroup.actionConfigs.get(actionId)
+  actionGroup.actionIds.delete(actionId)
+  actionGroup.actionConfigs.delete(actionId)
+  actionGroup.actionSnapshotHandlers.delete(actionId)
+  actionGroupsByActionId.delete(actionId)
 
   if (config) {
-    session.bridge.untrackGroup(config.browserGroupId)
+    actionGroup.bridge.untrackGroup(config.browserGroupId)
   }
 }
 
 async function captureBestEffort(
-  session: RunningBrowserSession,
+  actionGroup: RunningBrowserActionGroup,
   browserGroupId: string,
 ): Promise<BrowserStateSnapshot> {
   return (
-    (await session.bridge.captureGroup(browserGroupId).catch(() => undefined)) ??
-    session.bridge.readLatest(browserGroupId) ?? { urls: [] }
+    (await actionGroup.bridge.captureGroup(browserGroupId).catch(() => undefined)) ??
+    actionGroup.bridge.readLatest(browserGroupId) ?? { urls: [] }
   )
 }
 

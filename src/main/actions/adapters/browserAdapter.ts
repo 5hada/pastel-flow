@@ -8,7 +8,7 @@ import {
   readBrowserActionState,
   startOrAttachBrowserActionGroup,
   stopBrowserActionGroup,
-} from '../../browsers/browserSessionManager'
+} from '../../browsers/browserActionGroupRuntime'
 import type { ActionAdapter } from './actionAdapter'
 
 export const browserAdapter: ActionAdapter<

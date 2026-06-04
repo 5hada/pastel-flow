@@ -51,6 +51,7 @@ export type WorkspaceMode = 'run' | 'actions' | 'workflows' | 'tools' | 'setting
 
 export type NavigationCategory =
   | 'all'
+  | 'favorites'
   | 'running'
   | 'scheduled'
   | 'failed'

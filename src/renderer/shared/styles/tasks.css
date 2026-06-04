@@ -31,13 +31,29 @@
   gap: 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 12px;
+  padding: 14px;
   background: var(--surface);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 40%);
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.workflow-run-card:hover,
+.task-row:hover,
+.workflow-action-row:hover,
+.action-picker-row:hover,
+.run-event-row:hover,
+.editor-list-item:hover,
+.task-picker:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-soft);
 }
 
 .workflow-run-card {
   min-height: 110px;
-  align-content: space-between;
+  align-content: center;
 }
 
 .workflow-run-card div,
@@ -65,8 +81,9 @@
 .run-event-row small,
 .field-help,
 .editor-list-item span {
-  color: var(--muted, var(--text-muted));
-  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
 }
 
 .task-row {
@@ -179,23 +196,31 @@
 }
 
 .toggle-switch {
-  display: inline-grid;
+  position: relative;
+  display: inline-block;
   width: 44px;
   min-width: 44px;
-  align-items: center;
+  height: 24px;
+  flex: 0 0 44px;
+  line-height: 0;
 }
 
 .toggle-switch input {
   position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
   opacity: 0;
-  pointer-events: none;
+  cursor: pointer;
 }
 
 .toggle-switch span {
+  display: block;
   position: relative;
+  width: 44px;
   height: 24px;
   border-radius: 999px;
-  background: var(--border);
 }
 
 .toggle-switch span::after {
@@ -207,6 +232,7 @@
   border-radius: 999px;
   background: var(--surface);
   content: '';
+  transition: transform 140ms ease;
 }
 
 .toggle-switch input:checked + span {
@@ -225,7 +251,7 @@
 }
 
 .detail-list dt {
-  color: var(--muted, var(--text-muted));
+  color: var(--text-muted);
   font-size: 0.78rem;
   font-weight: 800;
 }

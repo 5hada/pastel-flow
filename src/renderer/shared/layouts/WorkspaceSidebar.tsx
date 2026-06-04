@@ -1,4 +1,22 @@
 import { Button } from '@heroui/react'
+import {
+  CurlyBrackets,
+  Database,
+  Bell,
+  ArrowsRotateLeft,
+  ShieldKeyhole,
+  Display,
+  Keyboard,
+  Magnifier,
+  Palette,
+  Circles4Square,
+  ListUl,
+  Star,
+  ClockArrowRotateLeft,
+  TriangleExclamation,
+  Arrows3RotateRight,
+  Ban
+} from '@gravity-ui/icons';
 import { useState } from 'react'
 import {
   type ActionDefinition,
@@ -52,6 +70,9 @@ export function WorkspaceSidebar({
   const restrictedCount = workflows.filter((workflow) =>
     isRestrictedDevicePolicy(workflow.permissions),
   ).length
+  const favoritesCount = workflows.filter((workflow) =>
+    {}
+  ).length
   const runningCount = workflows.filter(
     (workflow) => workflow.state.status === 'running',
   ).length
@@ -64,32 +85,33 @@ export function WorkspaceSidebar({
   ).length
   const runCategories: {
     id: NavigationCategory
-    icon: string
+    icon: any
     label: string
     count: number
   }[] = [
-    { id: 'all', icon: '□', label: '전체', count: workflows.length },
-    { id: 'running', icon: '●', label: '실행 중', count: runningCount },
-    { id: 'scheduled', icon: '◷', label: '예약됨', count: scheduledCount },
-    { id: 'failed', icon: '!', label: '실패', count: failedCount },
-    { id: 'restricted', icon: '◇', label: '제한됨', count: restrictedCount },
-    { id: 'secret_required', icon: '◆', label: 'Secret 필요', count: secretCount },
+    { id: 'all', icon: <ListUl/>, label: '전체', count: workflows.length },
+    { id: 'favorites', icon: <Star/>, label: '즐겨찾기', count: favoritesCount },
+    { id: 'running', icon: <Arrows3RotateRight/>, label: '실행 중', count: runningCount },
+    { id: 'scheduled', icon: <ClockArrowRotateLeft/>, label: '예약됨', count: scheduledCount },
+    { id: 'failed', icon: <TriangleExclamation/>, label: '실패', count: failedCount },
+    { id: 'restricted', icon: <Ban/>, label: '제한됨', count: restrictedCount },
+    { id: 'secret_required', icon: <ShieldKeyhole/>, label: 'Secret 필요', count: secretCount },
   ]
   const settingsCategories: {
     id: SettingsCategory
-    icon: string
+    icon: any
     label: string
   }[] = [
-    { id: 'general', icon: '◌', label: '일반' },
-    { id: 'appearance', icon: '◐', label: '모양' },
-    { id: 'browser', icon: '▤', label: '브라우저' },
-    { id: 'shortcuts', icon: '⌘', label: '단축키' },
-    { id: 'devices', icon: '▣', label: '기기' },
-    { id: 'secrets', icon: '◆', label: 'Secret' },
-    { id: 'sync', icon: '⇄', label: '동기화' },
-    { id: 'events', icon: '≡', label: '실행 이벤트' },
-    { id: 'data', icon: '▥', label: '데이터 관리' },
-    { id: 'developer', icon: '{}', label: '개발자' },
+    { id: 'general', icon: <Circles4Square/>, label: '일반' },
+    { id: 'appearance', icon: <Palette/>, label: '모양' },
+    { id: 'browser', icon: <Magnifier/>, label: '브라우저' },
+    { id: 'shortcuts', icon: <Keyboard/>, label: '단축키' },
+    { id: 'devices', icon: <Display/>, label: '기기' },
+    { id: 'secrets', icon: <ShieldKeyhole/>, label: 'Secret' },
+    { id: 'sync', icon: <ArrowsRotateLeft/>, label: '동기화' },
+    { id: 'events', icon: <Bell/>, label: '실행 이벤트' },
+    { id: 'data', icon: <Database/>, label: '데이터 관리' },
+    { id: 'developer', icon: <CurlyBrackets/>, label: '개발자' },
   ] 
   const actionTypeOptions = Array.from(
     new Set(actions.map((action) => action.type)),
@@ -226,8 +248,8 @@ export function WorkspaceSidebar({
 
         {currentMode === 'tools' ? (
           toolModules.length === 0 ? (
-            <div className="sidebar-empty">
-              <strong>Tool Module</strong>
+            <div className="sidebar-empty px-3 py-2">
+              <strong>Tool Module</strong><br/>
               <span>등록된 도구가 없습니다.</span>
             </div>
           ) : (

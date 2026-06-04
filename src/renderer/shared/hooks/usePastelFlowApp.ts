@@ -20,6 +20,7 @@ import {
   getActionTypeForTaskType,
 } from '../utils/taskFormTransforms'
 import { getErrorMessage } from '../utils/viewLabels'
+import { useWorkspaceShortcuts } from './useWorkspaceShortcuts'
 
 const sidebarAutoCollapseQuery = '(max-width: 640px)'
 
@@ -68,43 +69,19 @@ export function usePastelFlowApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  useEffect(() => {
-    function handleShortcut(event: KeyboardEvent) {
-      const pressedShortcut = formatKeyboardShortcut(event)
-      const shortcuts = settings.appSettings.shortcuts
-
-      if (pressedShortcut === shortcuts.refresh) {
-        event.preventDefault()
-        void refreshWorkspaceData()
-      } else if (pressedShortcut === shortcuts.openRun) {
-        event.preventDefault()
-        openRunMode()
-      } else if (pressedShortcut === shortcuts.openActions) {
-        event.preventDefault()
-        openActionMode()
-      } else if (pressedShortcut === shortcuts.openWorkflows) {
-        event.preventDefault()
-        openWorkflowMode()
-      } else if (pressedShortcut === shortcuts.openTools) {
-        event.preventDefault()
-        openToolsMode()
-      } else if (pressedShortcut === shortcuts.openSettings) {
-        event.preventDefault()
-        openSettingsMode()
-      } else if (
-        pressedShortcut === shortcuts.runSelectedWorkflow &&
-        actionWorkflow.selectedWorkflowId
-      ) {
-        event.preventDefault()
-        void actionWorkflow.runWorkflow(actionWorkflow.selectedWorkflowId)
-      }
-    }
-
-    window.addEventListener('keydown', handleShortcut)
-
-    return () => {
-      window.removeEventListener('keydown', handleShortcut)
-    }
+  useWorkspaceShortcuts({
+    handlers: {
+      onOpenActions: openActionMode,
+      onOpenRun: openRunMode,
+      onOpenSettings: openSettingsMode,
+      onOpenTools: openToolsMode,
+      onOpenWorkflows: openWorkflowMode,
+      onRefresh: () => void refreshWorkspaceData(),
+      onRunSelectedWorkflow: (workflowId) =>
+        void actionWorkflow.runWorkflow(workflowId),
+    },
+    selectedWorkflowId: actionWorkflow.selectedWorkflowId,
+    shortcuts: settings.appSettings.shortcuts,
   })
 
   useEffect(() => {
@@ -339,30 +316,6 @@ export function usePastelFlowApp() {
     setToolMessage: tools.setToolMessage,
     setToolRunResult: tools.setToolRunResult,
   }
-}
-
-function formatKeyboardShortcut(event: KeyboardEvent): string {
-  const parts = [
-    event.ctrlKey ? 'Ctrl' : '',
-    event.altKey ? 'Alt' : '',
-    event.shiftKey ? 'Shift' : '',
-    event.metaKey ? 'Meta' : '',
-    normalizeShortcutKey(event.key),
-  ].filter(Boolean)
-
-  return parts.join('+')
-}
-
-function normalizeShortcutKey(key: string): string {
-  if (key === ' ') {
-    return 'Space'
-  }
-
-  if (key === ',') {
-    return ','
-  }
-
-  return key.length === 1 ? key.toUpperCase() : key
 }
 
 function isCompactViewport(): boolean {

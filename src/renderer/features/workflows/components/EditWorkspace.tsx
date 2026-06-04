@@ -1,4 +1,5 @@
 import { Button, Card } from '@heroui/react'
+import {Pencil} from '@gravity-ui/icons';
 import type {
   BrowserProfilePreset,
   DeveloperVisibilitySettings,
@@ -17,6 +18,7 @@ import {
   getTaskScheduleLabel,
   getTaskStatusLabel,
 } from '../../../shared/utils/viewLabels'
+import { DetailItem } from '../../../shared/components/DetailItem'
 
 export type EditWorkspaceProps = {
   actions: ActionDefinition[]
@@ -83,7 +85,17 @@ export function EditWorkspace({
         <div className="panel-heading">
           <div>
             <p className="eyebrow">Workflows</p>
-            <h2>{selectedWorkflow.name}</h2>
+            <div className='grid-cols-2'>
+              <h2>{selectedWorkflow.name}</h2>
+              <Button
+                isIconOnly
+                variant="ghost"
+                type="button"
+                onClick={() => void{}}
+              >
+                <Pencil/>
+              </Button>
+            </div>
           </div>
           <Button
             aria-label="새 Workflow"
@@ -268,13 +280,4 @@ function reorderWorkflowActionRefs(
       ...actionRef,
       order: index,
     }))
-}
-
-function DetailItem({ label, value }: { label: string; value: string }) {
-  return (
-    <Card className="detail-item">
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </Card>
-  )
 }

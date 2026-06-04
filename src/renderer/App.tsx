@@ -1,4 +1,5 @@
 import { Button } from '@heroui/react'
+import { ChevronLeft, ChevronRight } from '@gravity-ui/icons';
 import { usePastelFlowApp } from './shared/hooks/usePastelFlowApp'
 import { createToolInputDefaults } from './shared/utils/viewLabels'
 import { AppHeader } from './shared/layouts/AppHeader'
@@ -40,7 +41,7 @@ export default function App() {
           type="button"
           onClick={() => app.setIsSidebarOpen(!app.isSidebarOpen)}
         >
-          ☰
+          {app.isSidebarOpen ? <ChevronLeft/> : <ChevronRight/>}
         </Button>
 
         {app.isSidebarOpen ? (

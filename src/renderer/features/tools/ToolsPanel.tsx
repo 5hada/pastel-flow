@@ -1,10 +1,11 @@
-import { Button, Card, Checkbox, Input, Label, ListBox, Radio, RadioGroup, Select, TextArea } from '@heroui/react'
+import { Button, Card, Input, Label, ListBox, Radio, RadioGroup, Select, Switch, TextArea } from '@heroui/react'
 import type {
   RegisteredToolModule,
   ToolModuleField,
   ToolModuleOutputField,
   ToolModuleRunResult,
 } from '../../../shared/tools'
+import { DetailItem } from '../../shared/components/DetailItem'
 
 export type ToolsPanelProps = {
   selectedToolId: string | null
@@ -51,7 +52,7 @@ export function ToolsPanel({
           </Button>
         ) : null}
       </div>
-      <Card className="settings-subsection" aria-label="tool modules">
+      <div className="tool-workspace-surface" aria-label="tool modules">
         {toolModules.length === 0 ? (
           <Card className="empty-state-action">
             <p className="empty-state">등록된 도구 모듈이 없습니다.</p>
@@ -65,84 +66,92 @@ export function ToolsPanel({
           </Card>
         ) : selectedTool ? (
           <div className="tool-module-detail">
+            <div className="tool-summary-strip">
+              <div>
+                <strong>{selectedTool.manifest.name}</strong>
                 {selectedTool.manifest.description ? (
-                  <p className="muted-text">
-                    {selectedTool.manifest.description}
-                  </p>
+                  <span>{selectedTool.manifest.description}</span>
                 ) : null}
-                <div className="tool-runner">
-                  {selectedTool.manifest.inputs.length > 0 ? (
-                    selectedTool.manifest.inputs.map((field) => (
-                      <ToolInputField
-                        field={field}
-                        key={field.key}
-                        value={toolInputValues[field.key]}
-                        onChange={(value) => onToolInputChange(field.key, value)}
-                      />
-                    ))
-                  ) : (
-                    <p className="empty-state">입력 없이 실행할 수 있습니다.</p>
-                  )}
-                  <div className="form-actions">
-                    <Button
-                      variant="primary"
-                      type="button"
-                      onClick={() => void onRunToolModule()}
-                    >
-                      실행
-                    </Button>
-                  </div>
-                </div>
-                {toolMessage ? (
-                  <p className="panel-success">{toolMessage}</p>
-                ) : null}
-                {toolRunResult ? (
-                  <ToolOutputRenderer
-                    output={toolRunResult.output}
-                    outputs={selectedTool.manifest.outputs}
+              </div>
+              <em>v{selectedTool.manifest.version}</em>
+            </div>
+
+            <Card className="tool-runner-card">
+              <div className="tool-input-grid">
+                {selectedTool.manifest.inputs.length > 0 ? (
+                  selectedTool.manifest.inputs.map((field) => (
+                    <ToolInputField
+                      field={field}
+                      key={field.key}
+                      value={toolInputValues[field.key]}
+                      onChange={(value) => onToolInputChange(field.key, value)}
+                    />
+                  ))
+                ) : (
+                  <p className="empty-state">입력 없이 실행할 수 있습니다.</p>
+                )}
+              </div>
+              <div className="form-actions">
+                <Button
+                  variant="primary"
+                  type="button"
+                  onClick={() => void onRunToolModule()}
+                >
+                  실행
+                </Button>
+              </div>
+            </Card>
+
+            {toolMessage ? (
+              <p className="panel-success">{toolMessage}</p>
+            ) : null}
+            {toolRunResult ? (
+              <ToolOutputRenderer
+                output={toolRunResult.output}
+                outputs={selectedTool.manifest.outputs}
+              />
+            ) : null}
+            {showToolMetadata ? (
+              <section className="tool-metadata-panel" aria-label="도구 기타 정보">
+                <dl className="detail-list compact-detail-list">
+                  <DetailItem
+                    label="입력"
+                    value={`${selectedTool.manifest.inputs.length}개`}
                   />
-                ) : null}
-                {showToolMetadata ? (
-                  <section className="tool-metadata-panel" aria-label="도구 기타 정보">
-                    <dl className="detail-list">
-                      <DetailItem
-                        label="입력"
-                        value={`${selectedTool.manifest.inputs.length}개`}
-                      />
-                      <DetailItem
-                        label="출력"
-                        value={`${selectedTool.manifest.outputs.length}개`}
-                      />
-                      <DetailItem
-                        label="권한"
-                        value={
-                          selectedTool.manifest.permissions.length > 0
-                            ? selectedTool.manifest.permissions.join(', ')
-                            : '없음'
-                        }
-                      />
-                      <DetailItem label="등록 위치" value={selectedTool.sourcePath} />
-                      <DetailItem
-                        label="Assets"
-                        value={`${selectedTool.manifest.assets.length}개`}
-                      />
-                      <DetailItem
-                        label="Data sources"
-                        value={`${selectedTool.manifest.dataSources.length}개`}
-                      />
-                      <DetailItem
-                        label="Datasets"
-                        value={`${selectedTool.manifest.datasets.length}개`}
-                      />
-                      <DetailItem
-                        label="Indexing"
-                        value={
-                          selectedTool.manifest.indexing?.enabled ? '사용' : '미사용'
-                        }
-                      />
-                    </dl>
-                  </section>
-                ) : null}
+                  <DetailItem
+                    label="출력"
+                    value={`${selectedTool.manifest.outputs.length}개`}
+                  />
+                  <DetailItem
+                    label="권한"
+                    value={
+                      selectedTool.manifest.permissions.length > 0
+                        ? selectedTool.manifest.permissions.join(', ')
+                        : '없음'
+                    }
+                  />
+                  <DetailItem label="등록 위치" value={selectedTool.sourcePath} />
+                  <DetailItem
+                    label="Assets"
+                    value={`${selectedTool.manifest.assets.length}개`}
+                  />
+                  <DetailItem
+                    label="Data sources"
+                    value={`${selectedTool.manifest.dataSources.length}개`}
+                  />
+                  <DetailItem
+                    label="Datasets"
+                    value={`${selectedTool.manifest.datasets.length}개`}
+                  />
+                  <DetailItem
+                    label="Indexing"
+                    value={
+                      selectedTool.manifest.indexing?.enabled ? '사용' : '미사용'
+                    }
+                  />
+                </dl>
+              </section>
+            ) : null}
           </div>
         ) : (
           <Card className="empty-state-action">
@@ -156,7 +165,7 @@ export function ToolsPanel({
             </Button>
           </Card>
         )}
-      </Card>
+      </div>
     </Card>
   )
 }
@@ -295,15 +304,14 @@ function ToolInputField({ field, onChange, value }: ToolInputFieldProps) {
           {label}
           {field.required ? ' *' : ''}
         </span>
-        <Checkbox
-          className="toggle-switch"
-          isSelected={value === true || value === 'true'}
-          onChange={onChange}
-        >
-          <Checkbox.Control>
-            <Checkbox.Indicator />
-          </Checkbox.Control>
-        </Checkbox>
+        <span className="toggle-switch">
+          <input
+            checked={value === true || value === 'true'}
+            type="checkbox"
+            onChange={(event) => onChange(event.target.checked)}
+          />
+          <span aria-hidden="true" />
+        </span>
       </label>
     )
   }
@@ -523,13 +531,4 @@ function isSafeLinkUrl(value: string): boolean {
   } catch {
     return false
   }
-}
-
-function DetailItem({ label, value }: { label: string; value: string }) {
-  return (
-    <Card className="detail-item">
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </Card>
-  )
 }

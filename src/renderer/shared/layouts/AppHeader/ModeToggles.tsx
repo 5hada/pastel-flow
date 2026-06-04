@@ -1,4 +1,5 @@
 import { Button, ButtonGroup } from '@heroui/react'
+import { Hammer, Play, Gear, Route, LocationArrow } from '@gravity-ui/icons';
 import type { WorkspaceMode } from '../../state/taskFormState'
 
 export type ModeTogglesProps = {
@@ -20,15 +21,15 @@ export function ModeToggles({
 }: ModeTogglesProps) {
   const modes: {
     id: WorkspaceMode
-    icon: string
+    icon: any
     label: string
     onClick(): void
   }[] = [
-    { id: 'run', icon: '▶', label: '실행', onClick: onRun },
-    { id: 'actions', icon: '◆', label: 'Action', onClick: onActions },
-    { id: 'workflows', icon: '▦', label: 'Workflow', onClick: onWorkflows },
-    { id: 'tools', icon: '◇', label: '도구', onClick: onTools },
-    { id: 'settings', icon: '⚙', label: '설정', onClick: onSettings },
+    { id: 'run', icon: <Play/>, label: '실행', onClick: onRun },
+    { id: 'actions', icon: <LocationArrow/>, label: 'Action', onClick: onActions },
+    { id: 'workflows', icon: <Route/>, label: 'Workflow', onClick: onWorkflows },
+    { id: 'tools', icon: <Hammer/>, label: '도구', onClick: onTools },
+    { id: 'settings', icon: <Gear/>, label: '설정', onClick: onSettings },
   ]
 
   return (
@@ -39,7 +40,7 @@ export function ModeToggles({
       variant="ghost"
     >
       {modes.map((mode) => (
-        <Button
+        <Button fullWidth
           aria-label={mode.label}
           className={currentMode === mode.id ? 'is-active' : ''}
           variant={currentMode === mode.id ? 'secondary' : 'ghost'}

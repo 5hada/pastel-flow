@@ -1,9 +1,8 @@
 @media (max-width: 920px) {
   .app-header {
-    grid-template-columns: minmax(150px, 1fr) 48px;
-    grid-auto-rows: auto;
-    min-height: 116px;
+    grid-template-columns: minmax(132px, 0.42fr) minmax(220px, 1fr) 48px;
     align-content: center;
+    min-height: 72px;
   }
 
   .app-header-meta {
@@ -11,21 +10,20 @@
   }
 
   .top-mode-bar {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    width: 100%;
+    grid-template-columns: repeat(5, minmax(38px, 1fr)) 0.2fr;
+    grid-column: 2;
+    width: min(100%, 300px);
+    justify-self: right;
   }
 
-  .app-workspace {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .workspace-sidebar {
+  .top-mode-bar strong {
     display: none;
   }
 
   .workspace-grid,
-  .editor-layout {
+  .editor-layout,
+  .appearance-theme-grid,
+  .appearance-display-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -34,16 +32,69 @@
   }
 }
 
+@media (max-width: 600px) {
+  .app-header {
+    grid-template-columns: minmax(104px, 1fr) minmax(170px, 1.6fr) 44px;
+    gap: 8px;
+    padding: 0 10px;
+  }
+
+  .app-brand {
+    gap: 8px;
+  }
+
+  .app-mark {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+  }
+
+  .app-header h1 {
+    font-size: 0.95rem;
+  }
+
+  .app-header p {
+    display: none;
+  }
+
+  .top-mode-bar {
+    grid-template-columns: repeat(5, minmax(32px, 1fr));
+    gap: 3px;
+  }
+
+  .app-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace-sidebar {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 5;
+    display: grid;
+    width: min(82vw, 300px);
+    max-width: calc(100vw - 24px);
+    box-shadow: 14px 0 32px rgb(0 0 0 / 18%);
+  }
+
+  .app-workspace.is-sidebar-collapsed .workspace-sidebar {
+    display: none;
+  }
+
+  .workspace-sidebar-toggle {
+    z-index: 7;
+  }
+}
+
 @media (max-width: 640px) {
   .workspace-content {
-    padding: 14px;
+    padding: 16px;
   }
 
   .mode-panel,
   .task-section,
   .detail-panel,
   .create-panel {
-    padding: 14px;
+    padding: 16px;
   }
 
   .panel-heading,

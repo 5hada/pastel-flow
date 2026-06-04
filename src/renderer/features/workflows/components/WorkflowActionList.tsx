@@ -1,4 +1,5 @@
-import { Button, Card, Checkbox, Input, Label, ListBox, Select } from '@heroui/react'
+import { Button, Card, Input, Label, ListBox, Select, Switch } from '@heroui/react'
+import { ArrowLeftToLine, ArrowRightToLine, XmarkShape } from '@gravity-ui/icons';
 import { useEffect, useState } from 'react'
 import type { ActionDefinition } from '../../../../shared/actions'
 import type { WorkflowDefinition } from '../../../../shared/workflows'
@@ -115,44 +116,40 @@ export function WorkflowActionList({
                 <strong>{action?.name ?? actionRef.actionId}</strong>
                 <small>{action ? getActionTypeLabel(action.type) : '연결 끊김'}</small>
               </div>
-              <Checkbox
+              <Switch
                 aria-label="Action 활성화"
-                className="toggle-switch"
                 isSelected={actionRef.enabled}
                 onChange={() => onToggleAction(actionRef.id)}
               >
-                <Checkbox.Control>
-                  <Checkbox.Indicator />
-                </Checkbox.Control>
-              </Checkbox>
+                <Switch.Control>
+                  <Switch.Thumb />
+                </Switch.Control>
+              </Switch>
               <Button
-                className="icon-button"
                 isDisabled={index === 0}
                 isIconOnly
                 variant="ghost"
                 type="button"
                 onClick={() => onMoveAction(actionRef.id, 'top')}
               >
-                ⇤
+                <ArrowLeftToLine/>
               </Button>
               <Button
-                className="icon-button"
                 isDisabled={index === sortedActionRefs.length - 1}
                 isIconOnly
                 variant="ghost"
                 type="button"
                 onClick={() => onMoveAction(actionRef.id, 'bottom')}
               >
-                ⇥
+                <ArrowRightToLine/>
               </Button>
               <Button
-                className="icon-button danger-button"
                 isIconOnly
                 variant="danger"
                 type="button"
                 onClick={() => onRemoveAction(actionRef.id)}
               >
-                ×
+                <XmarkShape/>
               </Button>
             </div>
           )

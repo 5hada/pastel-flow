@@ -116,7 +116,7 @@ export function TaskLaunchPanel({
         >
           {groupWorkflows(workflows, workflowHierarchy).map((group) => (
             <Card className="workflow-run-group" key={group.name}>
-              <h3>{group.name}</h3>
+              <h3 className='py-1'>{group.name}</h3>
               <div className={`workflow-run-group-items task-list-${displayMode}`}>
           {group.workflows.map((workflow) => {
             const isRunning = runningWorkflowId === workflow.id
@@ -162,6 +162,22 @@ export function TaskLaunchPanel({
                 className={`task-row${isSelected ? ' is-selected' : ''}`}
                 key={workflow.id}
               >
+                <div className='space-x-2'>
+                  {displayMode === 'list' &&
+                    isRestrictedDevicePolicy(workflow.permissions) ? (
+                      <Chip className='px-2' color="warning" size="sm" variant="soft">제한됨</Chip>
+                    ) : null}
+                  {displayMode === 'list' ? (
+                    <Chip
+                      className='px-2'
+                      color={statusChipColor[workflow.state.status]}
+                      size="sm"
+                      variant="soft"
+                    >
+                      {getTaskStatusLabel(workflow.state.status)}
+                    </Chip>
+                  ) : null}
+                </div>  
                 <div className="task-row-summary">
                     <span className="task-row-title">{workflow.name}</span>
                     <span className="task-row-meta">
@@ -175,44 +191,35 @@ export function TaskLaunchPanel({
                         '아직 실행 결과가 없습니다.'}
                     </span>
                 </div>
-                {displayMode === 'list' &&
-                isRestrictedDevicePolicy(workflow.permissions) ? (
-                  <Chip color="warning" size="sm" variant="soft">제한됨</Chip>
-                ) : null}
-                {displayMode === 'list' ? (
-                  <Chip
-                    color={statusChipColor[workflow.state.status]}
-                    size="sm"
-                    variant="soft"
-                  >
-                    {getTaskStatusLabel(workflow.state.status)}
-                  </Chip>
-                ) : null}
-                <Button
-                  variant={isSelected ? 'secondary' : 'ghost'}
-                  type="button"
-                  onClick={() => onSelect(workflow)}
-                >
-                  선택
-                </Button>
-                {displayMode === 'list' ? (
+                <div className='flex space-x-3 justify-end-safe'>
                   <Button
+                    className='px-6'
+                    variant={isSelected ? 'secondary' : 'ghost'}
                     type="button"
-                    variant={canStop || isStopping ? 'danger' : 'primary'}
-                    isDisabled={isRunning || isStopping}
-                    onClick={() =>
-                      void (canStop ? onStop(workflow.id) : onRun(workflow.id))
-                    }
+                    onClick={() => onSelect(workflow)}
                   >
-                    {isStopping
-                      ? '중지 중'
-                      : canStop
-                        ? '중지'
-                        : isRunning
-                          ? '실행 중'
-                          : '실행'}
+                    선택
                   </Button>
-                ) : null}
+                  {displayMode === 'list' ? (
+                    <Button
+                      className='px-6'
+                      type="button"
+                      variant={canStop || isStopping ? 'danger' : 'primary'}
+                      isDisabled={isRunning || isStopping}
+                      onClick={() =>
+                        void (canStop ? onStop(workflow.id) : onRun(workflow.id))
+                      }
+                    >
+                      {isStopping
+                        ? '중지 중'
+                        : canStop
+                          ? '중지'
+                          : isRunning
+                            ? '실행 중'
+                            : '실행'}
+                    </Button>
+                  ) : null}
+                </div>
               </article>
             )
           })}
@@ -243,22 +250,18 @@ function WorkflowRunCard({
   onAction(): void
 }) {
   return (
-    <Card className={`workflow-run-card status-${status}`}>
-      <Card.Header>
-        <Card.Title>{title}</Card.Title>
-        {subtitle ? <small>{subtitle}</small> : null}
-      </Card.Header>
-      <Card.Footer>
-        <Button
+        <Button fullWidth
+          className = 'h-30'
+          size = 'lg'
           isDisabled={isActionDisabled}
           type="button"
           variant={actionVariant}
           onClick={onAction}
         >
+          {title}<br/>
+          {subtitle ? <small>{subtitle}</small> : null}<br/>
           {actionLabel}
         </Button>
-      </Card.Footer>
-    </Card>
   )
 }
 

@@ -1,6 +1,6 @@
 .task-form {
   display: grid;
-  gap: 14px;
+  gap: 16px;
   min-width: 0;
 }
 
@@ -9,9 +9,9 @@
   display: grid;
   min-width: 0;
   gap: 8px;
-  color: var(--muted, var(--text-muted));
+  color: var(--text-muted);
   font-size: 0.9rem;
-  font-weight: 700;
+  font-weight: 750;
 }
 
 .task-form .inline-check,
@@ -44,6 +44,10 @@ textarea {
   color: var(--foreground, var(--text));
   background: var(--field-background, var(--control-bg));
   font: inherit;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background-color 140ms ease;
 }
 
 input,
@@ -63,6 +67,22 @@ textarea {
   resize: vertical;
 }
 
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: var(--border-strong);
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+[role='button']:focus-visible {
+  outline: none;
+  border-color: var(--border-strong);
+  box-shadow: var(--focus-ring);
+}
+
 .form-actions,
 .detail-actions {
   display: flex;
@@ -77,6 +97,7 @@ textarea {
   margin: 0;
   border-radius: 8px;
   padding: 12px 14px;
+  font-weight: 700;
 }
 
 .error-message {

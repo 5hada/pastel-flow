@@ -3,6 +3,7 @@ import type { CurrentDevice, LinkedDevice } from '../../../shared/devices'
 import {
   createDefaultBrowserTabGroupConfig,
   normalizeBrowserTabGroupConfig,
+  normalizeBrowserNavigationUrls,
   type BrowserTabGroupConfig,
 } from '../../../shared/browsers'
 import {
@@ -23,7 +24,7 @@ import type { TaskSchedule, TaskTemplate, TaskType } from '../state/taskTypes'
 import type { BrowserTaskFormState } from '../state/taskFormState'
 
 export function parseInitialUrls(value: string): string[] {
-  return parseLines(value)
+  return normalizeBrowserNavigationUrls(parseLines(value))
 }
 
 export function parseLines(value: string): string[] {

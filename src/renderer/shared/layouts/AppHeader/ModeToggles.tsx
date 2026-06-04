@@ -1,5 +1,6 @@
 import { Button, ButtonGroup } from '@heroui/react'
 import { Hammer, Play, Gear, Route, LocationArrow } from '@gravity-ui/icons';
+import type { ReactNode } from 'react'
 import type { WorkspaceMode } from '../../state/taskFormState'
 
 export type ModeTogglesProps = {
@@ -21,7 +22,7 @@ export function ModeToggles({
 }: ModeTogglesProps) {
   const modes: {
     id: WorkspaceMode
-    icon: any
+    icon: ReactNode
     label: string
     onClick(): void
   }[] = [

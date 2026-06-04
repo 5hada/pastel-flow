@@ -265,9 +265,9 @@ export function usePastelFlowApp() {
     closeSettingsMode: settings.closeSettingsMode,
     handleCreateSecret: secrets.handleCreateSecret,
     handleCreateAction,
-    handleCreateWorkflow: () =>
+    handleCreateWorkflow: (name?: string) =>
       actionWorkflow.createWorkflow({
-        name: settings.appSettings.defaultWorkflowName,
+        name: name?.trim() || settings.appSettings.defaultWorkflowName,
         permissions: {
           visibility: 'local_only',
           execution: 'local_only',

@@ -47,6 +47,25 @@ export async function evaluateDevToolsExpression(
 export async function createDevToolsTarget(
   port: number,
   url: string,
+): Promise<string | undefined> {
+  const client = await CDP({
+    host: '127.0.0.1',
+    port,
+  })
+
+  try {
+    const response = await client.Target.createTarget({ url }) as {
+      targetId?: string
+    }
+    return response.targetId
+  } finally {
+    await client.close()
+  }
+}
+
+export async function closeDevToolsTarget(
+  port: number,
+  targetId: string,
 ): Promise<void> {
   const client = await CDP({
     host: '127.0.0.1',
@@ -54,7 +73,9 @@ export async function createDevToolsTarget(
   })
 
   try {
-    await client.Target.createTarget({ url })
+    await (client.Target as unknown as {
+      closeTarget(params: { targetId: string }): Promise<unknown>
+    }).closeTarget({ targetId })
   } finally {
     await client.close()
   }

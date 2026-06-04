@@ -55,9 +55,15 @@ export function useActionWorkflowData(
       return
     }
 
+    const trimmedName = input.name.trim()
+    if (!trimmedName) {
+      setErrorMessage('Workflow 이름이 필요합니다.')
+      return
+    }
+
     try {
       const workflow = await window.pastelFlow.workflows.create({
-        name: input.name,
+        name: trimmedName,
         permissions: input.permissions,
         actionRefs: [],
       })

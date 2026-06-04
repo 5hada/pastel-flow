@@ -128,7 +128,6 @@ export function TaskLaunchPanel({
               return (
                 <WorkflowRunCard
                   key={workflow.id}
-                  status={workflow.state.status}
                   subtitle={
                     canStop || isStopping || isRunning
                       ? isStopping
@@ -237,14 +236,12 @@ function WorkflowRunCard({
   actionVariant,
   isActionDisabled,
   onAction,
-  status,
   subtitle,
   title,
 }: {
   actionLabel: ReactNode
   actionVariant: 'danger' | 'primary'
   isActionDisabled: boolean
-  status: string
   subtitle?: ReactNode
   title: ReactNode
   onAction(): void

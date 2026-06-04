@@ -1,4 +1,5 @@
 import { Button } from '@heroui/react'
+import type { ReactNode } from 'react'
 import {
   CurlyBrackets,
   Database,
@@ -70,9 +71,7 @@ export function WorkspaceSidebar({
   const restrictedCount = workflows.filter((workflow) =>
     isRestrictedDevicePolicy(workflow.permissions),
   ).length
-  const favoritesCount = workflows.filter((workflow) =>
-    {}
-  ).length
+  const favoritesCount = 0
   const runningCount = workflows.filter(
     (workflow) => workflow.state.status === 'running',
   ).length
@@ -85,7 +84,7 @@ export function WorkspaceSidebar({
   ).length
   const runCategories: {
     id: NavigationCategory
-    icon: any
+    icon: ReactNode
     label: string
     count: number
   }[] = [
@@ -99,7 +98,7 @@ export function WorkspaceSidebar({
   ]
   const settingsCategories: {
     id: SettingsCategory
-    icon: any
+    icon: ReactNode
     label: string
   }[] = [
     { id: 'general', icon: <Circles4Square/>, label: '일반' },

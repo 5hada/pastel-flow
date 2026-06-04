@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import type { BrowserNativeBridgeBrokerConnection } from './browserNativeBridgeBroker'
 import { nativeMessagingHostName } from './nativeMessagingProtocol'
 import {
   ensureNativeMessagingHostRegistration,
@@ -22,19 +23,26 @@ export type NativeMessagingHostAssets = {
 
 export async function ensureBrowserNativeMessagingHostAssets(
   dataDir: string,
+  brokerConnection: BrowserNativeBridgeBrokerConnection,
 ): Promise<NativeMessagingHostAssets> {
   const hostDirectory = path.join(dataDir, 'browser-native-messaging')
   const hostScriptPath = path.join(hostDirectory, 'pastel-flow-browser-host.mjs')
   const windowsLauncherPath = path.join(hostDirectory, 'pastel-flow-browser-host.cmd')
   const manifestPath = path.join(hostDirectory, `${nativeMessagingHostName}.json`)
+  const brokerConnectionPath = path.join(hostDirectory, 'broker-connection.json')
   const allowedOrigins = [`chrome-extension://${browserExtensionId}/`]
 
   await mkdir(hostDirectory, { recursive: true })
   await Promise.all([
     writeFile(hostScriptPath, nativeHostScript.trimStart(), 'utf8'),
     writeFile(
+      brokerConnectionPath,
+      `${JSON.stringify(brokerConnection, null, 2)}\n`,
+      'utf8',
+    ),
+    writeFile(
       windowsLauncherPath,
-      createWindowsLauncherScript(hostScriptPath),
+      createWindowsLauncherScript(hostScriptPath, getNativeHostNodeExecutable()),
       'utf8',
     ),
     writeFile(
@@ -80,21 +88,49 @@ function createNativeHostManifest(hostPath: string, allowedOrigins: string[]) {
   }
 }
 
-function createWindowsLauncherScript(hostScriptPath: string): string {
+function createWindowsLauncherScript(
+  hostScriptPath: string,
+  nodeExecutablePath: string,
+): string {
   return [
     '@echo off',
     'setlocal',
-    `node "${hostScriptPath}"`,
+    `"${nodeExecutablePath}" "${hostScriptPath}" %*`,
     '',
   ].join('\r\n')
 }
 
+function getNativeHostNodeExecutable(): string {
+  const npmNodeExecutablePath = process.env['npm_node_execpath']
+  if (npmNodeExecutablePath) {
+    return npmNodeExecutablePath
+  }
+
+  return process.execPath.toLowerCase().includes('electron')
+    ? 'node'
+    : process.execPath
+}
+
 const nativeHostScript = `
-import { exit, stdin, stdout } from 'node:process'
+import { readFile } from 'node:fs/promises'
+import net from 'node:net'
+import { argv, exit, stdin, stdout } from 'node:process'
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
 
 const MAX_MESSAGE_BYTES = 1024 * 1024
+const BROKER_RECONNECT_MS = 500
+const HOST_DIR = path.dirname(fileURLToPath(import.meta.url))
+const BROKER_CONNECTION_PATH = path.join(HOST_DIR, 'broker-connection.json')
+const EXPECTED_EXTENSION_ORIGIN = ${JSON.stringify(`chrome-extension://${browserExtensionId}/`)}
 
 let buffer = Buffer.alloc(0)
+let brokerSocket
+let brokerBuffer = ''
+let reconnectTimer
+
+assertAllowedOrigin()
+connectBroker()
 
 stdin.on('data', (chunk) => {
   if (buffer.length + chunk.length > MAX_MESSAGE_BYTES + 4) {
@@ -126,18 +162,9 @@ function readMessages() {
 
 function handleMessage(rawMessage) {
   try {
-    const request = JSON.parse(rawMessage.toString('utf8'))
-    writeMessage({
-      id: request.id || 'unknown',
-      ok: true,
-      result: {
-        ok: true,
-        version: '0.1.0',
-        transport: 'native-messaging',
-      },
-    })
+    writeBrokerLine(JSON.parse(rawMessage.toString('utf8')))
   } catch (error) {
-    writeMessage({
+    writeBrokerLine({
       id: 'unknown',
       ok: false,
       error: error instanceof Error ? error.message : 'Unknown native host error.',
@@ -159,5 +186,77 @@ function failAndExit(error) {
     error,
   })
   exit(1)
+}
+
+async function connectBroker() {
+  try {
+    const connection = JSON.parse(
+      await readFile(BROKER_CONNECTION_PATH, 'utf8'),
+    )
+    const socket = net.createConnection({
+      host: '127.0.0.1',
+      port: connection.port,
+    })
+    brokerSocket = socket
+    socket.setEncoding('utf8')
+    socket.on('connect', () => {
+      writeBrokerLine({
+        hello: 'pastel-flow-browser-host',
+        token: connection.token,
+      })
+    })
+    socket.on('data', (chunk) => {
+      brokerBuffer += chunk
+      const lines = brokerBuffer.split('\\n')
+      brokerBuffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (!line.trim()) {
+          continue
+        }
+
+        try {
+          writeMessage(JSON.parse(line))
+        } catch (error) {
+          writeBrokerLine({
+            id: 'unknown',
+            ok: false,
+            error: error instanceof Error ? error.message : 'Invalid broker message.',
+          })
+        }
+      }
+    })
+    socket.on('close', scheduleBrokerReconnect)
+    socket.on('error', scheduleBrokerReconnect)
+  } catch {
+    scheduleBrokerReconnect()
+  }
+}
+
+function scheduleBrokerReconnect() {
+  if (reconnectTimer) {
+    return
+  }
+
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = undefined
+    brokerSocket = undefined
+    connectBroker()
+  }, BROKER_RECONNECT_MS)
+}
+
+function writeBrokerLine(message) {
+  if (!brokerSocket || brokerSocket.destroyed) {
+    return
+  }
+
+  brokerSocket.write(JSON.stringify(message) + '\\n')
+}
+
+function assertAllowedOrigin() {
+  const callerOrigin = argv.find((argument) => argument.startsWith('chrome-extension://'))
+  if (callerOrigin !== EXPECTED_EXTENSION_ORIGIN) {
+    failAndExit('Native messaging caller origin is not allowed.')
+  }
 }
 `

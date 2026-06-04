@@ -1,5 +1,6 @@
 import { Button, Card } from '@heroui/react'
 import {Pencil} from '@gravity-ui/icons';
+import { useEffect, useState, type FormEvent } from 'react'
 import type {
   BrowserProfilePreset,
   DeveloperVisibilitySettings,
@@ -22,14 +23,16 @@ import { DetailItem } from '../../../shared/components/DetailItem'
 
 export type EditWorkspaceProps = {
   actions: ActionDefinition[]
+  defaultWorkflowName: string
   developerVisibility: DeveloperVisibilitySettings
   isLoading: boolean
   profilePresets: BrowserProfilePreset[]
   selectedWorkflowId: string | null
   workflowRunEvents: WorkflowRunEvent[]
   workflows: WorkflowDefinition[]
-  onCreateWorkflow(): Promise<void>
+  onCreateWorkflow(name?: string): Promise<void>
   onConfirmDeleteWorkflow(workflowId: string): Promise<void>
+  onStartCreateWorkflow(): void
   onUpdateWorkflow(
     workflowId: string,
     input: Partial<WorkflowDefinition>,
@@ -38,10 +41,12 @@ export type EditWorkspaceProps = {
 
 export function EditWorkspace({
   actions,
+  defaultWorkflowName,
   developerVisibility,
   isLoading,
   onConfirmDeleteWorkflow,
   onCreateWorkflow,
+  onStartCreateWorkflow,
   onUpdateWorkflow,
   selectedWorkflowId,
   workflowRunEvents,
@@ -49,6 +54,52 @@ export function EditWorkspace({
 }: EditWorkspaceProps) {
   const selectedWorkflow =
     workflows.find((workflow) => workflow.id === selectedWorkflowId) ?? null
+  const [createName, setCreateName] = useState(defaultWorkflowName)
+  const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+
+  useEffect(() => {
+    if (!selectedWorkflow) {
+      setCreateName(defaultWorkflowName)
+      setEditingWorkflowId(null)
+      setEditName('')
+      return
+    }
+
+    setEditingWorkflowId(null)
+    setEditName(selectedWorkflow.name)
+  }, [defaultWorkflowName, selectedWorkflow])
+
+  async function handleCreateWorkflow(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const trimmedName = createName.trim()
+
+    if (!trimmedName) {
+      return
+    }
+
+    await onCreateWorkflow(trimmedName)
+  }
+
+  async function handleRenameWorkflow(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!selectedWorkflow) {
+      return
+    }
+
+    const trimmedName = editName.trim()
+    if (!trimmedName || trimmedName === selectedWorkflow.name) {
+      setEditingWorkflowId(null)
+      setEditName(selectedWorkflow.name)
+      return
+    }
+
+    await onUpdateWorkflow(selectedWorkflow.id, {
+      name: trimmedName,
+    })
+    setEditingWorkflowId(null)
+  }
 
   if (isLoading) {
     return (
@@ -64,16 +115,25 @@ export function EditWorkspace({
         <div className="empty-state empty-state-action">
           <div>
             <p className="eyebrow">Workflows</p>
-            <h2>Workflow를 선택하세요</h2>
+            <h2>새 Workflow</h2>
           </div>
-          <p>좌측 패널에서 Workflow를 선택하거나 새 Workflow를 만드세요.</p>
-          <Button
-            variant="primary"
-            type="button"
-            onClick={() => void onCreateWorkflow()}
-          >
-            새 Workflow
-          </Button>
+          <form className="workflow-name-form" onSubmit={handleCreateWorkflow}>
+            <label>
+              이름
+              <input
+                value={createName}
+                onChange={(event) => setCreateName(event.target.value)}
+                placeholder="Workflow 이름"
+              />
+            </label>
+            <Button
+              variant="primary"
+              type="submit"
+              isDisabled={!createName.trim()}
+            >
+              생성
+            </Button>
+          </form>
         </div>
       </Card>
     )
@@ -85,24 +145,58 @@ export function EditWorkspace({
         <div className="panel-heading">
           <div>
             <p className="eyebrow">Workflows</p>
-            <div className='grid-cols-2'>
-              <h2>{selectedWorkflow.name}</h2>
-              <Button
-                isIconOnly
-                variant="ghost"
-                type="button"
-                onClick={() => void{}}
+            {editingWorkflowId === selectedWorkflow.id ? (
+              <form
+                className="workflow-title-form"
+                onSubmit={handleRenameWorkflow}
               >
-                <Pencil/>
-              </Button>
-            </div>
+                <input
+                  aria-label="Workflow 이름"
+                  value={editName}
+                  onChange={(event) => setEditName(event.target.value)}
+                />
+                <Button
+                  variant="primary"
+                  type="submit"
+                  isDisabled={!editName.trim()}
+                >
+                  저장
+                </Button>
+                <Button
+                  variant="ghost"
+                  type="button"
+                  onClick={() => {
+                    setEditingWorkflowId(null)
+                    setEditName(selectedWorkflow.name)
+                  }}
+                >
+                  취소
+                </Button>
+              </form>
+            ) : (
+              <div className="workflow-title-row">
+                <h2>{selectedWorkflow.name}</h2>
+                <Button
+                  aria-label="Workflow 이름 변경"
+                  isIconOnly
+                  variant="ghost"
+                  type="button"
+                  onClick={() => {
+                    setEditingWorkflowId(selectedWorkflow.id)
+                    setEditName(selectedWorkflow.name)
+                  }}
+                >
+                  <Pencil/>
+                </Button>
+              </div>
+            )}
           </div>
           <Button
             aria-label="새 Workflow"
             isIconOnly
             variant="ghost"
             type="button"
-            onClick={() => void onCreateWorkflow()}
+            onClick={onStartCreateWorkflow}
           >
             +
           </Button>

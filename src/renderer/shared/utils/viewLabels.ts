@@ -29,6 +29,8 @@ export function filterTasks(
   category: NavigationCategory,
 ): TaskTemplate[] {
   switch (category) {
+    case 'favorites':
+      return tasks
     case 'running':
       return tasks.filter((task) => task.state.status === 'running')
     case 'scheduled':
@@ -170,6 +172,8 @@ export function getNavigationCategoryLabel(category: NavigationCategory): string
   switch (category) {
     case 'all':
       return 'All templates'
+    case 'favorites':
+      return 'Favorites'
     case 'running':
       return 'Running'
     case 'scheduled':

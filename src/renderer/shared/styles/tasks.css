@@ -15,6 +15,40 @@
   font-size: 0.86rem;
 }
 
+.workflow-name-form,
+.workflow-title-form,
+.workflow-title-row {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.workflow-name-form {
+  width: min(420px, 100%);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.workflow-name-form label {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
+.workflow-title-row {
+  grid-template-columns: minmax(0, auto) auto;
+  align-items: center;
+  justify-content: start;
+}
+
+.workflow-title-form {
+  grid-template-columns: minmax(180px, 360px) auto auto;
+  align-items: center;
+}
+
 .workflow-run-group-items.task-list-grid,
 .task-list-grid {
   grid-template-columns: repeat(var(--workflow-grid-columns, 5), minmax(0, 1fr));

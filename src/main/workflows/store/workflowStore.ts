@@ -192,7 +192,7 @@ export function createWorkflowStore({ dataDir }: WorkflowStoreOptions): Workflow
 
         const workflow: WorkflowDefinition = {
           id: randomUUID(),
-          name: input.name.trim(),
+          name: normalizeWorkflowName(input.name),
           actionRefs,
           permissions: normalizeDevicePolicy(
             input.permissions ?? defaultDevicePolicy,
@@ -233,7 +233,10 @@ export function createWorkflowStore({ dataDir }: WorkflowStoreOptions): Workflow
         const updatedWorkflow: WorkflowDefinition = {
           ...currentWorkflow,
           ...input,
-          name: input.name?.trim() ?? currentWorkflow.name,
+          name:
+            input.name === undefined
+              ? currentWorkflow.name
+              : normalizeWorkflowName(input.name),
           actionRefs,
           permissions: input.permissions
             ? normalizeDevicePolicy(input.permissions)
@@ -329,6 +332,16 @@ function normalizeStoredWorkflow(
     schedule: normalizeWorkflowSchedule(workflow.schedule),
     state: workflow.state ?? defaultWorkflowState,
   }
+}
+
+function normalizeWorkflowName(name: unknown): string {
+  const trimmedName = typeof name === 'string' ? name.trim() : ''
+
+  if (!trimmedName) {
+    throw new Error('Workflow 이름이 필요합니다.')
+  }
+
+  return trimmedName
 }
 
 function normalizeWorkflowActionRefs(

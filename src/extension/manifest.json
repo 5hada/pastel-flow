@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Pastel Flow Browser Bridge",
+  "version": "0.1.0",
+  "description": "Connects Pastel Flow to browser tab groups.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlCX95HItWhCd7SfJ/GxY0i0dwtN7tj+9jRAjVTAPHzplCnnhMUKXWWcJWk3/1Arfxv5xye6nDSKWzMRgFvhzE9LKxBXWgdTyL1NgJHi3w37WaVxIf38XIR1F3RjxnMDhjy2VWqHEktmRvlcBCcO1CVgoHq1rz/AS2/TWteGS4K8FJdRXnlJEP6zqnm3Xodc51ojKCKnQqsUEvTq14/LibtXKUz+X/Gvzup1RTUMvN6QDVRyQ9kjUiDlAj9tgvTmqJ9oa7K0qvxKae4qsYQ6S1Lvu2WXdb+1W2jBA2x1a4jwqtnwcnQNFzZu4jeQBYe5QpbaEbsBmZzP5b8qQTjlGEQIDAQAB",
+  "permissions": [
+    "nativeMessaging",
+    "storage",
+    "tabGroups",
+    "tabs"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "minimum_chrome_version": "89"
+}

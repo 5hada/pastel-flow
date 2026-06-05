@@ -20,6 +20,7 @@ import type {
 import type {
   ActionRun,
   WorkflowRun,
+  WorkflowRunActorType,
   WorkflowRunEvent,
 } from '../../../../shared/runStatus'
 import {
@@ -38,6 +39,7 @@ import {
   formatDate,
   getTaskScheduleLabel,
   getTaskStatusLabel,
+  getWorkflowRunPolicyLabel,
 } from '../../../shared/utils/viewLabels'
 import { DetailItem } from '../../../shared/components/DetailItem'
 import { getWorkspaceFolderPathLabel } from '../../../shared/utils/workspaceFolderLabels'
@@ -237,7 +239,7 @@ export function EditWorkspace({
           title: workflow.name,
           meta: `Action ${workflow.actionRefs.length}개 · ${getTaskStatusLabel(
             workflow.state.status,
-          )}`,
+          )} · ${getWorkflowRunPolicyLabel(workflow.runPolicy)}`,
           message:
             workflow.state.lastError ??
             workflow.state.lastMessage ??
@@ -319,6 +321,19 @@ export function EditWorkspace({
           </Button>
         </div>
         <div className="editor-detail">
+            <WorkflowRunPolicyEditor
+              isLocked={isSelectedWorkflowLocked}
+              workflow={selectedWorkflow}
+              onUpdateRunPolicy={(runPolicy) => {
+                if (!selectedWorkflow || isSelectedWorkflowLocked) {
+                  return
+                }
+
+                void onUpdateWorkflow(selectedWorkflow.id, {
+                  runPolicy,
+                })
+              }}
+            />
             <WorkflowActionList
               actions={actions}
               workflow={selectedWorkflow}
@@ -468,6 +483,10 @@ export function EditWorkspace({
           ) : null}
           <DetailItem label="Action" value={`${selectedWorkflow.actionRefs.length}개`} />
           <DetailItem label="예약" value={getTaskScheduleLabel(selectedWorkflow.schedule)} />
+          <DetailItem
+            label="Run policy"
+            value={getWorkflowRunPolicyLabel(selectedWorkflow.runPolicy)}
+          />
           <DetailItem label="상태" value={getTaskStatusLabel(selectedWorkflow.state.status)} />
           <DetailItem label="마지막 실행" value={formatDate(selectedWorkflow.state.endedAt)} />
           <DetailItem
@@ -504,6 +523,131 @@ export function EditWorkspace({
         <WorkflowRunEventsPanel events={workflowRunEvents} />
       </Card>
     </section>
+  )
+}
+
+function WorkflowRunPolicyEditor({
+  isLocked,
+  onUpdateRunPolicy,
+  workflow,
+}: {
+  isLocked: boolean
+  onUpdateRunPolicy(
+    runPolicy: WorkflowDefinition['runPolicy'],
+  ): void
+  workflow: WorkflowDefinition
+}) {
+  const runPolicy = workflow.runPolicy
+  const selectedActors = runPolicy?.allowedActors ?? workflowRunActorOptions
+  const externalClientIdsText =
+    runPolicy?.allowedExternalClientIds?.join('\n') ?? ''
+
+  function updateRunPolicy(
+    input: Partial<NonNullable<WorkflowDefinition['runPolicy']>>,
+  ) {
+    onUpdateRunPolicy(
+      compactWorkflowRunPolicy({
+        ...runPolicy,
+        ...input,
+      }),
+    )
+  }
+
+  function toggleActor(actorType: WorkflowRunActorType) {
+    const actorSet = new Set(selectedActors)
+    if (actorSet.has(actorType)) {
+      if (actorSet.size === 1) {
+        return
+      }
+      actorSet.delete(actorType)
+    } else {
+      actorSet.add(actorType)
+    }
+
+    updateRunPolicy({
+      allowedActors: [...actorSet],
+    })
+  }
+
+  return (
+    <div className="workflow-run-policy task-form">
+      <div>
+        <strong>Run policy</strong>
+        <p className="muted-text">Workflow 실행 요청을 허용할 주체와 빈도를 제한합니다.</p>
+      </div>
+      <div className="workflow-run-policy-actors">
+        {workflowRunActorOptions.map((actorType) => (
+          <label className="inline-check" key={actorType}>
+            <input
+              checked={selectedActors.includes(actorType)}
+              disabled={isLocked}
+              type="checkbox"
+              onChange={() => toggleActor(actorType)}
+            />
+            {workflowRunActorLabels[actorType]}
+          </label>
+        ))}
+      </div>
+      <div className="form-grid">
+        <label className="inline-check">
+          <input
+            checked={runPolicy?.allowSchedule !== false}
+            disabled={isLocked}
+            type="checkbox"
+            onChange={(event) =>
+              updateRunPolicy({
+                allowSchedule: event.target.checked ? undefined : false,
+              })
+            }
+          />
+          Schedule 실행 허용
+        </label>
+        <label className="inline-check">
+          <input
+            checked={runPolicy?.requiresConfirmation === true}
+            disabled={isLocked}
+            type="checkbox"
+            onChange={(event) =>
+              updateRunPolicy({
+                requiresConfirmation: event.target.checked ? true : undefined,
+              })
+            }
+          />
+          외부 실행 전 확인 필요
+        </label>
+        <label>
+          시간당 최대 실행
+          <input
+            disabled={isLocked}
+            min={0}
+            type="number"
+            value={runPolicy?.maxRunsPerHour ?? ''}
+            onChange={(event) =>
+              updateRunPolicy({
+                maxRunsPerHour: event.target.value
+                  ? Number(event.target.value)
+                  : undefined,
+              })
+            }
+          />
+        </label>
+        <label>
+          외부 client IDs
+          <textarea
+            disabled={isLocked}
+            placeholder="client id per line"
+            value={externalClientIdsText}
+            onChange={(event) =>
+              updateRunPolicy({
+                allowedExternalClientIds: splitExternalClientIds(
+                  event.target.value,
+                ),
+              })
+            }
+          />
+        </label>
+      </div>
+    </div>
   )
 }
 
@@ -613,4 +757,66 @@ function createAutoInputMapping(
   )
 
   return Object.keys(mapping).length > 0 ? mapping : undefined
+}
+
+const workflowRunActorOptions: WorkflowRunActorType[] = [
+  'user',
+  'schedule',
+  'browser_extension',
+  'external_bridge',
+]
+
+const workflowRunActorLabels: Record<WorkflowRunActorType, string> = {
+  user: 'User',
+  schedule: 'Schedule',
+  browser_extension: 'Browser extension',
+  external_bridge: 'External bridge',
+}
+
+function compactWorkflowRunPolicy(
+  runPolicy: WorkflowDefinition['runPolicy'],
+): WorkflowDefinition['runPolicy'] {
+  if (!runPolicy) {
+    return undefined
+  }
+
+  const allowedActors =
+    runPolicy.allowedActors &&
+    runPolicy.allowedActors.length > 0 &&
+    runPolicy.allowedActors.length < workflowRunActorOptions.length
+      ? runPolicy.allowedActors
+      : undefined
+  const allowedExternalClientIds = runPolicy.allowedExternalClientIds?.filter(
+    Boolean,
+  )
+  const maxRunsPerHour =
+    typeof runPolicy.maxRunsPerHour === 'number' &&
+    Number.isFinite(runPolicy.maxRunsPerHour) &&
+    runPolicy.maxRunsPerHour > 0
+      ? Math.floor(runPolicy.maxRunsPerHour)
+      : undefined
+  const compacted = {
+    allowedActors,
+    allowedExternalClientIds:
+      allowedExternalClientIds && allowedExternalClientIds.length > 0
+        ? allowedExternalClientIds
+        : undefined,
+    requiresConfirmation:
+      runPolicy.requiresConfirmation === true ? true : undefined,
+    maxRunsPerHour,
+    allowSchedule: runPolicy.allowSchedule === false ? false : undefined,
+  }
+
+  return Object.values(compacted).some((value) => value !== undefined)
+    ? compacted
+    : undefined
+}
+
+function splitExternalClientIds(value: string): string[] | undefined {
+  const clientIds = value
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  return clientIds.length > 0 ? [...new Set(clientIds)] : undefined
 }

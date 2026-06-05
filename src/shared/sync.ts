@@ -7,6 +7,7 @@ import {
 import type { ActionDefinition, ActionIOField, ActionType } from './actions'
 import {
   defaultWorkflowState,
+  normalizeWorkflowRunPolicy,
   normalizeWorkflowSchedule,
   type WorkflowActionRef,
   type WorkflowDefinition,
@@ -15,9 +16,11 @@ import {
 } from './workflows'
 import type { RunStatus, WorkflowRunEvent } from './runStatus'
 import type { SecretScope } from './secrets'
+import type { TodoItem } from './todos'
 
 export type SyncActionDefinition = ActionDefinition
 export type SyncWorkflowDefinition = WorkflowDefinition
+export type SyncTodoItem = TodoItem
 
 export type SyncExportSnapshot = {
   schemaVersion: 1
@@ -25,6 +28,7 @@ export type SyncExportSnapshot = {
   sourceDevice: CurrentDevice
   actions: SyncActionDefinition[]
   workflows: SyncWorkflowDefinition[]
+  todos: SyncTodoItem[]
   workflowRunEvents: WorkflowRunEvent[]
   linkedDevices: LinkedDevice[]
 }
@@ -33,6 +37,7 @@ export type SyncImportResult = {
   importedAt: string
   workflowRunEventsAdded: number
   linkedDevicesMerged: number
+  todosMerged: number
 }
 
 export type SyncMode = 'mock_file'
@@ -72,6 +77,7 @@ export function normalizeSyncExportSnapshot(
     sourceDevice: normalizeCurrentDevice(candidate.sourceDevice),
     actions: normalizeSyncActions(candidate.actions),
     workflows: normalizeSyncWorkflows(candidate.workflows),
+    todos: normalizeSyncTodos(candidate.todos),
     workflowRunEvents: candidate.workflowRunEvents.map(normalizeWorkflowRunEvent),
     linkedDevices: normalizeLinkedDevices(candidate.linkedDevices),
   }
@@ -186,6 +192,9 @@ function normalizeSyncWorkflow(value: unknown): SyncWorkflowDefinition {
     permissions: normalizeDevicePolicy(
       isRecord(value.permissions) ? value.permissions : undefined,
     ),
+    runPolicy: normalizeWorkflowRunPolicy(
+      isRecord(value.runPolicy) ? value.runPolicy : undefined,
+    ),
     schedule: normalizeWorkflowSchedule(
       isRecord(value.schedule) ? value.schedule : undefined,
     ),
@@ -210,6 +219,7 @@ function normalizeWorkflowActionRefs(value: unknown[]): WorkflowActionRef[] {
             ? actionRef.order
             : index,
         inputMapping: normalizeWorkflowInputMapping(actionRef.inputMapping),
+        retryPolicy: normalizeWorkflowActionRetryPolicy(actionRef.retryPolicy),
         enabled: actionRef.enabled !== false,
       }
     })
@@ -219,6 +229,26 @@ function normalizeWorkflowActionRefs(value: unknown[]): WorkflowActionRef[] {
       ...actionRef,
       order: index,
     }))
+}
+
+function normalizeWorkflowActionRetryPolicy(
+  value: unknown,
+): WorkflowActionRef['retryPolicy'] {
+  if (!isRecord(value)) {
+    return undefined
+  }
+
+  const retryCount = clampInteger(value.retryCount, 0, 5)
+  const retryDelaySeconds = clampInteger(value.retryDelaySeconds, 0, 300)
+
+  if (retryCount === 0 && retryDelaySeconds === 0) {
+    return undefined
+  }
+
+  return {
+    retryCount,
+    retryDelaySeconds,
+  }
 }
 
 function normalizeWorkflowState(value: unknown): WorkflowState {
@@ -282,6 +312,43 @@ function normalizeWorkflowRunEvent(value: unknown): WorkflowRunEvent {
     status: value.status,
     message: optionalString(value.message),
     createdAt: value.createdAt.trim(),
+  }
+}
+
+function normalizeSyncTodos(value: unknown): SyncTodoItem[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.map(normalizeSyncTodo)
+}
+
+function normalizeSyncTodo(value: unknown): SyncTodoItem {
+  if (!isRecord(value)) {
+    throw new Error('동기화 스냅샷 Todo 형식이 올바르지 않습니다.')
+  }
+
+  if (
+    !isNonEmptyString(value.id) ||
+    !isNonEmptyString(value.title) ||
+    typeof value.completed !== 'boolean' ||
+    !isNonEmptyString(value.createdAt) ||
+    !isNonEmptyString(value.updatedAt)
+  ) {
+    throw new Error('동기화 스냅샷 Todo 필수 필드가 누락되었습니다.')
+  }
+
+  return {
+    id: value.id.trim(),
+    title: value.title.trim(),
+    dueAt: optionalString(value.dueAt),
+    category: optionalString(value.category),
+    details: optionalString(value.details),
+    completed: value.completed,
+    completedAt: optionalString(value.completedAt),
+    deletedAt: optionalString(value.deletedAt),
+    createdAt: value.createdAt.trim(),
+    updatedAt: value.updatedAt.trim(),
   }
 }
 
@@ -480,4 +547,13 @@ function isNonEmptyString(value: unknown): value is string {
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function clampInteger(value: unknown, min: number, max: number): number {
+  const numericValue = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(numericValue)) {
+    return min
+  }
+
+  return Math.min(max, Math.max(min, Math.floor(numericValue)))
 }

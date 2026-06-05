@@ -28,6 +28,9 @@ export const ipcRequestChannels = {
     update: 'todos:update',
     delete: 'todos:delete',
   },
+  externalBridge: {
+    getSchema: 'external-bridge:get-schema',
+  },
   actions: {
     list: 'actions:list',
     create: 'actions:create',

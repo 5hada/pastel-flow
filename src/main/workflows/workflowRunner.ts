@@ -94,14 +94,23 @@ export function createWorkflowRunner({
   return {
     getWorkflow,
     async runWorkflow(id, options) {
+      const actorId = options?.actorId
+      const actorType = options?.actorType ?? 'user'
+      const triggerSource = options?.triggerSource ?? 'manual'
+      const workflow = await getWorkflow(id)
+      await assertWorkflowRunPolicy(workflow, {
+        actorId,
+        actorType,
+        workflowRunStore,
+      })
+
       if (workflowRunLocks.has(id)) {
-        const workflow = await getWorkflow(id)
         await createSkippedWorkflowRun(workflow, {
-          actorId: options?.actorId,
-          actorType: options?.actorType ?? 'user',
+          actorId,
+          actorType,
           deviceId,
           reason: '이전 실행이 아직 진행 중이어서 새 실행을 건너뛰었습니다.',
-          triggerSource: options?.triggerSource ?? 'manual',
+          triggerSource,
           workflowRunEventStore,
           workflowRunStore,
         })
@@ -111,14 +120,13 @@ export function createWorkflowRunner({
 
       workflowRunLocks.add(id)
       try {
-        const workflow = await getWorkflow(id)
         if (workflow.state.status === 'running') {
           await createSkippedWorkflowRun(workflow, {
-            actorId: options?.actorId,
-            actorType: options?.actorType ?? 'user',
+            actorId,
+            actorType,
             deviceId,
             reason: 'Workflow가 이미 실행 중이어서 새 실행을 건너뛰었습니다.',
-            triggerSource: options?.triggerSource ?? 'manual',
+            triggerSource,
             workflowRunEventStore,
             workflowRunStore,
           })
@@ -132,11 +140,11 @@ export function createWorkflowRunner({
         }
         return await runActionWorkflow(workflow, actions, {
           adapterRegistry,
-          actorId: options?.actorId,
-          actorType: options?.actorType ?? 'user',
+          actorId,
+          actorType,
           dataDir,
           deviceId,
-          triggerSource: options?.triggerSource ?? 'manual',
+          triggerSource,
           appSettingsStore,
           workflowRunEventStore,
           workflowRunStore,
@@ -665,6 +673,65 @@ async function createSkippedWorkflowRun(
     status: 'idle',
     message: input.reason,
   })
+}
+
+async function assertWorkflowRunPolicy(
+  workflow: WorkflowDefinition,
+  input: {
+    actorId?: string
+    actorType: WorkflowRunActorType
+    workflowRunStore: WorkflowRunStore
+  },
+): Promise<void> {
+  const policy = workflow.runPolicy
+  if (!policy) {
+    return
+  }
+
+  if (
+    policy.allowedActors?.length &&
+    !policy.allowedActors.includes(input.actorType)
+  ) {
+    throw new Error(`Workflow 실행 주체가 허용되지 않았습니다: ${input.actorType}`)
+  }
+
+  if (input.actorType === 'schedule' && policy.allowSchedule === false) {
+    throw new Error('Workflow schedule 실행이 정책으로 비활성화되었습니다.')
+  }
+
+  if (
+    input.actorType === 'external_bridge' &&
+    policy.allowedExternalClientIds?.length &&
+    (!input.actorId || !policy.allowedExternalClientIds.includes(input.actorId))
+  ) {
+    throw new Error('허용되지 않은 외부 client의 Workflow 실행 요청입니다.')
+  }
+
+  if (policy.requiresConfirmation === true && input.actorType !== 'user') {
+    throw new Error('Workflow 실행 전 사용자 확인이 필요합니다.')
+  }
+
+  if (!policy.maxRunsPerHour) {
+    return
+  }
+
+  const oneHourAgo = Date.now() - 60 * 60_000
+  const recentRuns = await input.workflowRunStore.listRuns(workflow.id, {
+    limit: 500,
+  })
+  const runCount = recentRuns.filter((run) => {
+    const createdAtTime = new Date(run.createdAt).getTime()
+    return (
+      Number.isFinite(createdAtTime) &&
+      createdAtTime >= oneHourAgo &&
+      run.status !== 'cancelled' &&
+      run.status !== 'skipped'
+    )
+  }).length
+
+  if (runCount >= policy.maxRunsPerHour) {
+    throw new Error('Workflow 시간당 실행 한도를 초과했습니다.')
+  }
 }
 
 async function runWithRetry<TResult>(

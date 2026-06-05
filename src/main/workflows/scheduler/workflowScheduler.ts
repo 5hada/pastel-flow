@@ -48,6 +48,7 @@ export function createWorkflowScheduler({
 
         if (
           !schedule?.enabled ||
+          workflow.runPolicy?.allowSchedule === false ||
           !canExecuteWorkflowOnDevice(
             workflow,
             currentDevice,
@@ -72,11 +73,13 @@ export function createWorkflowScheduler({
             nextRunAt: getNextRunAt(now, schedule),
           },
         })
-        void workflowRunner.runWorkflow(workflow.id, {
-          actorType: 'schedule',
-          actorId: currentDevice.id,
-          triggerSource: 'schedule',
-        })
+        void workflowRunner
+          .runWorkflow(workflow.id, {
+            actorType: 'schedule',
+            actorId: currentDevice.id,
+            triggerSource: 'schedule',
+          })
+          .catch(() => undefined)
       }
     } finally {
       isTicking = false

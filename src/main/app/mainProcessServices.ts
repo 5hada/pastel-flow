@@ -113,6 +113,7 @@ export async function initializeMainProcessServices(dataDir: string): Promise<vo
     dataDir,
     appSettingsStore,
     deviceStore,
+    todoStore,
     workflowRunEventStore,
     workflowStore,
   })

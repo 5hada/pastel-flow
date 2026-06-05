@@ -4,6 +4,7 @@ import {
   canViewWorkflowOnDevice,
   createLocalOnlyDevicePolicy,
 } from '../../../shared/devices/'
+import { createExternalBridgeSchema } from '../../../shared/externalBridge'
 import { ipcRequestChannels } from '../../../shared/ipcChannels'
 import type { DeviceStore } from '../../devices/store/deviceStore'
 import type { AppSettingsStore } from '../../settings/store/appSettingsStore'
@@ -189,6 +190,17 @@ export function registerWorkflowIpc(
   })
   ipcMain.handle(ipcRequestChannels.workflows.list, async () => {
     return listVisibleWorkflows()
+  })
+  ipcMain.handle(ipcRequestChannels.externalBridge.getSchema, async () => {
+    const [workflows, actions] = await Promise.all([
+      listVisibleWorkflows(),
+      WorkflowStore.listActions(),
+    ])
+
+    return createExternalBridgeSchema({
+      actions,
+      workflows,
+    })
   })
   ipcMain.handle(ipcRequestChannels.workflows.create, async (_event, input) => {
     const currentDevice = await deviceStore.getCurrentDevice()

@@ -15,6 +15,8 @@ import {
 
 import type { ActionDefinition } from '../../../shared/actions'
 import type { WorkflowDefinition } from '../../../shared/workflows'
+import type { TodoItem } from '../../../shared/todos'
+import type { TodoStore } from '../../todos/store/todoStore'
 
 export type MockSyncStore = {
   getStatus(): Promise<SyncStatus>
@@ -30,6 +32,7 @@ export type MockSyncStoreOptions = {
   deviceStore: DeviceStore
   workflowRunEventStore: WorkflowRunEventStore
   workflowStore: WorkflowStore
+  todoStore: TodoStore
 }
 
 export function createMockSyncStore({
@@ -38,6 +41,7 @@ export function createMockSyncStore({
   deviceStore,
   workflowRunEventStore,
   workflowStore,
+  todoStore,
 }: MockSyncStoreOptions): MockSyncStore {
   const exportPath = path.join(dataDir, 'syncExport.json')
 
@@ -54,12 +58,16 @@ export function createMockSyncStore({
     },
 
     async exportSnapshot() {
-      const [currentDevice, settingsSnapshot, actions, workflows, workflowRunEvents] =
+      const [currentDevice, settingsSnapshot, actions, workflows, todos, workflowRunEvents] =
         await Promise.all([
           deviceStore.getCurrentDevice(),
           appSettingsStore.getSnapshot(),
           workflowStore.listActions(),
           workflowStore.listWorkflows(),
+          todoStore.listTodos({
+            includeCompleted: true,
+            includeDeleted: true,
+          }),
           appSettingsStore
             .getSnapshot()
             .then((snapshot) =>
@@ -74,6 +82,7 @@ export function createMockSyncStore({
         sourceDevice: currentDevice,
         actions: sanitizeActionsForSyncExport(actions),
         workflows: sanitizeWorkflowsForSyncExport(workflows),
+        todos,
         workflowRunEvents,
         linkedDevices: settingsSnapshot.settings.linkedDevices,
       }
@@ -98,6 +107,10 @@ export function createMockSyncStore({
         workflowStore.listActions(),
         workflowStore.listWorkflows(),
       ])
+      const currentTodos = await todoStore.listTodos({
+        includeCompleted: true,
+        includeDeleted: true,
+      })
       const mergedActions = mergeDefinitions(
         currentActions,
         normalizedSnapshot.actions,
@@ -106,6 +119,7 @@ export function createMockSyncStore({
         currentWorkflows,
         normalizedSnapshot.workflows,
       )
+      const mergedTodos = mergeTodos(currentTodos, normalizedSnapshot.todos)
       const workflowRunEventsAdded = await workflowRunEventStore.importEvents(
         normalizedSnapshot.workflowRunEvents,
       )
@@ -120,6 +134,7 @@ export function createMockSyncStore({
           actions: mergedActions,
           workflows:mergedWorkflows
         }),
+        todoStore.replaceTodos(mergedTodos),
         appSettingsStore.updateSettings({
           ...settingsSnapshot.settings,
           linkedDevices,
@@ -128,6 +143,7 @@ export function createMockSyncStore({
 
       return {
         importedAt: new Date().toISOString(),
+        todosMerged: countChangedDefinitions(currentTodos, mergedTodos),
         workflowRunEventsAdded,
         linkedDevicesMerged:
           linkedDevices.length - settingsSnapshot.settings.linkedDevices.length,
@@ -138,6 +154,23 @@ export function createMockSyncStore({
       return this.importSnapshot(await readSnapshot(filePath))
     },
   }
+}
+
+function countChangedDefinitions<TDefinition extends { id: string }>(
+  currentDefinitions: TDefinition[],
+  nextDefinitions: TDefinition[],
+): number {
+  const currentDefinitionMap = new Map(
+    currentDefinitions.map((definition) => [definition.id, definition]),
+  )
+
+  return nextDefinitions.filter((definition) => {
+    const currentDefinition = currentDefinitionMap.get(definition.id)
+    return (
+      !currentDefinition ||
+      JSON.stringify(currentDefinition) !== JSON.stringify(definition)
+    )
+  }).length
 }
 
 async function getLastExportedAt(exportPath: string): Promise<string | undefined> {
@@ -178,6 +211,25 @@ function mergeDefinitions<TDefinition extends ActionDefinition | WorkflowDefinit
   }
 
   return [...definitionMap.values()].sort((left, right) =>
+    left.createdAt.localeCompare(right.createdAt),
+  )
+}
+
+function mergeTodos(
+  currentTodos: TodoItem[],
+  incomingTodos: TodoItem[],
+): TodoItem[] {
+  const todoMap = new Map(currentTodos.map((todo) => [todo.id, todo]))
+
+  for (const incomingTodo of incomingTodos) {
+    const currentTodo = todoMap.get(incomingTodo.id)
+
+    if (!currentTodo || incomingTodo.updatedAt > currentTodo.updatedAt) {
+      todoMap.set(incomingTodo.id, incomingTodo)
+    }
+  }
+
+  return [...todoMap.values()].sort((left, right) =>
     left.createdAt.localeCompare(right.createdAt),
   )
 }

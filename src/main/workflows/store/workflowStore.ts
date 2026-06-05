@@ -7,7 +7,9 @@ import {
 } from '../../../shared/devices/'
 import {
   normalizeWorkflowSchedule,
+  normalizeWorkflowRunPolicy,
   defaultWorkflowState,
+  type WorkflowRunPolicy,
   type WorkflowSchedule,
   type WorkflowDefinition,
   type WorkflowState
@@ -53,12 +55,16 @@ export type CreateWorkflowInput = {
   name: string
   actionRefs?: WorkflowDefinition['actionRefs']
   permissions?: DevicePolicy
+  runPolicy?: WorkflowRunPolicy
   schedule?: WorkflowSchedule
   state?: WorkflowState
 }
 
 export type UpdateWorkflowInput = Partial<
-  Pick<WorkflowDefinition, 'name' | 'actionRefs' | 'permissions' | 'schedule' | 'state'>
+  Pick<
+    WorkflowDefinition,
+    'name' | 'actionRefs' | 'permissions' | 'runPolicy' | 'schedule' | 'state'
+  >
 >
 
 export type ReplaceWorkflowsInput = {
@@ -197,6 +203,7 @@ export function createWorkflowStore({ dataDir }: WorkflowStoreOptions): Workflow
           permissions: normalizeDevicePolicy(
             input.permissions ?? defaultDevicePolicy,
           ),
+          runPolicy: normalizeWorkflowRunPolicy(input.runPolicy),
           schedule: normalizeWorkflowSchedule(input.schedule),
           state: input.state ?? defaultWorkflowState,
           createdAt: now,
@@ -241,6 +248,10 @@ export function createWorkflowStore({ dataDir }: WorkflowStoreOptions): Workflow
           permissions: input.permissions
             ? normalizeDevicePolicy(input.permissions)
             : currentWorkflow.permissions,
+          runPolicy:
+            input.runPolicy === undefined
+              ? currentWorkflow.runPolicy
+              : normalizeWorkflowRunPolicy(input.runPolicy),
           schedule:
             input.schedule === undefined
               ? currentWorkflow.schedule
@@ -329,6 +340,7 @@ function normalizeStoredWorkflow(
       Array.isArray(workflow.actionRefs) ? workflow.actionRefs : [],
     ),
     permissions: normalizeDevicePolicy(workflow.permissions),
+    runPolicy: normalizeWorkflowRunPolicy(workflow.runPolicy),
     schedule: normalizeWorkflowSchedule(workflow.schedule),
     state: workflow.state ?? defaultWorkflowState,
   }

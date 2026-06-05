@@ -678,7 +678,7 @@ export function SettingsCategoryContent({
         {syncResult ? (
           <p className="panel-success">
             가져오기 완료: 이벤트 {syncResult.workflowRunEventsAdded}개, 기기{' '}
-            {syncResult.linkedDevicesMerged}개 병합
+            {syncResult.linkedDevicesMerged}개, Todo {syncResult.todosMerged}개 병합
           </p>
         ) : null}
       </Card>

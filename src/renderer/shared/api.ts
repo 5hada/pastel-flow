@@ -1,4 +1,5 @@
 import type { ActionsApi } from "../features/actions/actionsApi"
+import type { ExternalBridgeApi } from "../features/externalBridge/externalBridgeApi"
 import type { SecretsApi } from "../features/secrets/secretsApi"
 import type { SettingsApi } from "../features/settings/settingsApi"
 import type { SyncApi } from "../features/sync/syncApi"
@@ -9,6 +10,7 @@ import type { WorkflowsApi } from "../features/workflows/workflowsApi"
 
 export type PastelFlowApi = {
   actions: ActionsApi
+  externalBridge: ExternalBridgeApi
   secrets: SecretsApi
   settings: SettingsApi
   sync: SyncApi

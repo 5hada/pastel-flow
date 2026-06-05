@@ -21,6 +21,7 @@ import type {
 } from '../state/taskTypes'
 import type { SyncStatus } from '../../../shared/sync'
 import type { RegisteredToolModule, ToolModuleField } from '../../../shared/tools'
+import type { WorkflowDefinition } from '../../../shared/workflows'
 import type { NavigationCategory, WorkspaceMode } from '../state/taskFormState'
 import { normalizeCrawlerConfig } from './taskFormTransforms'
 
@@ -291,6 +292,37 @@ export function getTaskScheduleLabel(schedule?: TaskSchedule): string {
         schedule.nextRunAt,
       )}`
   }
+}
+
+export function getWorkflowRunPolicyLabel(
+  runPolicy: WorkflowDefinition['runPolicy'],
+): string {
+  if (!runPolicy) {
+    return '기본'
+  }
+
+  const parts: string[] = []
+  if (runPolicy.allowedActors?.length) {
+    parts.push(`허용 ${runPolicy.allowedActors.length}개`)
+  }
+
+  if (runPolicy.allowSchedule === false) {
+    parts.push('Schedule 차단')
+  }
+
+  if (runPolicy.requiresConfirmation) {
+    parts.push('확인 필요')
+  }
+
+  if (runPolicy.maxRunsPerHour) {
+    parts.push(`시간당 ${runPolicy.maxRunsPerHour}회`)
+  }
+
+  if (runPolicy.allowedExternalClientIds?.length) {
+    parts.push(`외부 client ${runPolicy.allowedExternalClientIds.length}개`)
+  }
+
+  return parts.length > 0 ? parts.join(' · ') : '기본'
 }
 
 export function formatDaysOfWeek(daysOfWeek: TaskSchedule['daysOfWeek']): string {

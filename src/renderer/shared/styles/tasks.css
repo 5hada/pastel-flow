@@ -19,6 +19,20 @@
   font-size: 0.86rem;
 }
 
+.workflow-run-policy {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--surface);
+}
+
+.workflow-run-policy-actors {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .workflow-name-form,
 .workflow-title-form,
 .workflow-title-row {

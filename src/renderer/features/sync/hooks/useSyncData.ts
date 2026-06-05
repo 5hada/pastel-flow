@@ -45,7 +45,7 @@ export function useSyncData({
       setSyncResult(null)
       const snapshot = await window.pastelFlow.sync.export()
       setSyncMessage(
-        `${snapshot.actions.length}개 Action, ${snapshot.workflows.length}개 Workflow, ${snapshot.workflowRunEvents.length}개 실행 이벤트를 내보냈습니다.`,
+        `${snapshot.actions.length}개 Action, ${snapshot.workflows.length}개 Workflow, ${snapshot.todos.length}개 Todo, ${snapshot.workflowRunEvents.length}개 실행 이벤트를 내보냈습니다.`,
       )
       await loadSyncStatus()
     } catch (error) {
@@ -67,7 +67,7 @@ export function useSyncData({
       }
 
       setSyncMessage(
-        `${snapshot.actions.length}개 Action과 ${snapshot.workflows.length}개 Workflow를 외부 JSON 파일로 내보냈습니다.`,
+        `${snapshot.actions.length}개 Action, ${snapshot.workflows.length}개 Workflow, ${snapshot.todos.length}개 Todo를 외부 JSON 파일로 내보냈습니다.`,
       )
       await loadSyncStatus()
     } catch (error) {

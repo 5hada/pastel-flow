@@ -10,6 +10,7 @@ export type TodoStore = {
   listTodos(input?: ListTodosInput): Promise<TodoItem[]>
   createTodo(input: CreateTodoInput): Promise<TodoItem>
   updateTodo(id: string, input: UpdateTodoInput): Promise<TodoItem>
+  replaceTodos(todos: TodoItem[]): Promise<void>
   deleteTodo(id: string): Promise<void>
 }
 
@@ -58,36 +59,7 @@ export function createTodoStore({ database }: TodoStoreOptions): TodoStore {
         updatedAt: now,
       }
 
-      database
-        .prepare(
-          `
-          INSERT INTO todos (
-            id,
-            title,
-            due_at,
-            category,
-            details,
-            completed,
-            completed_at,
-            deleted_at,
-            created_at,
-            updated_at
-          )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `,
-        )
-        .run(
-          todo.id,
-          todo.title,
-          todo.dueAt ?? null,
-          todo.category ?? null,
-          todo.details ?? null,
-          0,
-          null,
-          null,
-          todo.createdAt,
-          todo.updatedAt,
-        )
+      insertTodo(database, todo)
 
       return todo
     },
@@ -154,6 +126,16 @@ export function createTodoStore({ database }: TodoStoreOptions): TodoStore {
       return updatedTodo
     },
 
+    async replaceTodos(todos) {
+      const replaceMany = database.transaction((nextTodos: TodoItem[]) => {
+        database.prepare('DELETE FROM todos').run()
+        for (const todo of nextTodos) {
+          insertTodo(database, normalizeTodoItem(todo))
+        }
+      })
+      replaceMany(todos)
+    },
+
     async deleteTodo(id) {
       getTodo(database, id)
       const now = new Date().toISOString()
@@ -167,6 +149,54 @@ export function createTodoStore({ database }: TodoStoreOptions): TodoStore {
         )
         .run(now, now, id)
     },
+  }
+}
+
+function insertTodo(database: SqliteDatabase, todo: TodoItem): void {
+  database
+    .prepare(
+      `
+      INSERT INTO todos (
+        id,
+        title,
+        due_at,
+        category,
+        details,
+        completed,
+        completed_at,
+        deleted_at,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+    )
+    .run(
+      todo.id,
+      todo.title,
+      todo.dueAt ?? null,
+      todo.category ?? null,
+      todo.details ?? null,
+      todo.completed ? 1 : 0,
+      todo.completedAt ?? null,
+      todo.deletedAt ?? null,
+      todo.createdAt,
+      todo.updatedAt,
+    )
+}
+
+function normalizeTodoItem(todo: TodoItem): TodoItem {
+  return {
+    id: typeof todo.id === 'string' && todo.id.trim() ? todo.id.trim() : randomUUID(),
+    title: normalizeTitle(todo.title),
+    dueAt: normalizeOptionalString(todo.dueAt),
+    category: normalizeOptionalString(todo.category),
+    details: normalizeOptionalString(todo.details),
+    completed: todo.completed === true,
+    completedAt: normalizeOptionalString(todo.completedAt),
+    deletedAt: normalizeOptionalString(todo.deletedAt),
+    createdAt: normalizeOptionalString(todo.createdAt) ?? new Date().toISOString(),
+    updatedAt: normalizeOptionalString(todo.updatedAt) ?? new Date().toISOString(),
   }
 }
 

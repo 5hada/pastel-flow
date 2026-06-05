@@ -1,6 +1,6 @@
 import type { ActionRuntimeState } from '../actions'
 import type { DevicePolicy } from '../devices'
-import type { RunStatus } from '../runStatus'
+import type { RunStatus, WorkflowRunActorType } from '../runStatus'
 
 export type WorkflowScheduleMode = 'interval' | 'daily' | 'weekly'
 
@@ -46,10 +46,19 @@ export type WorkflowDefinition = {
   name: string
   actionRefs: WorkflowActionRef[]
   permissions: DevicePolicy
+  runPolicy?: WorkflowRunPolicy
   schedule?: WorkflowSchedule
   state: WorkflowState
   createdAt: string
   updatedAt: string
+}
+
+export type WorkflowRunPolicy = {
+  allowedActors?: WorkflowRunActorType[]
+  allowedExternalClientIds?: string[]
+  requiresConfirmation?: boolean
+  maxRunsPerHour?: number
+  allowSchedule?: boolean
 }
 
 export type WorkflowState = {

@@ -99,6 +99,11 @@ const pastelFlowApi = {
       return invoke(ipcRequestChannels.todos.delete, id)
     },
   },
+  externalBridge: {
+    getSchema() {
+      return invoke(ipcRequestChannels.externalBridge.getSchema)
+    },
+  },
   tasks: {
     list() {
       return invoke(ipcRequestChannels.tasks.list)

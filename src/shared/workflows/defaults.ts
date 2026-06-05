@@ -1,9 +1,11 @@
 import type {
   DayOfWeek,
+  WorkflowRunPolicy,
   WorkflowSchedule,
   WorkflowScheduleMode,
   WorkflowState,
 } from './types'
+import type { WorkflowRunActorType } from '../runStatus'
 
 export const defaultWorkflowState: WorkflowState = {
   status: 'idle',
@@ -40,6 +42,33 @@ export function normalizeWorkflowSchedule(
   }
 }
 
+export function normalizeWorkflowRunPolicy(
+  runPolicy: Partial<WorkflowRunPolicy> | null | undefined,
+): WorkflowRunPolicy | undefined {
+  if (!runPolicy) {
+    return undefined
+  }
+
+  const allowedActors = normalizeWorkflowRunActors(runPolicy.allowedActors)
+  const allowedExternalClientIds = normalizeStringList(
+    runPolicy.allowedExternalClientIds,
+  )
+  const maxRunsPerHour = normalizeMaxRunsPerHour(runPolicy.maxRunsPerHour)
+  const normalized: WorkflowRunPolicy = {
+    allowedActors,
+    allowedExternalClientIds,
+    requiresConfirmation:
+      runPolicy.requiresConfirmation === true ? true : undefined,
+    maxRunsPerHour,
+    allowSchedule:
+      runPolicy.allowSchedule === false ? false : undefined,
+  }
+
+  return Object.values(normalized).some((value) => value !== undefined)
+    ? normalized
+    : undefined
+}
+
 function normalizeScheduleInterval(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return defaultWorkflowSchedule.intervalMinutes
@@ -73,4 +102,47 @@ function normalizeDaysOfWeek(value: unknown): DayOfWeek[] | undefined {
 
 function isWorkflowScheduleMode(value: unknown): value is WorkflowScheduleMode {
   return value === 'interval' || value === 'daily' || value === 'weekly'
+}
+
+function normalizeWorkflowRunActors(
+  value: unknown,
+): WorkflowRunActorType[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined
+  }
+
+  const actors = value.filter(isWorkflowRunActorType)
+  return actors.length > 0 ? [...new Set(actors)] : undefined
+}
+
+function isWorkflowRunActorType(value: unknown): value is WorkflowRunActorType {
+  return (
+    value === 'user' ||
+    value === 'schedule' ||
+    value === 'browser_extension' ||
+    value === 'external_bridge'
+  )
+}
+
+function normalizeStringList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined
+  }
+
+  const items = value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  return items.length > 0 ? [...new Set(items)] : undefined
+}
+
+function normalizeMaxRunsPerHour(value: unknown): number | undefined {
+  const numericValue = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(numericValue)) {
+    return undefined
+  }
+
+  const normalizedValue = Math.floor(numericValue)
+  return normalizedValue > 0 ? Math.min(normalizedValue, 10_000) : undefined
 }

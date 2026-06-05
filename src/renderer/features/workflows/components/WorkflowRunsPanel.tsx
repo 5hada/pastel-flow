@@ -1,6 +1,7 @@
 import { Button } from '@heroui/react'
 import type { ActionRun, WorkflowRun } from '../../../../shared/runStatus'
 import type { WorkflowArtifact } from '../../../../shared/artifacts'
+import type { UrlGroupItemRun } from '../../../../shared/urlGroups'
 import { formatDate } from '../../../shared/utils/viewLabels'
 
 export type WorkflowRunsPanelProps = {
@@ -8,6 +9,7 @@ export type WorkflowRunsPanelProps = {
   artifacts: WorkflowArtifact[]
   runs: WorkflowRun[]
   selectedRunId: string | null
+  urlGroupItemRuns: UrlGroupItemRun[]
   onSelectRun(runId: string): void
 }
 
@@ -16,6 +18,7 @@ export function WorkflowRunsPanel({
   artifacts,
   runs,
   selectedRunId,
+  urlGroupItemRuns,
   onSelectRun,
 }: WorkflowRunsPanelProps) {
   const selectedRun = runs.find((run) => run.id === selectedRunId) ?? null
@@ -102,6 +105,27 @@ export function WorkflowRunsPanel({
                 ))}
               </div>
             ) : null}
+
+            {urlGroupItemRuns.length > 0 ? (
+              <div className="artifact-list" aria-label="URL 실행 목록">
+                <strong>URL Runs</strong>
+                {urlGroupItemRuns.map((itemRun) => (
+                  <div className="artifact-row" key={itemRun.id}>
+                    <span className={`status-pill status-${itemRun.status}`}>
+                      {getUrlGroupItemRunStatusLabel(itemRun.status)}
+                    </span>
+                    <div>
+                      <strong>{itemRun.url}</strong>
+                      <small>
+                        {formatDate(itemRun.startedAt ?? itemRun.createdAt)}
+                        {itemRun.endedAt ? ` - ${formatDate(itemRun.endedAt)}` : ''}
+                      </small>
+                      {itemRun.error ? <small>{itemRun.error}</small> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
       )}
@@ -152,6 +176,21 @@ function getActionRunStatusLabel(status: ActionRun['status']): string {
       return '실패'
     case 'cancelled':
       return '취소'
+    case 'skipped':
+      return '건너뜀'
+  }
+}
+
+function getUrlGroupItemRunStatusLabel(
+  status: UrlGroupItemRun['status'],
+): string {
+  switch (status) {
+    case 'running':
+      return '실행 중'
+    case 'succeeded':
+      return '완료'
+    case 'failed':
+      return '실패'
     case 'skipped':
       return '건너뜀'
   }

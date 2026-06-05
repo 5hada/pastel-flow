@@ -31,7 +31,12 @@ export function registerToolModuleIpc(
       return undefined
     }
 
-    return toolModuleStore.registerToolRootFromPath(result.filePaths[0])
+    const registeredTools = await toolModuleStore.registerToolRootFromPath(
+      result.filePaths[0],
+    )
+    await syncToolActionsWithManifests(registeredTools, workflowStore)
+
+    return registeredTools
   })
   ipcMain.handle(ipcRequestChannels.tools.run, (_event, toolId, input) =>
     toolModuleRunner.runTool(
@@ -41,7 +46,7 @@ export function registerToolModuleIpc(
         : {},
     ),
   )
-  ipcMain.handle(ipcRequestChannels.tools.createAction, async (_event, toolId) => {
+  ipcMain.handle(ipcRequestChannels.tools.createAction, async (_event, toolId, inputDefaults) => {
     const tool = await toolModuleStore.getTool(assertString(toolId, 'Tool ID'))
     return workflowStore.createAction({
       name: tool.manifest.name,
@@ -49,23 +54,80 @@ export function registerToolModuleIpc(
       config: {
         toolId: tool.id,
         version: tool.manifest.version,
+        inputDefaults: normalizeToolInputDefaults(
+          inputDefaults,
+          tool.manifest.inputs,
+        ),
       },
-      inputSchema: tool.manifest.inputs.map((field) => ({
-        id: field.key,
-        name: field.key,
-        type: mapToolFieldTypeToActionIoType(field),
-        required: field.required,
-        description: field.description,
-      })),
-      outputSchema: tool.manifest.outputs.map((field) => ({
-        id: field.key,
-        name: field.key,
-        type: mapToolFieldTypeToActionIoType(field),
-        required: field.required,
-        description: field.description,
-      })),
+      inputSchema: createActionInputSchema(tool.manifest.inputs),
+      outputSchema: createActionInputSchema(tool.manifest.outputs),
     })
   })
+}
+
+async function syncToolActionsWithManifests(
+  tools: Awaited<ReturnType<ToolModuleStore['registerToolRootFromPath']>>,
+  workflowStore: WorkflowStore,
+): Promise<void> {
+  const toolById = new Map(tools.map((tool) => [tool.id, tool]))
+  const actions = await workflowStore.listActions()
+
+  await Promise.all(
+    actions.flatMap((action) => {
+      if (action.type !== 'tool_action' || !isRecord(action.config)) {
+        return []
+      }
+
+      const toolId = typeof action.config.toolId === 'string'
+        ? action.config.toolId
+        : undefined
+      const tool = toolId ? toolById.get(toolId) : undefined
+      if (!tool) {
+        return []
+      }
+
+      return workflowStore.updateAction(action.id, {
+        config: {
+          ...action.config,
+          version: tool.manifest.version,
+        },
+        inputSchema: createActionInputSchema(tool.manifest.inputs),
+        outputSchema: createActionInputSchema(tool.manifest.outputs),
+      })
+    }),
+  )
+}
+
+function normalizeToolInputDefaults(
+  value: unknown,
+  fields: ToolModuleField[],
+): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined
+  }
+
+  const input = value as Record<string, unknown>
+  const entries = fields.flatMap((field) => {
+    const fieldValue = input[field.key]
+
+    if (fieldValue === undefined || fieldValue === null || fieldValue === '') {
+      return []
+    }
+
+    return [[field.key, fieldValue]]
+  })
+
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined
+}
+
+function createActionInputSchema(fields: ToolModuleField[]): ActionIOField[] {
+  return fields.map((field) => ({
+    id: field.key,
+    name: field.key,
+    type: mapToolFieldTypeToActionIoType(field),
+    required: field.required,
+    description: field.description,
+  }))
 }
 
 function mapToolFieldTypeToActionIoType(
@@ -100,4 +162,8 @@ function assertString(value: unknown, label: string): string {
   }
 
   return value
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }

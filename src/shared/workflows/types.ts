@@ -20,8 +20,25 @@ export type WorkflowActionRef = {
   id: string
   actionId: string
   order: number
-  inputMapping?: Record<string, string>
+  inputMapping?: WorkflowInputMapping
+  retryPolicy?: WorkflowActionRetryPolicy
   enabled: boolean
+}
+
+export type WorkflowActionRetryPolicy = {
+  retryCount: number
+  retryDelaySeconds: number
+}
+
+export type WorkflowInputMapping = Record<
+  string,
+  WorkflowInputMappingSource
+>
+
+export type WorkflowInputMappingSource = {
+  actionRefId: string
+  outputKey?: string
+  path?: string
 }
 
 export type WorkflowDefinition = {

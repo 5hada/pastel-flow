@@ -198,7 +198,7 @@ function createToolContext(
     network: permissions.includes('network')
       ? {
           async fetch(input, init) {
-            assertExternalHttpUrl(input)
+            assertExternalHttpUrl(input, manifest.networkAllowlist)
             const response = await fetch(input, init)
             const contentType = response.headers.get('content-type') ?? ''
             return contentType.includes('application/json')
@@ -311,7 +311,10 @@ function isPathInside(rootPath: string, targetPath: string): boolean {
   )
 }
 
-function assertExternalHttpUrl(value: string): void {
+function assertExternalHttpUrl(
+  value: string,
+  allowlist: string[] | undefined,
+): void {
   let url: URL
 
   try {
@@ -323,6 +326,34 @@ function assertExternalHttpUrl(value: string): void {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new Error(`network.fetch는 http/https URL만 허용합니다: ${value}`)
   }
+
+  if (!allowlist || allowlist.length === 0) {
+    throw new Error('network.fetch는 manifest.networkAllowlist 선언이 필요합니다.')
+  }
+
+  if (!allowlist.some((pattern) => matchesNetworkAllowlist(url, pattern))) {
+    throw new Error(`network.fetch URL이 allowlist에 없습니다: ${value}`)
+  }
+}
+
+function matchesNetworkAllowlist(url: URL, pattern: string): boolean {
+  const normalizedPattern = pattern.trim().toLowerCase()
+  const hostname = url.hostname.toLowerCase()
+
+  if (!normalizedPattern) {
+    return false
+  }
+
+  if (normalizedPattern.startsWith('http://') || normalizedPattern.startsWith('https://')) {
+    return url.href.toLowerCase().startsWith(normalizedPattern)
+  }
+
+  if (normalizedPattern.startsWith('*.')) {
+    const baseHost = normalizedPattern.slice(2)
+    return hostname === baseHost || hostname.endsWith(`.${baseHost}`)
+  }
+
+  return hostname === normalizedPattern
 }
 
 function validateOutputKeys(

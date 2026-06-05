@@ -81,8 +81,22 @@ const pastelFlowApi = {
     run(toolId: string, input: unknown) {
       return invoke(ipcRequestChannels.tools.run, toolId, input)
     },
-    createAction(toolId: string) {
-      return invoke(ipcRequestChannels.tools.createAction, toolId)
+    createAction(toolId: string, inputDefaults?: Record<string, unknown>) {
+      return invoke(ipcRequestChannels.tools.createAction, toolId, inputDefaults)
+    },
+  },
+  todos: {
+    list(input?: unknown) {
+      return invoke(ipcRequestChannels.todos.list, input)
+    },
+    create(input: unknown) {
+      return invoke(ipcRequestChannels.todos.create, input)
+    },
+    update(id: string, input: unknown) {
+      return invoke(ipcRequestChannels.todos.update, id, input)
+    },
+    delete(id: string) {
+      return invoke(ipcRequestChannels.todos.delete, id)
     },
   },
   tasks: {
@@ -172,6 +186,9 @@ const pastelFlowApi = {
     },
     listActionRuns(runId: string) {
       return invoke(ipcRequestChannels.workflows.listActionRuns, runId)
+    },
+    listUrlItemRuns(input: unknown) {
+      return invoke(ipcRequestChannels.workflows.listUrlItemRuns, input)
     },
     listArtifacts(input: unknown) {
       return invoke(ipcRequestChannels.workflows.listArtifacts, input)

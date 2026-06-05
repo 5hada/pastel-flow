@@ -10,6 +10,7 @@ import {
   normalizeWorkflowSchedule,
   type WorkflowActionRef,
   type WorkflowDefinition,
+  type WorkflowInputMapping,
   type WorkflowState,
 } from './workflows'
 import type { RunStatus, WorkflowRunEvent } from './runStatus'
@@ -208,7 +209,7 @@ function normalizeWorkflowActionRefs(value: unknown[]): WorkflowActionRef[] {
           typeof actionRef.order === 'number' && Number.isFinite(actionRef.order)
             ? actionRef.order
             : index,
-        inputMapping: normalizeStringRecord(actionRef.inputMapping),
+        inputMapping: normalizeWorkflowInputMapping(actionRef.inputMapping),
         enabled: actionRef.enabled !== false,
       }
     })
@@ -301,6 +302,7 @@ function sanitizeActionConfig(
     case 'discord_dry_run_action':
     case 'notion_dry_run_action':
     case 'trading_dry_run_action':
+    case 'transform_action':
       return config
   }
 }
@@ -389,14 +391,33 @@ function normalizeActionIoFields(value: unknown): ActionIOField[] | undefined {
   return fields.length > 0 ? fields : undefined
 }
 
-function normalizeStringRecord(value: unknown): Record<string, string> | undefined {
+function normalizeWorkflowInputMapping(
+  value: unknown,
+): WorkflowInputMapping | undefined {
   if (!isRecord(value)) {
     return undefined
   }
 
-  const entries = Object.entries(value).flatMap(([key, item]) =>
-    isNonEmptyString(key) && typeof item === 'string' ? [[key, item]] : [],
-  )
+  const entries = Object.entries(value).flatMap(([key, item]) => {
+    if (!isNonEmptyString(key) || !isRecord(item)) {
+      return []
+    }
+
+    if (!isNonEmptyString(item.actionRefId)) {
+      return []
+    }
+
+    return [
+      [
+        key,
+        {
+          actionRefId: item.actionRefId.trim(),
+          outputKey: optionalString(item.outputKey),
+          path: optionalString(item.path),
+        },
+      ],
+    ]
+  })
 
   return entries.length > 0 ? Object.fromEntries(entries) : undefined
 }
@@ -408,6 +429,7 @@ function isActionType(value: unknown): value is ActionType {
     value === 'discord_dry_run_action' ||
     value === 'notion_dry_run_action' ||
     value === 'trading_dry_run_action' ||
+    value === 'transform_action' ||
     value === 'tool_action'
   )
 }

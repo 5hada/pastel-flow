@@ -213,4 +213,76 @@ const migrations: Array<{
         .run()
     },
   },
+  {
+    id: '006_create_url_group_item_runs',
+    up(database) {
+      database
+        .prepare(
+          `
+          CREATE TABLE url_group_item_runs (
+            id TEXT PRIMARY KEY,
+            run_id TEXT NOT NULL,
+            workflow_id TEXT NOT NULL,
+            action_run_id TEXT NOT NULL,
+            url_group_id TEXT NOT NULL,
+            url_item_id TEXT NOT NULL,
+            url TEXT NOT NULL,
+            status TEXT NOT NULL,
+            started_at TEXT,
+            ended_at TEXT,
+            message TEXT,
+            error TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (run_id) REFERENCES workflow_runs(id) ON DELETE CASCADE,
+            FOREIGN KEY (action_run_id) REFERENCES action_runs(id) ON DELETE CASCADE
+          )
+          `,
+        )
+        .run()
+      database
+        .prepare(
+          'CREATE INDEX url_group_item_runs_action_idx ON url_group_item_runs (action_run_id, created_at ASC)',
+        )
+        .run()
+      database
+        .prepare(
+          'CREATE INDEX url_group_item_runs_run_idx ON url_group_item_runs (run_id, created_at ASC)',
+        )
+        .run()
+    },
+  },
+  {
+    id: '007_create_todos',
+    up(database) {
+      database
+        .prepare(
+          `
+          CREATE TABLE todos (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            due_at TEXT,
+            category TEXT,
+            details TEXT,
+            completed INTEGER NOT NULL,
+            completed_at TEXT,
+            deleted_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          )
+          `,
+        )
+        .run()
+      database
+        .prepare(
+          'CREATE INDEX todos_active_due_idx ON todos (deleted_at, completed, due_at)',
+        )
+        .run()
+      database
+        .prepare(
+          'CREATE INDEX todos_updated_idx ON todos (updated_at DESC)',
+        )
+        .run()
+    },
+  },
 ]

@@ -107,6 +107,7 @@ export type ToolModuleManifest = {
   outputs: ToolModuleOutputField[]
   indexing?: ToolModuleIndexing
   permissions: ToolModulePermission[]
+  networkAllowlist?: string[]
 }
 
 export type ToolModuleOutputField = ToolModuleField & {

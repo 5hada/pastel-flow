@@ -216,6 +216,8 @@ export function getWorkspaceModeLabel(workspaceMode: WorkspaceMode): string {
       return 'Workflow'
     case 'urlGroups':
       return 'URL Groups'
+    case 'todos':
+      return 'Todos'
     case 'tools':
       return '도구'
     case 'settings':

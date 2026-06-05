@@ -19,8 +19,11 @@ import { createMockSyncStore } from '../sync/store/mockSyncStore'
 import { registerToolModuleIpc } from '../tools/ipc/toolModuleIpc'
 import { createToolModuleRunner } from '../tools/runner/toolModuleRunner'
 import { createToolModuleStore } from '../tools/store/toolModuleStore'
+import { registerTodoIpc } from '../todos/ipc/todoIpc'
+import { createTodoStore } from '../todos/store/todoStore'
 import { createSqliteDatabase } from '../database/sqliteDatabase'
 import { registerUrlGroupIpc } from '../urlGroups/ipc/urlGroupIpc'
+import { createUrlGroupItemRunStore } from '../urlGroups/store/urlGroupItemRunStore'
 import { createUrlGroupStore } from '../urlGroups/store/urlGroupStore'
 import { createWorkflowArtifactWriter } from '../workflows/artifacts/workflowArtifactWriter'
 import { registerWorkflowIpc } from '../workflows/ipc/workflowIpc'
@@ -76,6 +79,12 @@ export async function initializeMainProcessServices(dataDir: string): Promise<vo
   const urlGroupStore = createUrlGroupStore({
     database,
   })
+  const urlGroupItemRunStore = createUrlGroupItemRunStore({
+    database,
+  })
+  const todoStore = createTodoStore({
+    database,
+  })
   const workflowArtifactWriter = createWorkflowArtifactWriter({
     artifactStore: workflowArtifactStore,
     dataDir,
@@ -117,6 +126,7 @@ export async function initializeMainProcessServices(dataDir: string): Promise<vo
     workflowArtifactWriter,
     workflowStore,
     urlGroupStore,
+    urlGroupItemRunStore,
     toolModuleRunner,
   })
 
@@ -131,6 +141,7 @@ export async function initializeMainProcessServices(dataDir: string): Promise<vo
     toolModuleRunner,
     workflowStore,
   )
+  registerTodoIpc(ipcMain, todoStore)
   registerUrlGroupIpc(ipcMain, urlGroupStore)
   registerWorkflowIpc(
     ipcMain,
@@ -139,6 +150,7 @@ export async function initializeMainProcessServices(dataDir: string): Promise<vo
     workflowRunEventStore,
     workflowRunStore,
     workflowArtifactStore,
+    urlGroupItemRunStore,
     appSettingsStore,
     deviceStore,
   )

@@ -1,5 +1,6 @@
 import type { WorkflowDefinition } from "../../../shared/workflows"
 import type { WorkflowArtifact } from "../../../shared/artifacts"
+import type { UrlGroupItemRun } from "../../../shared/urlGroups"
 import type {
   ActionRun,
   WorkflowRun,
@@ -19,6 +20,7 @@ export type WorkflowsApi = {
   stop(id: string): Promise<WorkflowDefinition>
   listRuns(workflowId?: string): Promise<WorkflowRun[]>
   listActionRuns(runId: string): Promise<ActionRun[]>
+  listUrlItemRuns(input: ListUrlGroupItemRunsInput): Promise<UrlGroupItemRun[]>
   listArtifacts(input: ListWorkflowArtifactsInput): Promise<WorkflowArtifact[]>
   listEvents(workflowId?: string): Promise<WorkflowRunEvent[]>
   pruneEvents(): Promise<number>
@@ -27,6 +29,13 @@ export type WorkflowsApi = {
 }
 
 export type ListWorkflowArtifactsInput = {
+  runId?: string
+  actionRunId?: string
+  workflowId?: string
+  limit?: number
+}
+
+export type ListUrlGroupItemRunsInput = {
   runId?: string
   actionRunId?: string
   workflowId?: string

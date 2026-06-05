@@ -4,6 +4,7 @@ import { useActionWorkflowData } from '../../features/actions/hooks/useActionWor
 import { useAppSettingsData } from '../../features/settings/hooks/useAppSettingsData'
 import { useSecretsData } from '../../features/secrets/hooks/useSecretsData'
 import { useSyncData } from '../../features/sync/hooks/useSyncData'
+import { useTodosData } from '../../features/todos/hooks/useTodosData'
 import { useToolModulesData } from '../../features/tools/hooks/useToolModulesData'
 import { useUrlGroupsData } from '../../features/urlGroups/hooks/useUrlGroupsData'
 import type { WorkflowsApi } from '../../features/workflows/workflowsApi'
@@ -26,6 +27,7 @@ import type {
   WorkspaceFolderScope,
 } from '../../../shared/settings'
 import type { WorkflowArtifact } from '../../../shared/artifacts'
+import type { UrlGroupItemRun } from '../../../shared/urlGroups'
 import {
   createDevicePolicyFromForm,
   createTaskConfigFromForm,
@@ -57,6 +59,7 @@ export function usePastelFlowApp() {
   const [selectedWorkflowRunId, setSelectedWorkflowRunId] = useState<string | null>(null)
   const [actionRuns, setActionRuns] = useState<ActionRun[]>([])
   const [workflowArtifacts, setWorkflowArtifacts] = useState<WorkflowArtifact[]>([])
+  const [urlGroupItemRuns, setUrlGroupItemRuns] = useState<UrlGroupItemRun[]>([])
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const actionWorkflow = useActionWorkflowData(setErrorMessage)
@@ -69,6 +72,7 @@ export function usePastelFlowApp() {
     setErrorMessage,
     actionWorkflow.loadActionWorkflowData,
   )
+  const todos = useTodosData(setErrorMessage)
   const urlGroups = useUrlGroupsData(setErrorMessage)
   const sync = useSyncData({
     loadAppSettings: settings.loadAppSettings,
@@ -83,6 +87,7 @@ export function usePastelFlowApp() {
     void secrets.loadSecrets()
     void secrets.loadSecretStorageStatus()
     void sync.loadSyncStatus()
+    void todos.loadTodos()
     void tools.loadToolModules()
     void urlGroups.loadUrlGroups()
     void actionWorkflow.loadActionWorkflowData()
@@ -139,6 +144,7 @@ export function usePastelFlowApp() {
   async function reloadWorkspaceData() {
     await Promise.all([
       actionWorkflow.loadActionWorkflowData(),
+      todos.loadTodos(),
       tools.loadToolModules(),
       urlGroups.loadUrlGroups(),
       settings.loadAppSettings(),
@@ -175,6 +181,13 @@ export function usePastelFlowApp() {
     urlGroups.setSelectedUrlGroupId(null)
     setWorkspaceMode('urlGroups')
     void urlGroups.loadUrlGroups()
+  }
+
+  function openTodosMode() {
+    setSelectedCollectionFolderId('all')
+    todos.setSelectedTodoId(null)
+    setWorkspaceMode('todos')
+    void todos.loadTodos()
   }
 
   function selectWorkflow(workflow: WorkflowDefinition) {
@@ -344,6 +357,7 @@ export function usePastelFlowApp() {
         setSelectedWorkflowRunId(null)
         setActionRuns([])
         setWorkflowArtifacts([])
+        setUrlGroupItemRuns([])
         return
       }
 
@@ -355,16 +369,20 @@ export function usePastelFlowApp() {
       setWorkflowRuns(runs)
       const nextSelectedRunId = runs[0]?.id ?? null
       setSelectedWorkflowRunId(nextSelectedRunId)
-      const [nextActionRuns, nextArtifacts] = nextSelectedRunId
+      const [nextActionRuns, nextArtifacts, nextUrlGroupItemRuns] = nextSelectedRunId
         ? await Promise.all([
             window.pastelFlow.workflows.listActionRuns(nextSelectedRunId),
             window.pastelFlow.workflows.listArtifacts({
               runId: nextSelectedRunId,
             }),
+            window.pastelFlow.workflows.listUrlItemRuns({
+              runId: nextSelectedRunId,
+            }),
           ])
-        : [[], []]
+        : [[], [], []]
       setActionRuns(nextActionRuns)
       setWorkflowArtifacts(nextArtifacts)
+      setUrlGroupItemRuns(nextUrlGroupItemRuns)
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     }
@@ -380,16 +398,19 @@ export function usePastelFlowApp() {
         setSelectedWorkflowRunId(null)
         setActionRuns([])
         setWorkflowArtifacts([])
+        setUrlGroupItemRuns([])
         return
       }
 
       setSelectedWorkflowRunId(runId)
-      const [nextActionRuns, nextArtifacts] = await Promise.all([
+      const [nextActionRuns, nextArtifacts, nextUrlGroupItemRuns] = await Promise.all([
         window.pastelFlow.workflows.listActionRuns(runId),
         window.pastelFlow.workflows.listArtifacts({ runId }),
+        window.pastelFlow.workflows.listUrlItemRuns({ runId }),
       ])
       setActionRuns(nextActionRuns)
       setWorkflowArtifacts(nextArtifacts)
+      setUrlGroupItemRuns(nextUrlGroupItemRuns)
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     }
@@ -401,6 +422,7 @@ export function usePastelFlowApp() {
     setSelectedWorkflowRunId(null)
     setActionRuns([])
     setWorkflowArtifacts([])
+    setUrlGroupItemRuns([])
   }
 
   async function handleRunWorkflow(workflowId: string) {
@@ -504,8 +526,12 @@ export function usePastelFlowApp() {
     workflowRunEvents,
     workflowRuns,
     workflowArtifacts,
+    urlGroupItemRuns,
     selectedWorkflowRunId,
     toolInputValues: tools.toolInputValues,
+    todos: todos.todos,
+    selectedTodoId: todos.selectedTodoId,
+    includeCompletedTodos: todos.includeCompletedTodos,
     urlGroups: urlGroups.urlGroups,
     selectedUrlGroupId: urlGroups.selectedUrlGroupId,
     toolMessage: tools.toolMessage,
@@ -553,6 +579,7 @@ export function usePastelFlowApp() {
     openCategory,
     openRunMode,
     openSettingsMode,
+    openTodosMode,
     openToolsMode,
     openUrlGroupsMode,
     openWorkflowMode,
@@ -567,6 +594,7 @@ export function usePastelFlowApp() {
     setSelectedCollectionFolderId,
     setSelectedSettingsCategory,
     setSelectedToolId: tools.setSelectedToolId,
+    setSelectedTodoId: todos.setSelectedTodoId,
     setSelectedUrlGroupId: urlGroups.setSelectedUrlGroupId,
     setSelectedWorkflowId: actionWorkflow.setSelectedWorkflowId,
     setSettingsForm: settings.setSettingsForm,
@@ -574,8 +602,15 @@ export function usePastelFlowApp() {
     setToolMessage: tools.setToolMessage,
     setToolRunResult: tools.setToolRunResult,
     createWorkspaceFolder,
+    handleCreateTodo: todos.createTodo,
     handleCreateUrlGroup: urlGroups.createUrlGroup,
+    handleDeleteTodo: todos.deleteTodo,
     handleDeleteUrlGroup: urlGroups.deleteUrlGroup,
+    handleIncludeCompletedTodosChange(value: boolean) {
+      todos.setIncludeCompletedTodos(value)
+      void todos.loadTodos({ includeCompleted: value })
+    },
+    handleUpdateTodo: todos.updateTodo,
     handleUpdateUrlGroup: urlGroups.updateUrlGroup,
     deleteWorkspaceFolder,
     moveWorkspaceFolder,
@@ -621,11 +656,13 @@ function hasWorkflowRunHistoryApi(
 ): workflowsApi is WorkflowsApi & {
   listRuns: WorkflowsApi['listRuns']
   listActionRuns: WorkflowsApi['listActionRuns']
+  listUrlItemRuns: WorkflowsApi['listUrlItemRuns']
   listArtifacts: WorkflowsApi['listArtifacts']
 } {
   return (
     typeof workflowsApi.listRuns === 'function' &&
     typeof workflowsApi.listActionRuns === 'function' &&
+    typeof workflowsApi.listUrlItemRuns === 'function' &&
     typeof workflowsApi.listArtifacts === 'function'
   )
 }

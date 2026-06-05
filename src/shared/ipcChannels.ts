@@ -22,6 +22,12 @@ export const ipcRequestChannels = {
     run: 'tools:run',
     createAction: 'tools:create-action',
   },
+  todos: {
+    list: 'todos:list',
+    create: 'todos:create',
+    update: 'todos:update',
+    delete: 'todos:delete',
+  },
   actions: {
     list: 'actions:list',
     create: 'actions:create',
@@ -57,6 +63,7 @@ export const ipcRequestChannels = {
     stop: 'workflows:stop',
     listRuns: 'workflows:list-runs',
     listActionRuns: 'workflows:list-action-runs',
+    listUrlItemRuns: 'workflows:list-url-item-runs',
     listArtifacts: 'workflows:list-artifacts',
     listEvents: 'workflows:list-events',
     pruneEvents: 'workflows:prune-events',

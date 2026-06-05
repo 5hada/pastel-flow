@@ -342,6 +342,7 @@ function normalizeStoredManifest(
     permissions: Array.isArray(manifest.permissions)
       ? manifest.permissions
       : [],
+    networkAllowlist: normalizeStringList(manifest.networkAllowlist),
   }
 }
 
@@ -378,6 +379,7 @@ function normalizeManifest(
   const datasets = normalizeDatasets(candidate.datasets, errors)
   const indexing = normalizeIndexing(candidate.indexing)
   const permissions = normalizePermissions(candidate.permissions, errors)
+  const networkAllowlist = normalizeStringList(candidate.networkAllowlist)
 
   if (errors.length > 0) {
     return undefined
@@ -399,6 +401,7 @@ function normalizeManifest(
     outputs,
     indexing,
     permissions,
+    networkAllowlist,
   }
 }
 
@@ -854,6 +857,22 @@ async function findToolModulePaths(rootPath: string): Promise<string[]> {
 
   await walk(rootPath, 0)
   return results
+}
+
+function normalizeStringList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined
+  }
+
+  const values = [
+    ...new Set(
+      value
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter(Boolean),
+    ),
+  ]
+
+  return values.length > 0 ? values : undefined
 }
 
 async function readDirectoryEntries(currentPath: string) {

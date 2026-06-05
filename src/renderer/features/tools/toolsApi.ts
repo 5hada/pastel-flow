@@ -11,5 +11,8 @@ export type ToolsApi = {
     toolId: string,
     input: Record<string, unknown>,
   ): Promise<ToolModuleRunResult>
-  createAction(toolId: string): Promise<ActionDefinition>
+  createAction(
+    toolId: string,
+    inputDefaults?: Record<string, unknown>,
+  ): Promise<ActionDefinition>
 }

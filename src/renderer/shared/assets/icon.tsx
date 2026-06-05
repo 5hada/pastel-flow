@@ -51,6 +51,7 @@ export const commonIcons = {
   settings: <Gear/>,
   starred: <Star/>,
   tools: <Hammer/>,
+  todos: <ListUl/>,
   urlGroups: <ListUl/>,
   warning: <TriangleExclamation/>,
   workflows: <Route/>,

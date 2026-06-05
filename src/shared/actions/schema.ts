@@ -1,4 +1,8 @@
-import type { WorkflowDefinition } from '../workflows'
+import type {
+  WorkflowDefinition,
+  WorkflowInputMapping,
+  WorkflowInputMappingSource,
+} from '../workflows'
 import type {
   ActionDefinition,
   ActionIOField,
@@ -12,7 +16,7 @@ export type WorkflowMappingValidationResult = {
 
 export function getMissingRequiredActionInputs(
   action: ActionDefinition,
-  inputMapping?: Record<string, string>,
+  inputMapping?: WorkflowInputMapping,
 ): ActionIOField[] {
   return getActionInputSchema(action).filter(
     (field) =>
@@ -192,6 +196,14 @@ export function validateWorkflowInputMappings(
           `${action.name}.${inputField.name} 타입이 맞지 않습니다: ${sourceField.type} -> ${inputField.type}`,
         )
       }
+
+      if (source.path && !isValidDotPath(source.path)) {
+        errors.push(`${action.name}.${inputField.name} dot path 형식이 올바르지 않습니다.`)
+      }
+
+      if (source.path && sourceField.type !== 'json') {
+        errors.push(`${action.name}.${inputField.name} dot path는 json 출력에만 사용할 수 있습니다.`)
+      }
     }
 
     outputFieldsByActionRefId.set(actionRef.id, getActionOutputSchema(action))
@@ -222,15 +234,13 @@ export function canMapActionField(
   )
 }
 
-export function parseMappingSource(value: string): {
-  actionRefId: string
-  outputKey?: string
-} {
-  const [actionRefId = '', outputKey] = value.split('.', 2)
-
+export function parseMappingSource(
+  value: WorkflowInputMappingSource,
+): WorkflowInputMappingSource {
   return {
-    actionRefId,
-    outputKey,
+    actionRefId: value.actionRefId,
+    outputKey: value.outputKey,
+    path: value.path,
   }
 }
 
@@ -246,6 +256,12 @@ function hasActionInputDefault(action: ActionDefinition, inputId: string): boole
 
   const value = inputDefaults[inputId]
   return value !== undefined && value !== null && value !== ''
+}
+
+function isValidDotPath(value: string): boolean {
+  return value
+    .split('.')
+    .every((segment) => /^[A-Za-z0-9_-]+$/.test(segment))
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

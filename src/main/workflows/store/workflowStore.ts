@@ -354,6 +354,7 @@ function normalizeWorkflowActionRefs(
       actionId: actionRef.actionId,
       order: Number.isFinite(actionRef.order) ? actionRef.order : index,
       inputMapping: actionRef.inputMapping,
+      retryPolicy: normalizeWorkflowActionRetryPolicy(actionRef.retryPolicy),
       enabled: actionRef.enabled !== false,
     }))
     .sort((left, right) => left.order - right.order)
@@ -361,6 +362,35 @@ function normalizeWorkflowActionRefs(
       ...actionRef,
       order: index,
     }))
+}
+
+function normalizeWorkflowActionRetryPolicy(
+  retryPolicy: WorkflowDefinition['actionRefs'][number]['retryPolicy'],
+): WorkflowDefinition['actionRefs'][number]['retryPolicy'] {
+  if (!retryPolicy) {
+    return undefined
+  }
+
+  const retryCount = clampInteger(retryPolicy.retryCount, 0, 5)
+  const retryDelaySeconds = clampInteger(retryPolicy.retryDelaySeconds, 0, 300)
+
+  if (retryCount === 0 && retryDelaySeconds === 0) {
+    return undefined
+  }
+
+  return {
+    retryCount,
+    retryDelaySeconds,
+  }
+}
+
+function clampInteger(value: unknown, min: number, max: number): number {
+  const numericValue = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(numericValue)) {
+    return min
+  }
+
+  return Math.min(max, Math.max(min, Math.floor(numericValue)))
 }
 
 function assertWorkflowActionRefsExist(

@@ -10,7 +10,11 @@ import {
   type ActionIOField,
   type TransformActionConfig,
 } from '../../../../shared/actions'
-import type { WorkflowDefinition } from '../../../../shared/workflows'
+import type {
+  WorkflowDefinition,
+  WorkflowInputMapping,
+  WorkflowInputMappingSource,
+} from '../../../../shared/workflows'
 import { getActionTypeLabel } from '../../../shared/utils/viewLabels'
 
 export type WorkflowActionListProps = {
@@ -25,7 +29,11 @@ export type WorkflowActionListProps = {
   onUpdateActionConfig(actionId: string, config: unknown): void
   onUpdateInputMapping(
     actionRefId: string,
-    inputMapping: Record<string, string> | undefined,
+    inputMapping: WorkflowInputMapping | undefined,
+  ): void
+  onUpdateRetryPolicy(
+    actionRefId: string,
+    retryPolicy: WorkflowDefinition['actionRefs'][number]['retryPolicy'],
   ): void
   onToggleAction(actionRefId: string): void
 }
@@ -40,6 +48,7 @@ export function WorkflowActionList({
   onRemoveAction,
   onUpdateActionConfig,
   onUpdateInputMapping,
+  onUpdateRetryPolicy,
   onToggleAction,
   workflow,
 }: WorkflowActionListProps) {
@@ -210,6 +219,11 @@ export function WorkflowActionList({
                   onUpdateInputMapping={onUpdateInputMapping}
                 />
               ) : null}
+              <ActionRetryPolicyEditor
+                actionRef={actionRef}
+                isLocked={isLocked}
+                onUpdateRetryPolicy={onUpdateRetryPolicy}
+              />
               {action?.type === 'transform_action' ? (
                 <TransformActionConfigEditor
                   action={action}
@@ -330,6 +344,74 @@ export function WorkflowActionList({
   )
 }
 
+function ActionRetryPolicyEditor({
+  actionRef,
+  isLocked,
+  onUpdateRetryPolicy,
+}: {
+  actionRef: WorkflowDefinition['actionRefs'][number]
+  isLocked: boolean
+  onUpdateRetryPolicy(
+    actionRefId: string,
+    retryPolicy: WorkflowDefinition['actionRefs'][number]['retryPolicy'],
+  ): void
+}) {
+  const retryCount = actionRef.retryPolicy?.retryCount ?? 0
+  const retryDelaySeconds = actionRef.retryPolicy?.retryDelaySeconds ?? 0
+
+  function updateRetryPolicy(input: {
+    retryCount?: number
+    retryDelaySeconds?: number
+  }) {
+    const nextRetryCount = input.retryCount ?? retryCount
+    const nextRetryDelaySeconds =
+      input.retryDelaySeconds ?? retryDelaySeconds
+
+    onUpdateRetryPolicy(
+      actionRef.id,
+      nextRetryCount === 0 && nextRetryDelaySeconds === 0
+        ? undefined
+        : {
+            retryCount: nextRetryCount,
+            retryDelaySeconds: nextRetryDelaySeconds,
+          },
+    )
+  }
+
+  return (
+    <div className="action-input-mapping-editor">
+      <label>
+        <span>Retry count</span>
+        <input
+          disabled={isLocked}
+          max={5}
+          min={0}
+          type="number"
+          value={retryCount}
+          onChange={(event) =>
+            updateRetryPolicy({ retryCount: Number(event.target.value) })
+          }
+        />
+      </label>
+      <label>
+        <span>Retry delay seconds</span>
+        <input
+          disabled={isLocked}
+          max={300}
+          min={0}
+          type="number"
+          value={retryDelaySeconds}
+          onChange={(event) =>
+            updateRetryPolicy({
+              retryDelaySeconds: Number(event.target.value),
+            })
+          }
+        />
+      </label>
+    </div>
+  )
+}
+
 const transformOptions: Array<{
   label: string
   mode: TransformActionConfig['mode']
@@ -433,7 +515,7 @@ function ActionInputMappingEditor({
   isLocked: boolean
   onUpdateInputMapping(
     actionRefId: string,
-    inputMapping: Record<string, string> | undefined,
+    inputMapping: WorkflowInputMapping | undefined,
   ): void
 }) {
   const outputOptions = actionRefsBefore.flatMap((sourceActionRef) => {
@@ -449,6 +531,9 @@ function ActionInputMappingEditor({
       value: `${sourceActionRef.id}.${outputField.id}`,
     }))
   })
+  const outputOptionByValue = new Map(
+    outputOptions.map((option) => [option.value, option]),
+  )
 
   function updateMapping(inputId: string, value: string) {
     const nextMapping = {
@@ -456,7 +541,15 @@ function ActionInputMappingEditor({
     }
 
     if (value) {
-      nextMapping[inputId] = value
+      const option = outputOptionByValue.get(value)
+      if (!option) {
+        return
+      }
+
+      nextMapping[inputId] = {
+        actionRefId: option.actionRefId,
+        outputKey: option.outputField.id,
+      }
     } else {
       delete nextMapping[inputId]
     }
@@ -467,32 +560,70 @@ function ActionInputMappingEditor({
     )
   }
 
+  function updateMappingPath(inputId: string, path: string) {
+    const currentSource = actionRef.inputMapping?.[inputId]
+    if (!currentSource) {
+      return
+    }
+
+    const nextSource = {
+      ...currentSource,
+      path: path.trim() || undefined,
+    }
+    const nextMapping = {
+      ...(actionRef.inputMapping ?? {}),
+      [inputId]: nextSource,
+    }
+
+    onUpdateInputMapping(actionRef.id, nextMapping)
+  }
+
   return (
     <div className="action-input-mapping-editor">
-      {inputSchema.map((inputField) => (
-        <label key={inputField.id}>
-          <span>
-            {inputField.name}
-            {inputField.required ? ' *' : ''} · {inputField.type}
-          </span>
-          <select
-            disabled={isLocked}
-            value={actionRef.inputMapping?.[inputField.id] ?? ''}
-            onChange={(event) => updateMapping(inputField.id, event.target.value)}
-          >
-            <option value="">연결 없음</option>
-            {outputOptions.map((option) => (
-              <option
-                disabled={!canMapActionField(option.outputField, inputField)}
-                key={`${inputField.id}-${option.value}`}
-                value={option.value}
-              >
-                {option.actionName}.{option.outputField.id} · {option.outputField.type}
-              </option>
-            ))}
-          </select>
-        </label>
-      ))}
+      {inputSchema.map((inputField) => {
+        const currentSource = actionRef.inputMapping?.[inputField.id]
+        const selectedOption = outputOptionByValue.get(
+          formatMappingSelectValue(currentSource),
+        )
+        const canUsePath = selectedOption?.outputField.type === 'json'
+
+        return (
+          <label key={inputField.id}>
+            <span>
+              {inputField.name}
+              {inputField.required ? ' *' : ''} · {inputField.type}
+            </span>
+            <select
+              disabled={isLocked}
+              value={formatMappingSelectValue(currentSource)}
+              onChange={(event) =>
+                updateMapping(inputField.id, event.target.value)
+              }
+            >
+              <option value="">연결 없음</option>
+              {outputOptions.map((option) => (
+                <option
+                  disabled={!canMapActionField(option.outputField, inputField)}
+                  key={`${inputField.id}-${option.value}`}
+                  value={option.value}
+                >
+                  {option.actionName}.{option.outputField.id} · {option.outputField.type}
+                </option>
+              ))}
+            </select>
+            {canUsePath ? (
+              <input
+                disabled={isLocked}
+                placeholder="Dot path, e.g. items.0.title"
+                value={currentSource?.path ?? ''}
+                onChange={(event) =>
+                  updateMappingPath(inputField.id, event.target.value)
+                }
+              />
+            ) : null}
+          </label>
+        )
+      })}
     </div>
   )
 }
@@ -555,4 +686,14 @@ function moveActionRefByDrop(
 
   nextIds.splice(targetIndex, 0, sourceId)
   return nextIds
+}
+
+function formatMappingSelectValue(
+  source: WorkflowInputMappingSource | undefined,
+): string {
+  if (!source?.actionRefId || !source.outputKey) {
+    return ''
+  }
+
+  return `${source.actionRefId}.${source.outputKey}`
 }

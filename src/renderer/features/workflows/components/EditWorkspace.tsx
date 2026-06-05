@@ -13,7 +13,10 @@ import type {
   ActionDefinition,
   TransformActionConfig,
 } from '../../../../shared/actions'
-import type { WorkflowDefinition } from '../../../../shared/workflows'
+import type {
+  WorkflowDefinition,
+  WorkflowInputMapping,
+} from '../../../../shared/workflows'
 import type {
   ActionRun,
   WorkflowRun,
@@ -25,6 +28,7 @@ import {
   getActionOutputSchema,
 } from '../../../../shared/actions'
 import type { WorkflowArtifact } from '../../../../shared/artifacts'
+import type { UrlGroupItemRun } from '../../../../shared/urlGroups'
 import { WorkflowRunEventsPanel } from './WorkflowRunEventsPanel'
 import { WorkflowRunsPanel } from './WorkflowRunsPanel'
 import { WorkflowActionList } from './WorkflowActionList'
@@ -50,6 +54,7 @@ export type EditWorkspaceProps = {
   actionRuns: ActionRun[]
   selectedWorkflowRunId: string | null
   workflowArtifacts: WorkflowArtifact[]
+  urlGroupItemRuns: UrlGroupItemRun[]
   workflowRuns: WorkflowRun[]
   workflowRunEvents: WorkflowRunEvent[]
   workspaceFolderAssignments: Record<string, string>
@@ -92,6 +97,7 @@ export function EditWorkspace({
   selectedWorkflowId,
   onSelectWorkflowRun,
   workflowArtifacts,
+  urlGroupItemRuns,
   workflowRunEvents,
   workflowRuns,
   workspaceFolderAssignments,
@@ -385,6 +391,18 @@ export function EditWorkspace({
                   ),
                 })
               }}
+              onUpdateRetryPolicy={(actionRefId, retryPolicy) => {
+                if (!selectedWorkflow || isSelectedWorkflowLocked) {
+                  return
+                }
+                void onUpdateWorkflow(selectedWorkflow.id, {
+                  actionRefs: selectedWorkflow.actionRefs.map((actionRef) =>
+                    actionRef.id === actionRefId
+                      ? { ...actionRef, retryPolicy }
+                      : actionRef,
+                  ),
+                })
+              }}
               onCreateTransformAction={async (mode) => {
                 if (!selectedWorkflow || isSelectedWorkflowLocked) {
                   return
@@ -480,6 +498,7 @@ export function EditWorkspace({
           artifacts={workflowArtifacts}
           runs={workflowRuns}
           selectedRunId={selectedWorkflowRunId}
+          urlGroupItemRuns={urlGroupItemRuns}
           onSelectRun={onSelectWorkflowRun}
         />
         <WorkflowRunEventsPanel events={workflowRunEvents} />
@@ -566,7 +585,7 @@ function createAutoInputMapping(
   actionId: string,
   previousActionRefs: WorkflowDefinition['actionRefs'],
   actions: ActionDefinition[],
-): Record<string, string> | undefined {
+): WorkflowInputMapping | undefined {
   const actionMap = new Map(actions.map((action) => [action.id, action]))
   const action = actionMap.get(actionId)
   if (!action) {
@@ -583,7 +602,10 @@ function createAutoInputMapping(
 
         return getActionOutputSchema(sourceAction)
           .filter((outputField) => canMapActionField(outputField, inputField))
-          .map((outputField) => `${actionRef.id}.${outputField.id}`)
+          .map((outputField) => ({
+            actionRefId: actionRef.id,
+            outputKey: outputField.id,
+          }))
       })
 
       return candidates.length === 1 ? [[inputField.id, candidates[0]]] : []

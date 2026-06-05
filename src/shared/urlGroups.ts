@@ -15,6 +15,29 @@ export type UrlGroup = {
   updatedAt: string
 }
 
+export type UrlGroupItemRunStatus =
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'skipped'
+
+export type UrlGroupItemRun = {
+  id: string
+  runId: string
+  workflowId: string
+  actionRunId: string
+  urlGroupId: string
+  urlItemId: string
+  url: string
+  status: UrlGroupItemRunStatus
+  startedAt?: string
+  endedAt?: string
+  message?: string
+  error?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export type CreateUrlGroupInput = {
   name: string
   description?: string

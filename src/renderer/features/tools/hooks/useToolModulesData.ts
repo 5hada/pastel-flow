@@ -107,7 +107,10 @@ export function useToolModulesData(
     try {
       setErrorMessage(null)
       setToolMessage(null)
-      const action = await window.pastelFlow.tools.createAction(selectedToolId)
+      const action = await window.pastelFlow.tools.createAction(
+        selectedToolId,
+        toolInputValues,
+      )
       setToolMessage(`${action.name} Action을 생성했습니다.`)
       await loadActionWorkflowData()
     } catch (error) {

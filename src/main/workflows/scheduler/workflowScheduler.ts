@@ -48,7 +48,6 @@ export function createWorkflowScheduler({
 
         if (
           !schedule?.enabled ||
-          workflow.state.status === 'running' ||
           !canExecuteWorkflowOnDevice(
             workflow,
             currentDevice,

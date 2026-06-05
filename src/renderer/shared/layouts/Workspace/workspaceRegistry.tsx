@@ -3,6 +3,7 @@ import type { WorkspaceMode } from '../../state/taskFormState'
 import { ActionsWorkspace } from '../../../features/actions/ActionsWorkspace'
 import { RunWorkspace } from '../../../features/run/RunWorkspace'
 import { SettingsWorkspace } from '../../../features/settings/SettingsWorkspace'
+import { TodosWorkspace } from '../../../features/todos/TodosWorkspace'
 import { ToolsWorkspace } from '../../../features/tools/ToolsWorkspace'
 import { UrlGroupsWorkspace } from '../../../features/urlGroups/UrlGroupsWorkspace'
 import { WorkflowsWorkspace } from '../../../features/workflows/WorkflowsWorkspace'
@@ -101,6 +102,7 @@ export const workspaceTemplates: WorkspaceTemplate[] = [
         workflowRunEvents: context.workflowRunEvents,
         workflowRuns: context.workflowRuns,
         workflowArtifacts: context.workflowArtifacts,
+        urlGroupItemRuns: context.urlGroupItemRuns,
         workspaceFolderAssignments: context.appSettings.workspaceFolderAssignments,
         workspaceFolders: context.appSettings.workspaceFolders,
         workflows: context.workflows,
@@ -123,6 +125,24 @@ export const workspaceTemplates: WorkspaceTemplate[] = [
       }
 
       return <UrlGroupsWorkspace {...props} />
+    },
+  },
+  {
+    type: 'todos',
+    render(context: WorkspaceContext) {
+      const props = {
+        includeCompletedTodos: context.includeCompletedTodos,
+        isLoading: context.isLoading,
+        selectedTodoId: context.selectedTodoId,
+        todos: context.todos,
+        onCreateTodo: context.handleCreateTodo,
+        onDeleteTodo: context.handleDeleteTodo,
+        onIncludeCompletedChange: context.handleIncludeCompletedTodosChange,
+        onSelectTodo: context.setSelectedTodoId,
+        onUpdateTodo: context.handleUpdateTodo,
+      }
+
+      return <TodosWorkspace {...props} />
     },
   },
   {

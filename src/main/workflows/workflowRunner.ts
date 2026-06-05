@@ -1,4 +1,8 @@
-import type { WorkflowDefinition, WorkflowState } from '../../shared/workflows'
+import type {
+  WorkflowDefinition,
+  WorkflowInputMapping,
+  WorkflowState,
+} from '../../shared/workflows'
 import type { ActionDefinition, ActionRuntimeState } from '../../shared/actions'
 import type {
   WorkflowRunActorType,
@@ -17,6 +21,7 @@ import type { WorkflowRunStore } from './store/workflowRunStore'
 import type { WorkflowArtifactWriter } from './artifacts/workflowArtifactWriter'
 import type { WorkflowArtifactRef } from '../../shared/artifacts'
 import type { UrlGroupStore } from '../urlGroups/store/urlGroupStore'
+import type { UrlGroupItemRunStore } from '../urlGroups/store/urlGroupItemRunStore'
 
 const workflowRunLocks = new Set<string>()
 
@@ -44,6 +49,7 @@ export type WorkflowRunnerOptions = {
   workflowRunStore: WorkflowRunStore
   workflowArtifactWriter: WorkflowArtifactWriter
   urlGroupStore: UrlGroupStore
+  urlGroupItemRunStore: UrlGroupItemRunStore
   dataDir: string
   deviceId: string
 }
@@ -58,6 +64,7 @@ export function createWorkflowRunner({
   workflowArtifactWriter,
   workflowStore,
   urlGroupStore,
+  urlGroupItemRunStore,
   toolModuleRunner,
 }: WorkflowRunnerOptions): WorkflowRunner {
   async function getWorkflow(id: string): Promise<WorkflowDefinition> {
@@ -88,13 +95,33 @@ export function createWorkflowRunner({
     getWorkflow,
     async runWorkflow(id, options) {
       if (workflowRunLocks.has(id)) {
-        return getWorkflow(id)
+        const workflow = await getWorkflow(id)
+        await createSkippedWorkflowRun(workflow, {
+          actorId: options?.actorId,
+          actorType: options?.actorType ?? 'user',
+          deviceId,
+          reason: '이전 실행이 아직 진행 중이어서 새 실행을 건너뛰었습니다.',
+          triggerSource: options?.triggerSource ?? 'manual',
+          workflowRunEventStore,
+          workflowRunStore,
+        })
+
+        return workflow
       }
 
       workflowRunLocks.add(id)
       try {
         const workflow = await getWorkflow(id)
         if (workflow.state.status === 'running') {
+          await createSkippedWorkflowRun(workflow, {
+            actorId: options?.actorId,
+            actorType: options?.actorType ?? 'user',
+            deviceId,
+            reason: 'Workflow가 이미 실행 중이어서 새 실행을 건너뛰었습니다.',
+            triggerSource: options?.triggerSource ?? 'manual',
+            workflowRunEventStore,
+            workflowRunStore,
+          })
           return workflow
         }
         getRunnableActionRefs(workflow)
@@ -116,6 +143,7 @@ export function createWorkflowRunner({
           workflowArtifactWriter,
           workflowStore,
           urlGroupStore,
+          urlGroupItemRunStore,
           toolModuleRunner,
         })
       } finally {
@@ -204,6 +232,7 @@ async function runActionWorkflow(
     workflowArtifactWriter: WorkflowArtifactWriter
     workflowStore: WorkflowStore
     urlGroupStore: UrlGroupStore
+    urlGroupItemRunStore: UrlGroupItemRunStore
     toolModuleRunner: ToolModuleRunner
   },
 ): Promise<WorkflowDefinition> {
@@ -287,36 +316,86 @@ async function runActionWorkflow(
             : action.type === 'browser_action'
               ? await resolveBrowserActionUrlGroup(action, context.urlGroupStore)
               : action
-        const result = await adapter.run({
-          action: actionWithMappedInput,
-          deviceId: context.deviceId,
-          dataDir: context.dataDir,
-          appSettings: appSettingsSnapshot.settings,
-          async updateConfig(config) {
-            await context.workflowStore.updateAction(action.id, { config })
-          },
-          async updateState(state) {
-            const currentWorkflow = await context.workflowStore
-              .listWorkflows()
-              .then((workflows) =>
-                workflows.find(
-                  (current) => current.id === workflow.id,
-                ),
-              )
-            const nextActionState = mergeWorkflowState(
-              currentWorkflow?.state ?? workflow.state,
-              action.id,
-              state
-            )
-            await context.workflowStore.updateWorkflow(workflow.id, {
-              state: {
-                ...(currentWorkflow?.state ?? workflow.state),
-                ...(state as Partial<WorkflowState>),
-                actionStates: nextActionState.actionStates,
-              },
-            })
-          },
+        await createBrowserUrlGroupItemRuns({
+          action,
+          actionRunId: actionRun.id,
+          context,
+          runId: workflowRun.id,
+          workflowId: workflow.id,
         })
+        const result = await runWithRetry(
+          actionRef,
+          context,
+          workflow.id,
+          workflowRun.id,
+          actionRun.id,
+          () =>
+            adapter.run({
+              action: actionWithMappedInput,
+              deviceId: context.deviceId,
+              dataDir: context.dataDir,
+              appSettings: appSettingsSnapshot.settings,
+              async updateConfig(config) {
+                await context.workflowStore.updateAction(action.id, { config })
+              },
+              async updateState(state) {
+                const runtimeState = state as Partial<ActionRuntimeState>
+                const currentWorkflow = await context.workflowStore
+                  .listWorkflows()
+                  .then((workflows) =>
+                    workflows.find(
+                      (current) => current.id === workflow.id,
+                    ),
+                  )
+                const nextActionState = mergeWorkflowState(
+                  currentWorkflow?.state ?? workflow.state,
+                  action.id,
+                  runtimeState
+                )
+                await context.workflowStore.updateWorkflow(workflow.id, {
+                  state: {
+                    ...(currentWorkflow?.state ?? workflow.state),
+                    ...(runtimeState as Partial<WorkflowState>),
+                    actionStates: nextActionState.actionStates,
+                  },
+                })
+
+                if (runtimeState.status && runtimeState.status !== 'running') {
+                  const endedAt = runtimeState.endedAt ?? new Date().toISOString()
+                  const actionRunStatus = mapRunStatusToActionRunStatus(runtimeState.status)
+                  await context.workflowRunStore.updateActionRun(actionRun.id, {
+                    status: actionRunStatus,
+                    endedAt,
+                    outputSummary: summarizeValue(runtimeState),
+                    error: runtimeState.lastError,
+                  })
+                  await context.workflowRunStore.updateRun(workflowRun.id, {
+                    status: actionRunStatus === 'failed' ? 'failed' : 'succeeded',
+                    endedAt,
+                    summary: runtimeState.lastMessage,
+                    error: runtimeState.lastError,
+                  })
+                  await context.workflowRunEventStore.appendEvent({
+                    runId: workflowRun.id,
+                    workflowId: workflow.id,
+                    actionRunId: actionRun.id,
+                    deviceId: context.deviceId,
+                    status: runtimeState.status,
+                    message: runtimeState.lastMessage ?? `${action.name} Action 상태를 갱신했습니다.`,
+                  })
+                  await context.urlGroupItemRunStore.completeActionItemRuns(
+                    actionRun.id,
+                    {
+                      status: actionRunStatus === 'failed' ? 'failed' : 'succeeded',
+                      endedAt,
+                      message: runtimeState.lastMessage,
+                      error: runtimeState.lastError,
+                    },
+                  )
+                }
+              },
+            }),
+        )
         const resultState = result.state as WorkflowState
         const actionEndedAt =
           resultState.status === 'running' ? undefined : new Date().toISOString()
@@ -326,6 +405,18 @@ async function runActionWorkflow(
           outputSummary: summarizeValue(resultState),
           error: resultState.lastError,
         })
+        if (actionEndedAt) {
+          await context.urlGroupItemRunStore.completeActionItemRuns(
+            actionRun.id,
+            {
+              status:
+                resultState.status === 'failed' ? 'failed' : 'succeeded',
+              endedAt: actionEndedAt,
+              message: resultState.lastMessage,
+              error: resultState.lastError,
+            },
+          )
+        }
         currentActionRunId = undefined
         const currentWorkflow = await context.workflowStore
           .listWorkflows()
@@ -380,6 +471,7 @@ async function runActionWorkflow(
       if (!config.toolId) {
         throw new Error('tool_action config.toolId가 필요합니다.')
       }
+      const toolId = config.toolId
 
       const toolInput = {
         ...(config.inputDefaults ?? {}),
@@ -396,9 +488,17 @@ async function runActionWorkflow(
         inputSummary: summarizeValue(toolInput),
       })
       currentActionRunId = toolActionRun.id
-      const result = await context.toolModuleRunner.runTool(config.toolId, {
-        ...toolInput,
-      })
+      const result = await runWithRetry(
+        actionRef,
+        context,
+        workflow.id,
+        workflowRun.id,
+        toolActionRun.id,
+        () =>
+          context.toolModuleRunner.runTool(toolId, {
+            ...toolInput,
+          }),
+      )
       const completedAt = new Date().toISOString()
       const outputArtifacts =
         await context.workflowArtifactWriter.saveOutputArtifacts({
@@ -468,6 +568,13 @@ async function runActionWorkflow(
         endedAt: new Date().toISOString(),
         error: getErrorMessage(error),
       })
+      await context.urlGroupItemRunStore.completeActionItemRuns(
+        currentActionRunId,
+        {
+          status: 'failed',
+          error: getErrorMessage(error),
+        },
+      )
     }
     const failedWorkflow = await context.workflowStore.updateWorkflow(workflow.id, {
       state: {
@@ -525,6 +632,88 @@ function mergeWorkflowState(
   }
 }
 
+async function createSkippedWorkflowRun(
+  workflow: WorkflowDefinition,
+  input: {
+    actorId?: string
+    actorType: WorkflowRunActorType
+    deviceId: string
+    reason: string
+    triggerSource: WorkflowRunTriggerSource
+    workflowRunEventStore: WorkflowRunEventStore
+    workflowRunStore: WorkflowRunStore
+  },
+): Promise<void> {
+  const now = new Date().toISOString()
+  const workflowRun = await input.workflowRunStore.createRun({
+    workflowId: workflow.id,
+    actorType: input.actorType,
+    actorId: input.actorId,
+    triggerSource: input.triggerSource,
+    status: 'skipped',
+    startedAt: now,
+    summary: input.reason,
+    workflowSnapshot: sanitizeSnapshotValue(workflow),
+  })
+  await input.workflowRunStore.updateRun(workflowRun.id, {
+    endedAt: now,
+  })
+  await input.workflowRunEventStore.appendEvent({
+    runId: workflowRun.id,
+    workflowId: workflow.id,
+    deviceId: input.deviceId,
+    status: 'idle',
+    message: input.reason,
+  })
+}
+
+async function runWithRetry<TResult>(
+  actionRef: WorkflowDefinition['actionRefs'][number],
+  context: {
+    deviceId: string
+    workflowRunEventStore: WorkflowRunEventStore
+  },
+  workflowId: string,
+  runId: string,
+  actionRunId: string,
+  run: () => Promise<TResult>,
+): Promise<TResult> {
+  const retryCount = actionRef.retryPolicy?.retryCount ?? 0
+  const retryDelaySeconds = actionRef.retryPolicy?.retryDelaySeconds ?? 0
+  const maxAttempts = retryCount + 1
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await run()
+    } catch (error) {
+      if (attempt >= maxAttempts) {
+        throw error
+      }
+
+      await context.workflowRunEventStore.appendEvent({
+        runId,
+        workflowId,
+        actionRunId,
+        deviceId: context.deviceId,
+        status: 'running',
+        message: `Action 실행 실패로 재시도합니다. (${attempt}/${retryCount}) ${getErrorMessage(error)}`,
+      })
+
+      if (retryDelaySeconds > 0) {
+        await delay(retryDelaySeconds * 1000)
+      }
+    }
+  }
+
+  throw new Error('Action retry 실행 상태가 올바르지 않습니다.')
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds)
+  })
+}
+
 function getActionOutputScopeValue(
   action: ActionDefinition,
   state: WorkflowState,
@@ -563,8 +752,43 @@ async function resolveBrowserActionUrlGroup(
   }
 }
 
+async function createBrowserUrlGroupItemRuns(input: {
+  action: ActionDefinition
+  actionRunId: string
+  context: {
+    urlGroupItemRunStore: UrlGroupItemRunStore
+    urlGroupStore: UrlGroupStore
+  }
+  runId: string
+  workflowId: string
+}): Promise<void> {
+  if (
+    input.action.type !== 'browser_action' ||
+    !isRecord(input.action.config) ||
+    typeof input.action.config.urlGroupId !== 'string'
+  ) {
+    return
+  }
+
+  const urlGroup = await input.context.urlGroupStore.getUrlGroup(
+    input.action.config.urlGroupId,
+  )
+  const enabledItems = urlGroup.items.filter((item) => item.enabled)
+  if (enabledItems.length === 0) {
+    return
+  }
+
+  await input.context.urlGroupItemRunStore.createItemRuns({
+    runId: input.runId,
+    workflowId: input.workflowId,
+    actionRunId: input.actionRunId,
+    urlGroupId: urlGroup.id,
+    items: enabledItems,
+  })
+}
+
 function resolveInputMapping(
-  inputMapping: Record<string, string> | undefined,
+  inputMapping: WorkflowInputMapping | undefined,
   outputScope: Record<string, unknown>,
 ): Record<string, unknown> {
   if (!inputMapping) {
@@ -572,18 +796,42 @@ function resolveInputMapping(
   }
 
   return Object.fromEntries(
-    Object.entries(inputMapping).map(([inputKey, outputPath]) => {
-      const source = parseMappingSource(outputPath)
+    Object.entries(inputMapping).map(([inputKey, mappingSource]) => {
+      const source = parseMappingSource(mappingSource)
       const sourceValue = outputScope[source.actionRefId]
+      const outputValue =
+        source.outputKey && isRecord(sourceValue)
+          ? sourceValue[source.outputKey]
+          : sourceValue
 
       return [
         inputKey,
-        source.outputKey && isRecord(sourceValue)
-          ? sourceValue[source.outputKey]
-          : sourceValue,
+        source.path ? readDotPath(outputValue, source.path) : outputValue,
       ]
     }),
   )
+}
+
+function readDotPath(value: unknown, pathValue: string): unknown {
+  if (!pathValue.trim()) {
+    return value
+  }
+
+  return pathValue.split('.').reduce<unknown>((currentValue, segment) => {
+    if (currentValue === undefined || currentValue === null) {
+      return undefined
+    }
+
+    if (Array.isArray(currentValue) && /^\d+$/.test(segment)) {
+      return currentValue[Number(segment)]
+    }
+
+    if (isRecord(currentValue)) {
+      return currentValue[segment]
+    }
+
+    return undefined
+  }, value)
 }
 
 function mapRunStatusToActionRunStatus(

@@ -24,6 +24,7 @@ export default function App() {
           onActions: app.openActionMode,
           onWorkflows: app.openWorkflowMode,
           onUrlGroups: app.openUrlGroupsMode,
+          onTodos: app.openTodosMode,
           onTools: app.openToolsMode,
           onSettings: app.openSettingsMode,
         }}

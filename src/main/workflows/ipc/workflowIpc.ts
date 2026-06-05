@@ -11,6 +11,7 @@ import type { WorkflowArtifactStore } from '../store/workflowArtifactStore'
 import type { WorkflowRunEventStore } from '../store/workflowRunEventStore'
 import type { WorkflowRunStore } from '../store/workflowRunStore'
 import type { WorkflowStore } from '../store/workflowStore'
+import type { UrlGroupItemRunStore } from '../../urlGroups/store/urlGroupItemRunStore'
 import type { WorkflowRunner } from '../workflowRunner'
 
 export function registerWorkflowIpc(
@@ -20,6 +21,7 @@ export function registerWorkflowIpc(
   WorkflowRunEventStore: WorkflowRunEventStore,
   workflowRunStore: WorkflowRunStore,
   workflowArtifactStore: WorkflowArtifactStore,
+  urlGroupItemRunStore: UrlGroupItemRunStore,
   appSettingsStore: AppSettingsStore,
   deviceStore: DeviceStore,
 ): void {
@@ -117,6 +119,26 @@ export function registerWorkflowIpc(
     const artifacts = await workflowArtifactStore.listArtifacts(artifactsInput)
     return artifacts.filter((artifact) =>
       visibleWorkflowIds.has(artifact.workflowId),
+    )
+  }
+
+  async function listUrlGroupItemRuns(input: unknown) {
+    const itemRunsInput = assertListRunDetailInput(input)
+    const workflows = await listVisibleWorkflows()
+    const visibleWorkflowIds = new Set(
+      workflows.map((workflow) => workflow.id),
+    )
+
+    if (
+      itemRunsInput.workflowId &&
+      !visibleWorkflowIds.has(itemRunsInput.workflowId)
+    ) {
+      return []
+    }
+
+    const itemRuns = await urlGroupItemRunStore.listItemRuns(itemRunsInput)
+    return itemRuns.filter((itemRun) =>
+      visibleWorkflowIds.has(itemRun.workflowId),
     )
   }
 
@@ -271,6 +293,9 @@ export function registerWorkflowIpc(
   ipcMain.handle(ipcRequestChannels.workflows.listActionRuns, (_event, runId) =>
     listActionRuns(assertString(runId, 'Workflow run ID')),
   )
+  ipcMain.handle(ipcRequestChannels.workflows.listUrlItemRuns, (_event, input) =>
+    listUrlGroupItemRuns(input),
+  )
   ipcMain.handle(ipcRequestChannels.workflows.listArtifacts, (_event, input) =>
     listWorkflowArtifacts(input),
   )
@@ -312,6 +337,17 @@ function assertString(value: unknown, label: string): string {
 }
 
 function assertListWorkflowArtifactsInput(
+  value: unknown,
+): {
+  runId?: string
+  actionRunId?: string
+  workflowId?: string
+  limit?: number
+} {
+  return assertListRunDetailInput(value)
+}
+
+function assertListRunDetailInput(
   value: unknown,
 ): {
   runId?: string

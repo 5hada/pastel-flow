@@ -51,6 +51,7 @@ export const ipcRequestChannels = {
     stop: 'workflows:stop',
     listRuns: 'workflows:list-runs',
     listActionRuns: 'workflows:list-action-runs',
+    listArtifacts: 'workflows:list-artifacts',
     listEvents: 'workflows:list-events',
     pruneEvents: 'workflows:prune-events',
   },

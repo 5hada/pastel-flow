@@ -7,6 +7,7 @@ import {
 import { ipcRequestChannels } from '../../../shared/ipcChannels'
 import type { DeviceStore } from '../../devices/store/deviceStore'
 import type { AppSettingsStore } from '../../settings/store/appSettingsStore'
+import type { WorkflowArtifactStore } from '../store/workflowArtifactStore'
 import type { WorkflowRunEventStore } from '../store/workflowRunEventStore'
 import type { WorkflowRunStore } from '../store/workflowRunStore'
 import type { WorkflowStore } from '../store/workflowStore'
@@ -18,6 +19,7 @@ export function registerWorkflowIpc(
   workflowRunner: WorkflowRunner,
   WorkflowRunEventStore: WorkflowRunEventStore,
   workflowRunStore: WorkflowRunStore,
+  workflowArtifactStore: WorkflowArtifactStore,
   appSettingsStore: AppSettingsStore,
   deviceStore: DeviceStore,
 ): void {
@@ -96,6 +98,26 @@ export function registerWorkflowIpc(
     }
 
     return workflowRunStore.listActionRuns(runId)
+  }
+
+  async function listWorkflowArtifacts(input: unknown) {
+    const artifactsInput = assertListWorkflowArtifactsInput(input)
+    const workflows = await listVisibleWorkflows()
+    const visibleWorkflowIds = new Set(
+      workflows.map((workflow) => workflow.id),
+    )
+
+    if (
+      artifactsInput.workflowId &&
+      !visibleWorkflowIds.has(artifactsInput.workflowId)
+    ) {
+      return []
+    }
+
+    const artifacts = await workflowArtifactStore.listArtifacts(artifactsInput)
+    return artifacts.filter((artifact) =>
+      visibleWorkflowIds.has(artifact.workflowId),
+    )
   }
 
   ipcMain.handle(ipcRequestChannels.actions.list, async () => {
@@ -249,6 +271,9 @@ export function registerWorkflowIpc(
   ipcMain.handle(ipcRequestChannels.workflows.listActionRuns, (_event, runId) =>
     listActionRuns(assertString(runId, 'Workflow run ID')),
   )
+  ipcMain.handle(ipcRequestChannels.workflows.listArtifacts, (_event, input) =>
+    listWorkflowArtifacts(input),
+  )
   ipcMain.handle(ipcRequestChannels.workflows.listEvents, (_event, workflowId?: string) =>
     listWorkflowEvents(workflowId),
   )
@@ -284,6 +309,32 @@ function assertString(value: unknown, label: string): string {
   }
 
   return value
+}
+
+function assertListWorkflowArtifactsInput(
+  value: unknown,
+): {
+  runId?: string
+  actionRunId?: string
+  workflowId?: string
+  limit?: number
+} {
+  const input = isRecord(value) ? value : {}
+  const limit =
+    typeof input.limit === 'number' && Number.isFinite(input.limit)
+      ? input.limit
+      : undefined
+
+  return {
+    runId: optionalString(input.runId),
+    actionRunId: optionalString(input.actionRunId),
+    workflowId: optionalString(input.workflowId),
+    limit,
+  }
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
 function assertCreateActionInput(

@@ -154,4 +154,38 @@ const migrations: Array<{
         .run()
     },
   },
+  {
+    id: '004_create_workflow_artifacts',
+    up(database) {
+      database
+        .prepare(
+          `
+          CREATE TABLE workflow_artifacts (
+            id TEXT PRIMARY KEY,
+            run_id TEXT NOT NULL,
+            workflow_id TEXT NOT NULL,
+            action_run_id TEXT,
+            artifact_type TEXT NOT NULL,
+            artifact_path TEXT NOT NULL,
+            artifact_size INTEGER,
+            summary TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (run_id) REFERENCES workflow_runs(id) ON DELETE CASCADE,
+            FOREIGN KEY (action_run_id) REFERENCES action_runs(id) ON DELETE SET NULL
+          )
+          `,
+        )
+        .run()
+      database
+        .prepare(
+          'CREATE INDEX workflow_artifacts_run_created_idx ON workflow_artifacts (run_id, created_at DESC)',
+        )
+        .run()
+      database
+        .prepare(
+          'CREATE INDEX workflow_artifacts_action_created_idx ON workflow_artifacts (action_run_id, created_at DESC)',
+        )
+        .run()
+    },
+  },
 ]

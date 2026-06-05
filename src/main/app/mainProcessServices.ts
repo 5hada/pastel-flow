@@ -21,6 +21,7 @@ import { createToolModuleStore } from '../tools/store/toolModuleStore'
 import { createSqliteDatabase } from '../storage/sqliteDatabase'
 import { registerWorkflowIpc } from '../workflows/ipc/workflowIpc'
 import { createWorkflowScheduler } from '../workflows/scheduler/workflowScheduler'
+import { createWorkflowArtifactStore } from '../workflows/store/workflowArtifactStore'
 import { createWorkflowRunEventStore } from '../workflows/store/workflowRunEventStore'
 import { createWorkflowRunStore } from '../workflows/store/workflowRunStore'
 import { createWorkflowStore } from '../workflows/store/workflowStore'
@@ -63,6 +64,9 @@ export async function initializeMainProcessServices(dataDir: string): Promise<vo
     },
   })
   const workflowRunStore = createWorkflowRunStore({
+    database,
+  })
+  const workflowArtifactStore = createWorkflowArtifactStore({
     database,
   })
   const secretStore = createSecretStore({
@@ -119,6 +123,7 @@ export async function initializeMainProcessServices(dataDir: string): Promise<vo
     workflowRunner,
     workflowRunEventStore,
     workflowRunStore,
+    workflowArtifactStore,
     appSettingsStore,
     deviceStore,
   )

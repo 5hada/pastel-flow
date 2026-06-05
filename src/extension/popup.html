@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pastel Flow</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="popup-shell">
+      <header>
+        <strong>Pastel Flow</strong>
+        <span id="statusBadge">확인 중</span>
+      </header>
+      <dl>
+        <div>
+          <dt>상태</dt>
+          <dd id="statusText">연결 상태를 확인하고 있습니다.</dd>
+        </div>
+        <div>
+          <dt>Native host</dt>
+          <dd id="hostName">-</dd>
+        </div>
+        <div>
+          <dt>App broker</dt>
+          <dd id="brokerStatus">-</dd>
+        </div>
+        <div>
+          <dt>Extension</dt>
+          <dd id="extensionVersion">-</dd>
+        </div>
+        <div>
+          <dt>업데이트</dt>
+          <dd id="updatedAt">-</dd>
+        </div>
+        <div>
+          <dt>마지막 요청</dt>
+          <dd id="lastRequestAt">-</dd>
+        </div>
+      </dl>
+      <p id="lastError" class="error-text" hidden></p>
+      <button id="refreshButton" type="button">새로고침</button>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

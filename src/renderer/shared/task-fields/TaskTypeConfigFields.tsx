@@ -8,6 +8,7 @@ import type { TaskFieldsProps } from './types'
 
 export function TaskTypeConfigFields({
   form,
+  isDisabled = false,
   onChange,
   profilePresets,
 }: TaskFieldsProps) {
@@ -16,23 +17,25 @@ export function TaskTypeConfigFields({
       return (
         <BrowserConfigFields
           form={form}
+          isDisabled={isDisabled}
           profilePresets={profilePresets}
           onChange={onChange}
         />
       )
     case 'crawler':
-      return <CrawlerConfigFields form={form} onChange={onChange} />
+      return <CrawlerConfigFields form={form} isDisabled={isDisabled} onChange={onChange} />
     case 'discord_bot':
-      return <DiscordBotConfigFields form={form} onChange={onChange} />
+      return <DiscordBotConfigFields form={form} isDisabled={isDisabled} onChange={onChange} />
     case 'notion_sync':
-      return <NotionSyncConfigFields form={form} onChange={onChange} />
+      return <NotionSyncConfigFields form={form} isDisabled={isDisabled} onChange={onChange} />
     case 'trading_bot':
-      return <TradingBotConfigFields form={form} onChange={onChange} />
+      return <TradingBotConfigFields form={form} isDisabled={isDisabled} onChange={onChange} />
   }
 }
 
 function BrowserConfigFields({
   form,
+  isDisabled = false,
   onChange,
   profilePresets = [],
 }: TaskFieldsProps) {
@@ -46,7 +49,7 @@ function BrowserConfigFields({
   return (
     <>
       <div className="form-grid">
-        <Select selectedKey={form.browserKind} onSelectionChange={(key) => onChange({ ...form, browserKind: String(key) as typeof form.browserKind })}>
+        <Select isDisabled={isDisabled} selectedKey={form.browserKind} onSelectionChange={(key) => onChange({ ...form, browserKind: String(key) as typeof form.browserKind })}>
           <Label>브라우저</Label>
           <Select.Trigger>
             <Select.Value />
@@ -63,7 +66,7 @@ function BrowserConfigFields({
             </ListBox>
           </Select.Popover>
         </Select>
-        <Select selectedKey={form.runMode} onSelectionChange={(key) => onChange({ ...form, runMode: String(key) as typeof form.runMode })}>
+        <Select isDisabled={isDisabled} selectedKey={form.runMode} onSelectionChange={(key) => onChange({ ...form, runMode: String(key) as typeof form.runMode })}>
           <Label>실행 방식</Label>
           <Select.Trigger>
             <Select.Value />
@@ -81,7 +84,7 @@ function BrowserConfigFields({
           </Select.Popover>
         </Select>
         {form.runMode === 'extension_controlled' ? (
-          <Select selectedKey={form.profileSource} onSelectionChange={(key) => onChange({ ...form, profileSource: String(key) as typeof form.profileSource })}>
+          <Select isDisabled={isDisabled} selectedKey={form.profileSource} onSelectionChange={(key) => onChange({ ...form, profileSource: String(key) as typeof form.profileSource })}>
             <Label>프로필 소스</Label>
             <Select.Trigger>
               <Select.Value />
@@ -103,7 +106,7 @@ function BrowserConfigFields({
       {form.runMode === 'extension_controlled' &&
       form.profileSource === 'existing_profile' ? (
         profilePresets.length > 0 ? (
-          <Select selectedKey={selectedProfilePresetId} onSelectionChange={(key) => {
+          <Select isDisabled={isDisabled} selectedKey={selectedProfilePresetId} onSelectionChange={(key) => {
             const profilePresetId = String(key)
             const preset = profilePresets.find(
               (currentPreset) => currentPreset.id === profilePresetId,
@@ -139,6 +142,7 @@ function BrowserConfigFields({
           <label>
             기존 프로필 경로
             <Input
+              disabled={isDisabled}
               value={form.existingProfilePath}
               onChange={(event) =>
                 onChange({ ...form, existingProfilePath: event.target.value })
@@ -150,6 +154,7 @@ function BrowserConfigFields({
       <label>
         초기 URL
         <TextArea
+          disabled={isDisabled}
           value={form.initialUrls}
           onChange={(event) => onChange({ ...form, initialUrls: event.target.value })}
           placeholder="한 줄에 하나씩 입력"
@@ -158,6 +163,7 @@ function BrowserConfigFields({
       </label>
       <Checkbox
         className="inline-check"
+        isDisabled={isDisabled}
         isSelected={form.dynamicTemplateUpdates}
         onChange={(dynamicTemplateUpdates) =>
           onChange({ ...form, dynamicTemplateUpdates })
@@ -174,12 +180,13 @@ function BrowserConfigFields({
   )
 }
 
-function CrawlerConfigFields({ form, onChange }: TaskFieldsProps) {
+function CrawlerConfigFields({ form, isDisabled = false, onChange }: TaskFieldsProps) {
   return (
     <>
       <label>
         수집 URL
         <TextArea
+          disabled={isDisabled}
           value={form.crawlerUrls}
           onChange={(event) => onChange({ ...form, crawlerUrls: event.target.value })}
           placeholder="한 줄에 하나씩 입력"
@@ -189,6 +196,7 @@ function CrawlerConfigFields({ form, onChange }: TaskFieldsProps) {
       <label>
         URL당 최대 bytes
         <Input
+          disabled={isDisabled}
           max={500000}
           min={1024}
           type="number"
@@ -202,11 +210,12 @@ function CrawlerConfigFields({ form, onChange }: TaskFieldsProps) {
   )
 }
 
-function DiscordBotConfigFields({ form, onChange }: TaskFieldsProps) {
+function DiscordBotConfigFields({ form, isDisabled = false, onChange }: TaskFieldsProps) {
   return (
     <label>
       명령 prefix
       <Input
+        disabled={isDisabled}
         value={form.discordCommandPrefix}
         onChange={(event) =>
           onChange({ ...form, discordCommandPrefix: event.target.value })
@@ -216,11 +225,12 @@ function DiscordBotConfigFields({ form, onChange }: TaskFieldsProps) {
   )
 }
 
-function NotionSyncConfigFields({ form, onChange }: TaskFieldsProps) {
+function NotionSyncConfigFields({ form, isDisabled = false, onChange }: TaskFieldsProps) {
   return (
     <label>
       Database ID
       <Input
+        disabled={isDisabled}
         value={form.notionDatabaseId}
         onChange={(event) =>
           onChange({ ...form, notionDatabaseId: event.target.value })
@@ -230,7 +240,7 @@ function NotionSyncConfigFields({ form, onChange }: TaskFieldsProps) {
   )
 }
 
-function TradingBotConfigFields({ form, onChange }: TaskFieldsProps) {
+function TradingBotConfigFields({ form, isDisabled = false, onChange }: TaskFieldsProps) {
   return (
     <fieldset className="settings-fieldset">
       <legend>자동매매 skeleton</legend>
@@ -239,6 +249,7 @@ function TradingBotConfigFields({ form, onChange }: TaskFieldsProps) {
         <label>
           Exchange
           <Input
+            disabled={isDisabled}
             value={form.tradingExchange}
             onChange={(event) =>
               onChange({ ...form, tradingExchange: event.target.value })
@@ -248,6 +259,7 @@ function TradingBotConfigFields({ form, onChange }: TaskFieldsProps) {
         <label>
           Symbol
           <Input
+            disabled={isDisabled}
             value={form.tradingSymbol}
             onChange={(event) =>
               onChange({ ...form, tradingSymbol: event.target.value })

@@ -85,6 +85,21 @@
   box-shadow: var(--shadow-soft);
 }
 
+.is-edit-locked {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--surface) 86%, var(--border) 14%);
+}
+
+.is-edit-locked .workflow-action-row {
+  cursor: not-allowed;
+}
+
+.is-edit-locked .task-form,
+.is-edit-locked .workflow-action-list,
+.is-edit-locked .danger-zone {
+  opacity: 0.68;
+}
+
 .workflow-run-card {
   min-height: 110px;
   align-content: center;

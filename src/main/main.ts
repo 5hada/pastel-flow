@@ -2,7 +2,7 @@ import { app, BrowserWindow, Menu } from 'electron'
 import { configureAppEnvironment } from './app/appEnvironment'
 import { createAppWindow } from './app/appWindow'
 import { initializeMainProcessServices } from './app/mainProcessServices'
-import { installExtension, REDUX_DEVTOOLS } from 'electron-devtools-installer';
+// import { installExtension, REDUX_DEVTOOLS } from 'electron-devtools-installer';
 
 let win: BrowserWindow | null = null
 const appEnvironment = configureAppEnvironment(import.meta.url)
@@ -32,12 +32,12 @@ app.on('activate', () => {
 })
 
 app.whenReady().then(async () => {
-  try {
-    const ext = await installExtension(REDUX_DEVTOOLS)
-    console.log(`Added Extension: ${ext.name}`)
-  } catch (err) {
-    console.log('An error occurred:', err)
-  }
+  // try {
+  //   const ext = await installExtension(REDUX_DEVTOOLS)
+  //   console.log(`Added Extension: ${ext.name}`)
+  // } catch (err) {
+  //   console.log('An error occurred:', err)
+  // }
   Menu.setApplicationMenu(null)
 
   await initializeMainProcessServices(app.getPath('userData'))

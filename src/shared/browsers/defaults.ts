@@ -11,7 +11,7 @@ import type {
 } from './types'
 import { normalizeBrowserNavigationUrls } from './urlFilters'
 
-export const defaultBrowserRunMode: BrowserRunMode = 'dedicated_profile'
+export const defaultBrowserRunMode: BrowserRunMode = 'extension_controlled'
 
 export const defaultDynamicTemplateUpdates = false
 
@@ -89,11 +89,7 @@ function isRestorePolicy(value: unknown): value is RestorePolicy {
 }
 
 function isBrowserRunMode(value: unknown): value is BrowserRunMode {
-  return (
-    value === 'dedicated_profile' ||
-    value === 'extension_controlled' ||
-    value === 'default_browser_deeplink'
-  )
+  return value === 'extension_controlled'
 }
 
 function isBrowserProfileSource(

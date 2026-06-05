@@ -6,6 +6,10 @@ import {
   ensureNativeMessagingHostRegistration,
   type NativeMessagingRegistrationResult,
 } from './browserNativeMessagingRegistry'
+import {
+  browserExtensionVersion,
+  minimumBrowserExtensionVersion,
+} from './browserExtensionCompatibility'
 
 export const browserExtensionPublicKey =
   'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlCX95HItWhCd7SfJ/GxY0i0dwtN7tj+9jRAjVTAPHzplCnnhMUKXWWcJWk3/1Arfxv5xye6nDSKWzMRgFvhzE9LKxBXWgdTyL1NgJHi3w37WaVxIf38XIR1F3RjxnMDhjy2VWqHEktmRvlcBCcO1CVgoHq1rz/AS2/TWteGS4K8FJdRXnlJEP6zqnm3Xodc51ojKCKnQqsUEvTq14/LibtXKUz+X/Gvzup1RTUMvN6QDVRyQ9kjUiDlAj9tgvTmqJ9oa7K0qvxKae4qsYQ6S1Lvu2WXdb+1W2jBA2x1a4jwqtnwcnQNFzZu4jeQBYe5QpbaEbsBmZzP5b8qQTjlGEQIDAQAB'
@@ -122,14 +126,24 @@ const MAX_MESSAGE_BYTES = 1024 * 1024
 const BROKER_RECONNECT_MS = 500
 const HOST_DIR = path.dirname(fileURLToPath(import.meta.url))
 const BROKER_CONNECTION_PATH = path.join(HOST_DIR, 'broker-connection.json')
-const EXPECTED_EXTENSION_ORIGIN = ${JSON.stringify(`chrome-extension://${browserExtensionId}/`)}
+const EXPECTED_EXTENSION_ORIGINS = ${JSON.stringify([
+  `chrome-extension://${browserExtensionId}`,
+  `chrome-extension://${browserExtensionId}/`,
+])}
+const EXPECTED_EXTENSION_VERSION = ${JSON.stringify(browserExtensionVersion)}
+const MINIMUM_EXTENSION_VERSION = ${JSON.stringify(minimumBrowserExtensionVersion)}
 
 let buffer = Buffer.alloc(0)
 let brokerSocket
 let brokerBuffer = ''
 let reconnectTimer
+let lastBrokerStatusKey = ''
 
 assertAllowedOrigin()
+writeBrokerStatus({
+  state: 'connecting',
+  message: 'Waiting for Pastel Flow app broker.',
+})
 connectBroker()
 
 stdin.on('data', (chunk) => {
@@ -184,6 +198,7 @@ function failAndExit(error) {
     id: 'unknown',
     ok: false,
     error,
+    type: 'pastelFlow:nativeHostError',
   })
   exit(1)
 }
@@ -197,12 +212,19 @@ async function connectBroker() {
       host: '127.0.0.1',
       port: connection.port,
     })
+    let socketHadError = false
     brokerSocket = socket
+    brokerBuffer = ''
     socket.setEncoding('utf8')
     socket.on('connect', () => {
       writeBrokerLine({
         hello: 'pastel-flow-browser-host',
         token: connection.token,
+      })
+      writeBrokerStatus({
+        connectedAt: new Date().toISOString(),
+        state: 'connected',
+        message: 'Connected to Pastel Flow app broker.',
       })
     })
     socket.on('data', (chunk) => {
@@ -226,9 +248,35 @@ async function connectBroker() {
         }
       }
     })
-    socket.on('close', scheduleBrokerReconnect)
-    socket.on('error', scheduleBrokerReconnect)
-  } catch {
+    socket.on('close', () => {
+      if (brokerSocket === socket) {
+        brokerSocket = undefined
+      }
+      if (!socketHadError) {
+        writeBrokerStatus({
+          disconnectedAt: new Date().toISOString(),
+          state: 'waiting',
+          message: 'Pastel Flow app broker disconnected.',
+        })
+      }
+      scheduleBrokerReconnect()
+    })
+    socket.on('error', (error) => {
+      socketHadError = true
+      writeBrokerStatus({
+        disconnectedAt: new Date().toISOString(),
+        lastError: error instanceof Error ? error.message : 'Broker socket error.',
+        state: 'waiting',
+        message: 'Waiting for Pastel Flow app broker.',
+      })
+      scheduleBrokerReconnect()
+    })
+  } catch (error) {
+    writeBrokerStatus({
+      lastError: error instanceof Error ? error.message : 'Broker connection file is unavailable.',
+      state: 'waiting',
+      message: 'Waiting for Pastel Flow app broker.',
+    })
     scheduleBrokerReconnect()
   }
 }
@@ -253,9 +301,29 @@ function writeBrokerLine(message) {
   brokerSocket.write(JSON.stringify(message) + '\\n')
 }
 
+function writeBrokerStatus(status) {
+  const statusKey = JSON.stringify({
+    lastError: status.lastError,
+    message: status.message,
+    state: status.state,
+  })
+  if (statusKey === lastBrokerStatusKey) {
+    return
+  }
+
+  lastBrokerStatusKey = statusKey
+  writeMessage({
+    expectedExtensionVersion: EXPECTED_EXTENSION_VERSION,
+    minimumExtensionVersion: MINIMUM_EXTENSION_VERSION,
+    type: 'pastelFlow:brokerStatus',
+    updatedAt: new Date().toISOString(),
+    ...status,
+  })
+}
+
 function assertAllowedOrigin() {
   const callerOrigin = argv.find((argument) => argument.startsWith('chrome-extension://'))
-  if (callerOrigin !== EXPECTED_EXTENSION_ORIGIN) {
+  if (!EXPECTED_EXTENSION_ORIGINS.includes(callerOrigin)) {
     failAndExit('Native messaging caller origin is not allowed.')
   }
 }

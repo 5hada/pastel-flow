@@ -1,6 +1,7 @@
 import { ipcMain, safeStorage } from 'electron'
 import { createActionAdapterRegistry } from '../actions/adapters/actionAdapterRegistry'
 import { browserAdapter } from '../actions/adapters/browserAdapter'
+import { initializeBrowserActionGroupRuntime } from '../browsers/browserActionGroupRuntime'
 import { crawlerAdapter } from '../actions/adapters/crawlerAdapter'
 import {
   discordBotAdapter,
@@ -76,6 +77,7 @@ export async function initializeMainProcessServices(dataDir: string): Promise<vo
     notionSyncAdapter,
     tradingBotAdapter,
   ])
+  await initializeBrowserActionGroupRuntime(dataDir)
   const mockSyncStore = createMockSyncStore({
     dataDir,
     appSettingsStore,

@@ -3,7 +3,6 @@ import {
   BrowserTabGroupConfig,
   normalizeBrowserTabGroupConfig
 } from '../../../shared/browsers'
-import { openDefaultBrowserUrls } from '../../browsers/browserProcessLauncher'
 import {
   readBrowserActionState,
   startOrAttachBrowserActionGroup,
@@ -26,19 +25,6 @@ export const browserAdapter: ActionAdapter<
   async run({ action, dataDir, updateConfig, updateState }) {
     const config = normalizeBrowserTabGroupConfig(action.config)
 
-    if (config.runMode === 'default_browser_deeplink') {
-      await openDefaultBrowserUrls(config.initialUrls)
-
-      return {
-        state: {
-          ...action,
-          status: 'idle',
-          lastRunAt: new Date().toISOString(),
-          lastError: undefined,
-        },
-        message: '기본 브라우저로 초기 URL을 열었습니다.',
-      }
-    }
     const runResult = await startOrAttachBrowserActionGroup(action.id, config, {
       dataDir,
       async onActionSnapshot(actionId, nextConfig, nextState) {

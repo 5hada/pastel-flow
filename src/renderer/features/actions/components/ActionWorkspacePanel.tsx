@@ -7,6 +7,7 @@ import type {
   DeveloperVisibilitySettings,
 } from '../../../../shared/settings'
 import type { ActionDefinition } from '../../../../shared/actions'
+import type { WorkflowDefinition } from '../../../../shared/workflows'
 import {
   taskTypeOptions,
   type BrowserTaskFormState,
@@ -29,6 +30,7 @@ export type ActionWorkspacePanelProps = {
   profilePresets: BrowserProfilePreset[]
   selectedActionId: string | null
   secrets: LocalSecretMetadata[]
+  workflows: WorkflowDefinition[]
   onChange(value: BrowserTaskFormState): void
   onDeleteAction(actionId: string): Promise<void>
   onSelectAction(actionId: string | null): void
@@ -52,9 +54,19 @@ export function ActionWorkspacePanel({
   secrets,
   profilePresets,
   selectedActionId,
+  workflows,
 }: ActionWorkspacePanelProps) {
   const selectedAction =
     actions.find((action) => action.id === selectedActionId) ?? null
+  const isSelectedActionLocked =
+    selectedAction !== null &&
+    workflows.some(
+      (workflow) =>
+        workflow.state.status === 'running' &&
+        workflow.actionRefs.some(
+          (actionRef) => actionRef.actionId === selectedAction.id,
+        ),
+    )
   const [editForm, setEditForm] = useState<BrowserTaskFormState | null>(null)
   const editableTaskType = selectedAction
     ? getTaskTypeForActionType(selectedAction.type)
@@ -65,7 +77,10 @@ export function ActionWorkspacePanel({
   }, [selectedAction])
 
   return (
-    <Card className="mode-panel action-workspace" aria-label="Action 편집">
+    <Card
+      className={`mode-panel action-workspace${isSelectedActionLocked ? ' is-edit-locked' : ''}`}
+      aria-label="Action 편집"
+    >
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Actions</p>
@@ -89,6 +104,9 @@ export function ActionWorkspacePanel({
                   className="task-form"
                   onSubmit={(event) => {
                     event.preventDefault()
+                    if (isSelectedActionLocked) {
+                      return
+                    }
                     if (!editForm.name.trim()) {
                       return
                     }
@@ -112,6 +130,7 @@ export function ActionWorkspacePanel({
                     <label>
                       이름
                       <Input
+                        disabled={isSelectedActionLocked}
                         value={editForm.name}
                         onChange={(event) =>
                           setEditForm({
@@ -125,6 +144,7 @@ export function ActionWorkspacePanel({
                       <label>
                         Action 타입
                         <Select
+                          isDisabled={isSelectedActionLocked}
                           selectedKey={editForm.taskType}
                           onSelectionChange={(key) =>
                             setEditForm({
@@ -168,6 +188,7 @@ export function ActionWorkspacePanel({
                   {editableTaskType ? (
                     <TaskTypeConfigFields
                       form={editForm}
+                      isDisabled={isSelectedActionLocked}
                       profilePresets={profilePresets}
                       onChange={setEditForm}
                     />
@@ -179,6 +200,7 @@ export function ActionWorkspacePanel({
                   <label>
                     Secret 참조
                     <Select
+                      isDisabled={isSelectedActionLocked}
                       selectionMode="multiple"
                       value={parseLines(editForm.secretRefIds)}
                       onChange={(keys) =>
@@ -209,9 +231,16 @@ export function ActionWorkspacePanel({
                     </Select>
                   </label>
                   <div className="form-actions">
-                    <Button variant="primary" type="submit">저장</Button>
+                    <Button
+                      isDisabled={isSelectedActionLocked}
+                      variant="primary"
+                      type="submit"
+                    >
+                      저장
+                    </Button>
                     <Button
                       className="danger-button"
+                      isDisabled={isSelectedActionLocked}
                       variant="danger"
                       type="button"
                       onClick={() => void onDeleteAction(selectedAction.id)}

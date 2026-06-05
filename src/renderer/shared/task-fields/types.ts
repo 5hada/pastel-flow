@@ -5,6 +5,7 @@ import type { BrowserTaskFormState } from '../state/taskFormState'
 
 export type TaskFieldsProps = {
   form: BrowserTaskFormState
+  isDisabled?: boolean
   profilePresets?: BrowserProfilePreset[]
   onChange(value: BrowserTaskFormState): void
 }

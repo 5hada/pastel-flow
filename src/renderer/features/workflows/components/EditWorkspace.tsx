@@ -28,6 +28,7 @@ export type EditWorkspaceProps = {
   isLoading: boolean
   profilePresets: BrowserProfilePreset[]
   selectedWorkflowId: string | null
+  runningWorkflowId: string | null
   workflowRunEvents: WorkflowRunEvent[]
   workflows: WorkflowDefinition[]
   onCreateWorkflow(name?: string): Promise<void>
@@ -48,12 +49,16 @@ export function EditWorkspace({
   onCreateWorkflow,
   onStartCreateWorkflow,
   onUpdateWorkflow,
+  runningWorkflowId,
   selectedWorkflowId,
   workflowRunEvents,
   workflows,
 }: EditWorkspaceProps) {
   const selectedWorkflow =
     workflows.find((workflow) => workflow.id === selectedWorkflowId) ?? null
+  const isSelectedWorkflowLocked =
+    selectedWorkflow?.state.status === 'running' ||
+    selectedWorkflow?.id === runningWorkflowId
   const [createName, setCreateName] = useState(defaultWorkflowName)
   const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
@@ -84,7 +89,7 @@ export function EditWorkspace({
   async function handleRenameWorkflow(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!selectedWorkflow) {
+    if (!selectedWorkflow || isSelectedWorkflowLocked) {
       return
     }
 
@@ -141,7 +146,10 @@ export function EditWorkspace({
 
   return (
     <section aria-label="기존 작업 수정">
-      <Card className="mode-panel workflow-builder" aria-label="Workflow 작성">
+      <Card
+        className={`mode-panel workflow-builder${isSelectedWorkflowLocked ? ' is-edit-locked' : ''}`}
+        aria-label="Workflow 작성"
+      >
         <div className="panel-heading">
           <div>
             <p className="eyebrow">Workflows</p>
@@ -153,12 +161,13 @@ export function EditWorkspace({
                 <input
                   aria-label="Workflow 이름"
                   value={editName}
+                  disabled={isSelectedWorkflowLocked}
                   onChange={(event) => setEditName(event.target.value)}
                 />
                 <Button
                   variant="primary"
                   type="submit"
-                  isDisabled={!editName.trim()}
+                  isDisabled={isSelectedWorkflowLocked || !editName.trim()}
                 >
                   저장
                 </Button>
@@ -182,9 +191,12 @@ export function EditWorkspace({
                   variant="ghost"
                   type="button"
                   onClick={() => {
-                    setEditingWorkflowId(selectedWorkflow.id)
-                    setEditName(selectedWorkflow.name)
+                    if (!isSelectedWorkflowLocked) {
+                      setEditingWorkflowId(selectedWorkflow.id)
+                      setEditName(selectedWorkflow.name)
+                    }
                   }}
+                  isDisabled={isSelectedWorkflowLocked}
                 >
                   <Pencil/>
                 </Button>
@@ -205,8 +217,9 @@ export function EditWorkspace({
             <WorkflowActionList
               actions={actions}
               workflow={selectedWorkflow}
+              isLocked={isSelectedWorkflowLocked}
               onAddAction={(actionId) => {
-                if (!selectedWorkflow) {
+                if (!selectedWorkflow || isSelectedWorkflowLocked) {
                   return
                 }
                 void onUpdateWorkflow(selectedWorkflow.id, {
@@ -222,7 +235,7 @@ export function EditWorkspace({
                 })
               }}
               onMoveAction={(actionRefId, direction) => {
-                if (!selectedWorkflow) {
+                if (!selectedWorkflow || isSelectedWorkflowLocked) {
                   return
                 }
                 void onUpdateWorkflow(selectedWorkflow.id, {
@@ -234,7 +247,7 @@ export function EditWorkspace({
                 })
               }}
               onReorderActions={(actionRefIds) => {
-                if (!selectedWorkflow) {
+                if (!selectedWorkflow || isSelectedWorkflowLocked) {
                   return
                 }
                 void onUpdateWorkflow(selectedWorkflow.id, {
@@ -245,7 +258,7 @@ export function EditWorkspace({
                 })
               }}
               onRemoveAction={(actionRefId) => {
-                if (!selectedWorkflow) {
+                if (!selectedWorkflow || isSelectedWorkflowLocked) {
                   return
                 }
                 void onUpdateWorkflow(selectedWorkflow.id, {
@@ -255,7 +268,7 @@ export function EditWorkspace({
                 })
               }}
               onToggleAction={(actionRefId) => {
-                if (!selectedWorkflow) {
+                if (!selectedWorkflow || isSelectedWorkflowLocked) {
                   return
                 }
                 void onUpdateWorkflow(selectedWorkflow.id, {
@@ -270,6 +283,7 @@ export function EditWorkspace({
             <Card className="danger-zone" aria-label="Workflow 삭제">
               <Button
                 className="danger-button"
+                isDisabled={isSelectedWorkflowLocked}
                 variant="danger"
                 type="button"
                 onClick={() => void onConfirmDeleteWorkflow(selectedWorkflow.id)}

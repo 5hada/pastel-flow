@@ -1,6 +1,10 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { createServer, type Server, type Socket } from 'node:net'
-import type { BrowserBridgeCommand } from './browserBridgeSchemas'
+import {
+  browserBridgeEventSchema,
+  type BrowserBridgeCommand,
+  type BrowserBridgeEvent,
+} from './browserBridgeSchemas'
 
 export type BrowserNativeBridgeBrokerConnection = {
   port: number
@@ -11,6 +15,8 @@ export type BrowserNativeBridgeBroker = {
   connection: BrowserNativeBridgeBrokerConnection
   dispatch(command: BrowserBridgeCommand): Promise<unknown>
   hasClient(): boolean
+  onClientDisconnected(listener: () => void): () => void
+  onEvent(listener: (event: BrowserBridgeEvent) => void): () => void
   dispose(): void
 }
 
@@ -29,6 +35,8 @@ export async function createBrowserNativeBridgeBroker(): Promise<BrowserNativeBr
   const server = createServer()
   const pendingRequests = new Map<string, PendingRequest>()
   const waiters = new Set<() => void>()
+  const disconnectListeners = new Set<() => void>()
+  const eventListeners = new Set<(event: BrowserBridgeEvent) => void>()
   let client: Socket | null = null
   let disposed = false
 
@@ -65,9 +73,19 @@ export async function createBrowserNativeBridgeBroker(): Promise<BrowserNativeBr
             return
           }
 
-          client?.destroy()
+          if (client && client !== socket) {
+            rejectPendingRequests(
+              pendingRequests,
+              '브라우저 확장 제어 연결이 새 연결로 교체되었습니다.',
+            )
+            client.destroy()
+          }
           client = socket
           notifyWaiters(waiters)
+          continue
+        }
+
+        if (emitBrokerEvent(eventListeners, message)) {
           continue
         }
 
@@ -77,6 +95,11 @@ export async function createBrowserNativeBridgeBroker(): Promise<BrowserNativeBr
     socket.on('close', () => {
       if (client === socket) {
         client = null
+        rejectPendingRequests(
+          pendingRequests,
+          '브라우저 확장 제어 연결이 끊겼습니다.',
+        )
+        notifyDisconnectListeners(disconnectListeners)
       }
     })
     socket.on('error', () => undefined)
@@ -104,7 +127,12 @@ export async function createBrowserNativeBridgeBroker(): Promise<BrowserNativeBr
       return new Promise((resolve, reject) => {
         const timeoutId = setTimeout(() => {
           pendingRequests.delete(id)
-          reject(new Error('브라우저 확장 제어 응답 시간이 초과되었습니다.'))
+          client?.destroy()
+          reject(
+            new Error(
+              `브라우저 확장 제어 응답 시간이 초과되었습니다: ${command.type}`,
+            ),
+          )
         }, bridgeResponseTimeoutMs)
 
         pendingRequests.set(id, {
@@ -126,20 +154,51 @@ export async function createBrowserNativeBridgeBroker(): Promise<BrowserNativeBr
     hasClient() {
       return Boolean(client && !client.destroyed && client.writable)
     },
+    onClientDisconnected(listener) {
+      disconnectListeners.add(listener)
+
+      return () => {
+        disconnectListeners.delete(listener)
+      }
+    },
+    onEvent(listener) {
+      eventListeners.add(listener)
+
+      return () => {
+        eventListeners.delete(listener)
+      }
+    },
     dispose() {
       disposed = true
       client?.destroy()
       server.close()
       waiters.clear()
-      pendingRequests.forEach((pendingRequest) => {
-        clearTimeout(pendingRequest.timeoutId)
-        pendingRequest.reject(
-          new Error('브라우저 확장 제어 broker가 종료되었습니다.'),
-        )
-      })
-      pendingRequests.clear()
+      disconnectListeners.clear()
+      eventListeners.clear()
+      rejectPendingRequests(
+        pendingRequests,
+        '브라우저 확장 제어 broker가 종료되었습니다.',
+      )
     },
   }
+}
+
+function emitBrokerEvent(
+  listeners: Set<(event: BrowserBridgeEvent) => void>,
+  message: unknown,
+): boolean {
+  const candidate = message as { event?: unknown; type?: unknown }
+  if (candidate.type !== 'pastelFlow:event') {
+    return false
+  }
+
+  const parsedEvent = browserBridgeEventSchema.safeParse(candidate.event)
+  if (!parsedEvent.success) {
+    return true
+  }
+
+  listeners.forEach((listener) => listener(parsedEvent.data))
+  return true
 }
 
 function parseBrokerMessage(line: string): unknown {
@@ -196,6 +255,17 @@ function settlePendingRequest(
         : '브라우저 확장 제어 명령이 실패했습니다.',
     ),
   )
+}
+
+function rejectPendingRequests(
+  pendingRequests: Map<string, PendingRequest>,
+  message: string,
+): void {
+  pendingRequests.forEach((pendingRequest) => {
+    clearTimeout(pendingRequest.timeoutId)
+    pendingRequest.reject(new Error(message))
+  })
+  pendingRequests.clear()
 }
 
 async function waitForClient({
@@ -264,6 +334,10 @@ function timingSafeStringEqual(left: string, right: string): boolean {
 
 function notifyWaiters(waiters: Set<() => void>): void {
   waiters.forEach((waiter) => waiter())
+}
+
+function notifyDisconnectListeners(listeners: Set<() => void>): void {
+  listeners.forEach((listener) => listener())
 }
 
 function listen(server: Server): Promise<number> {

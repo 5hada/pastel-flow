@@ -1,6 +1,7 @@
 const commandTypes = new Set([
   'closeGroup',
   'ensureGroup',
+  'health',
   'ping',
   'snapshotGroup',
 ])

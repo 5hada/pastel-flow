@@ -3,6 +3,7 @@ import type {
 } from '../../shared/browsers'
 import {
   browserTabGroupStateSnapshotSchema,
+  browserBridgeHealthResultSchema,
   type BrowserBridgeCommand,
 } from './browserBridgeSchemas'
 import {
@@ -12,6 +13,7 @@ import {
 import type { BrowserNativeBridgeBroker } from './browserNativeBridgeBroker'
 import { ensureBrowserNativeMessagingHostAssets } from './browserNativeMessagingHost'
 import { normalizeTemplateUrls } from './browserUrlFilters'
+import { checkBrowserExtensionCompatibility } from './browserExtensionCompatibility'
 
 export type BrowserStateSnapshot = {
   urls: string[]
@@ -19,7 +21,8 @@ export type BrowserStateSnapshot = {
 }
 
 export type BrowserActionGroupBridge = {
-  closeGroup(browserGroupId: string): Promise<void>
+  checkHealth(): Promise<void>
+  closeGroup(browserGroupId: string): Promise<BrowserStateSnapshot>
   ensureGroup(browserGroupId: string, initialUrls: string[]): Promise<void>
   captureGroup(browserGroupId: string): Promise<BrowserStateSnapshot>
   readLatest(browserGroupId: string): BrowserStateSnapshot | undefined
@@ -48,18 +51,30 @@ export function startBrowserActionGroupBridge(
     }
     return snapshot
   }
-  const interval = setInterval(() => {
-    trackedGroupIds.forEach((browserGroupId) => {
-      void capture(browserGroupId).catch(() => undefined)
-    })
-  }, 1000)
 
   return {
-    closeGroup(browserGroupId) {
-      return dispatchBridgeCommand(transport, {
+    async checkHealth() {
+      const result = await dispatchBridgeCommand(transport, {
+        type: 'health',
+      })
+      const health = browserBridgeHealthResultSchema.parse(result)
+      const compatibility = checkBrowserExtensionCompatibility(health.version)
+      if (!compatibility.compatible) {
+        throw new Error(compatibility.reason)
+      }
+    },
+    async closeGroup(browserGroupId) {
+      const value = await dispatchBridgeCommand(transport, {
         type: 'closeGroup',
         browserGroupId,
-      }).then(() => undefined)
+      })
+      const snapshot = parseCloseGroupSnapshot(value)
+      if (snapshot) {
+        latestSnapshots.set(browserGroupId, snapshot)
+        return snapshot
+      }
+
+      return latestSnapshots.get(browserGroupId) ?? { urls: [] }
     },
     async ensureGroup(browserGroupId, initialUrls) {
       const targetUrls = normalizeTemplateUrls(initialUrls)
@@ -90,11 +105,25 @@ export function startBrowserActionGroupBridge(
       latestSnapshots.delete(browserGroupId)
     },
     dispose() {
-      clearInterval(interval)
       transport.dispose()
       trackedGroupIds.clear()
       latestSnapshots.clear()
     },
+  }
+}
+
+function parseCloseGroupSnapshot(value: unknown): BrowserStateSnapshot | undefined {
+  const candidate = value as { snapshot?: unknown }
+  const parsedSnapshot = browserTabGroupStateSnapshotSchema.safeParse(
+    candidate?.snapshot,
+  )
+  if (!parsedSnapshot.success) {
+    return undefined
+  }
+
+  return {
+    urls: normalizeTemplateUrls(parsedSnapshot.data.tabs.map((tab) => tab.url)),
+    tabGroupSnapshot: parsedSnapshot.data,
   }
 }
 

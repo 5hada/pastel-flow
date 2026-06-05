@@ -6,7 +6,10 @@ import {
   type BrowserActionGroupBridge,
   type BrowserStateSnapshot,
 } from './browserActionGroupBridge'
-import { createBrowserNativeBridgeBroker } from './browserNativeBridgeBroker'
+import {
+  createBrowserNativeBridgeBroker,
+} from './browserNativeBridgeBroker'
+import type { BrowserBridgeEvent } from './browserBridgeSchemas'
 
 export type BrowserActionGroupRunResult = {
   message: string
@@ -32,6 +35,7 @@ type RunningBrowserActionGroup = {
 
 type InstalledBrowserBridge = {
   bridge: BrowserActionGroupBridge
+  dispose(): void
 }
 
 type BrowserActionGroupRuntimeOptions = {
@@ -58,6 +62,7 @@ export async function startOrAttachBrowserActionGroup(
   )
 
   attachAction(actionGroup, actionId, config, options.onActionSnapshot)
+  await actionGroup.bridge.checkHealth()
   await actionGroup.bridge.ensureGroup(config.browserGroupId, config.initialUrls)
 
   return {
@@ -76,8 +81,7 @@ export async function stopBrowserActionGroup(
     throw new Error('관리 중인 브라우저 Action 그룹을 찾지 못했습니다.')
   }
 
-  const snapshot = await captureBestEffort(actionGroup, config.browserGroupId)
-  await actionGroup.bridge.closeGroup(config.browserGroupId)
+  const snapshot = await actionGroup.bridge.closeGroup(config.browserGroupId)
   detachAction(actionGroup, actionId)
 
   return {
@@ -101,6 +105,12 @@ export function readBrowserActionState(
     : undefined
 }
 
+export async function initializeBrowserActionGroupRuntime(
+  dataDir: string,
+): Promise<void> {
+  await getInstalledBrowserBridge(dataDir)
+}
+
 async function getInstalledBrowserBridge(
   dataDir: string,
 ): Promise<InstalledBrowserBridge> {
@@ -120,9 +130,41 @@ async function createInstalledBrowserBridge(
   const broker = await createBrowserNativeBridgeBroker()
   await ensureInstalledBrowserExtensionBridge(dataDir, broker)
   const bridge = startBrowserActionGroupBridge(broker)
+  const unsubscribeDisconnect = broker.onClientDisconnected(() => {
+    void markDisconnectedActionGroups(bridge)
+  })
+  const unsubscribeEvent = broker.onEvent((event) => {
+    void handleBrowserBridgeEvent(bridge, event)
+  })
 
   return {
     bridge,
+    dispose() {
+      unsubscribeDisconnect()
+      unsubscribeEvent()
+      bridge.dispose()
+      broker.dispose()
+    },
+  }
+}
+
+async function handleBrowserBridgeEvent(
+  bridge: BrowserActionGroupBridge,
+  event: BrowserBridgeEvent,
+): Promise<void> {
+  switch (event.type) {
+    case 'managedGroupClosed':
+      await markClosedActionGroups(
+        bridge,
+        event.browserGroupId,
+        event.snapshot
+          ? {
+              urls: event.snapshot.tabs.map((tab) => tab.url).filter(Boolean),
+              tabGroupSnapshot: event.snapshot,
+            }
+          : { urls: [] },
+      )
+      return
   }
 }
 
@@ -169,13 +211,62 @@ function detachAction(
   }
 }
 
-async function captureBestEffort(
-  actionGroup: RunningBrowserActionGroup,
+async function markDisconnectedActionGroups(
+  bridge: BrowserActionGroupBridge,
+): Promise<void> {
+  const disconnectedActionGroups = [
+    ...new Set(
+      [...actionGroupsByActionId.values()].filter(
+        (actionGroup) => actionGroup.bridge === bridge,
+      ),
+    ),
+  ]
+
+  await Promise.all(
+    disconnectedActionGroups.flatMap((actionGroup) =>
+      [...actionGroup.actionConfigs.entries()].map(async ([actionId, config]) => {
+        await actionGroup.actionSnapshotHandlers.get(actionId)?.(config, {
+          status: 'idle',
+          endedAt: new Date().toISOString(),
+          lastError: undefined,
+          lastMessage:
+            '브라우저 확장 연결이 끊겨 브라우저 Action 그룹 제어를 중지했습니다.',
+        })
+        detachAction(actionGroup, actionId)
+      }),
+    ),
+  )
+}
+
+async function markClosedActionGroups(
+  bridge: BrowserActionGroupBridge,
   browserGroupId: string,
-): Promise<BrowserStateSnapshot> {
-  return (
-    (await actionGroup.bridge.captureGroup(browserGroupId).catch(() => undefined)) ??
-    actionGroup.bridge.readLatest(browserGroupId) ?? { urls: [] }
+  snapshot: BrowserStateSnapshot,
+): Promise<void> {
+  const closedActionGroups = [
+    ...new Set(
+      [...actionGroupsByActionId.values()].filter(
+        (actionGroup) => actionGroup.bridge === bridge,
+      ),
+    ),
+  ]
+
+  await Promise.all(
+    closedActionGroups.flatMap((actionGroup) =>
+      [...actionGroup.actionConfigs.entries()]
+        .filter(([, config]) => config.browserGroupId === browserGroupId)
+        .map(async ([actionId, config]) => {
+          const nextConfig = applySnapshotToConfig(config, snapshot)
+          await actionGroup.actionSnapshotHandlers.get(actionId)?.(nextConfig, {
+            status: 'idle',
+            endedAt: new Date().toISOString(),
+            lastError: undefined,
+            lastMessage:
+              '브라우저에서 탭 그룹이 닫혀 브라우저 Action 그룹 제어를 중지했습니다.',
+          })
+          detachAction(actionGroup, actionId)
+        }),
+    ),
   )
 }
 
@@ -183,6 +274,10 @@ function applySnapshotToConfig(
   config: BrowserTabGroupConfig,
   snapshot: BrowserStateSnapshot,
 ): BrowserTabGroupConfig {
+  if (!config.dynamicTemplateUpdates) {
+    return config
+  }
+
   return {
     ...config,
     initialUrls: snapshot.urls.length > 0 ? snapshot.urls : config.initialUrls,

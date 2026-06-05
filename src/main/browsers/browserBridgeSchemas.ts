@@ -2,6 +2,9 @@ import { z } from 'zod'
 
 export const browserBridgeCommandSchema = z.discriminatedUnion('type', [
   z.object({
+    type: z.literal('health'),
+  }),
+  z.object({
     type: z.literal('ping'),
   }),
   z.object({
@@ -60,3 +63,20 @@ export const browserBridgePingResultSchema = z.object({
   ok: z.literal(true),
   version: z.string(),
 })
+
+export const browserBridgeHealthResultSchema = z.object({
+  managedGroupCount: z.number(),
+  ok: z.literal(true),
+  transport: z.literal('native-messaging'),
+  version: z.string(),
+})
+
+export const browserBridgeEventSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('managedGroupClosed'),
+    browserGroupId: z.string().min(1),
+    snapshot: browserTabGroupStateSnapshotSchema.optional(),
+  }),
+])
+
+export type BrowserBridgeEvent = z.infer<typeof browserBridgeEventSchema>

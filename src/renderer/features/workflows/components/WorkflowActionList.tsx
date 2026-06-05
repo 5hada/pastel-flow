@@ -8,6 +8,7 @@ import { getActionTypeLabel } from '../../../shared/utils/viewLabels'
 export type WorkflowActionListProps = {
   actions: ActionDefinition[]
   workflow: WorkflowDefinition | null
+  isLocked?: boolean
   onAddAction(actionId: string): void
   onMoveAction(actionRefId: string, position: 'top' | 'bottom'): void
   onRemoveAction(actionRefId: string): void
@@ -17,6 +18,7 @@ export type WorkflowActionListProps = {
 
 export function WorkflowActionList({
   actions,
+  isLocked = false,
   onAddAction,
   onMoveAction,
   onReorderActions,
@@ -76,7 +78,12 @@ export function WorkflowActionList({
   return (
     <div className="workflow-action-list">
       <div className="detail-actions">
-        <Button variant="secondary" type="button" onClick={() => setIsPickerOpen(true)}>
+        <Button
+          isDisabled={isLocked}
+          variant="secondary"
+          type="button"
+          onClick={() => setIsPickerOpen(true)}
+        >
           Action 추가
         </Button>
       </div>
@@ -89,14 +96,25 @@ export function WorkflowActionList({
           return (
             <div
               className="workflow-action-row"
-              draggable
+              draggable={!isLocked}
               key={actionRef.id}
               onDragStart={(event) => {
+                if (isLocked) {
+                  event.preventDefault()
+                  return
+                }
                 event.dataTransfer.setData('text/plain', actionRef.id)
                 event.dataTransfer.effectAllowed = 'move'
               }}
-              onDragOver={(event) => event.preventDefault()}
+              onDragOver={(event) => {
+                if (!isLocked) {
+                  event.preventDefault()
+                }
+              }}
               onDrop={(event) => {
+                if (isLocked) {
+                  return
+                }
                 event.preventDefault()
                 const sourceActionRefId = event.dataTransfer.getData('text/plain')
                 if (!sourceActionRefId || sourceActionRefId === actionRef.id) {
@@ -118,6 +136,7 @@ export function WorkflowActionList({
               </div>
               <Switch
                 aria-label="Action 활성화"
+                isDisabled={isLocked}
                 isSelected={actionRef.enabled}
                 onChange={() => onToggleAction(actionRef.id)}
               >
@@ -126,7 +145,7 @@ export function WorkflowActionList({
                 </Switch.Control>
               </Switch>
               <Button
-                isDisabled={index === 0}
+                isDisabled={isLocked || index === 0}
                 isIconOnly
                 variant="ghost"
                 type="button"
@@ -135,7 +154,7 @@ export function WorkflowActionList({
                 <ArrowLeftToLine/>
               </Button>
               <Button
-                isDisabled={index === sortedActionRefs.length - 1}
+                isDisabled={isLocked || index === sortedActionRefs.length - 1}
                 isIconOnly
                 variant="ghost"
                 type="button"
@@ -145,6 +164,7 @@ export function WorkflowActionList({
               </Button>
               <Button
                 isIconOnly
+                isDisabled={isLocked}
                 variant="danger"
                 type="button"
                 onClick={() => onRemoveAction(actionRef.id)}
@@ -224,7 +244,12 @@ export function WorkflowActionList({
                     <strong>{action.name}</strong>
                     <small>{getActionTypeLabel(action.type)}</small>
                   </div>
-                  <Button variant="secondary" type="button" onClick={() => onAddAction(action.id)}>
+                  <Button
+                    isDisabled={isLocked}
+                    variant="secondary"
+                    type="button"
+                    onClick={() => onAddAction(action.id)}
+                  >
                     추가
                   </Button>
                 </div>

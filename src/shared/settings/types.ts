@@ -14,6 +14,15 @@ export type ThemeMode = 'system' | 'light' | 'dark' | 'custom'
 export type InitialUrlInputMode = 'line'
 export type WorkflowListDisplayMode = 'grid' | 'list'
 
+export type WorkspaceFolderScope = 'actions' | 'tools' | 'workflows'
+
+export type WorkspaceFolder = {
+  id: string
+  name: string
+  scope: WorkspaceFolderScope
+  order: number
+}
+
 export type ThemeColorKey =
   | 'appBg'
   | 'surface'
@@ -72,6 +81,8 @@ export type AppSettings = {
   workflowGridColumnCount: number
   startAtLogin: boolean
   workflowHierarchy: string[]
+  workspaceFolders: WorkspaceFolder[]
+  workspaceFolderAssignments: Record<string, string>
   browserProfilePresets: BrowserProfilePreset[]
   browserExecutablePaths: BrowserExecutablePaths
   developerVisibility: DeveloperVisibilitySettings

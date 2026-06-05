@@ -5,7 +5,11 @@ import { useAppSettingsData } from '../../features/settings/hooks/useAppSettings
 import { useSecretsData } from '../../features/secrets/hooks/useSecretsData'
 import { useSyncData } from '../../features/sync/hooks/useSyncData'
 import { useToolModulesData } from '../../features/tools/hooks/useToolModulesData'
-import type { WorkflowRunEvent } from '../../../shared/runStatus'
+import type {
+  ActionRun,
+  WorkflowRun,
+  WorkflowRunEvent,
+} from '../../../shared/runStatus'
 import {
   createBrowserTaskForm,
   defaultCreateForm,
@@ -13,6 +17,11 @@ import {
   type SettingsCategory,
   type WorkspaceMode,
 } from '../state/taskFormState'
+import type {
+  AppSettings,
+  WorkspaceFolder,
+  WorkspaceFolderScope,
+} from '../../../shared/settings'
 import {
   createDevicePolicyFromForm,
   createTaskConfigFromForm,
@@ -29,6 +38,8 @@ export function usePastelFlowApp() {
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('run')
   const [selectedCategory, setSelectedCategory] =
     useState<NavigationCategory>('all')
+  const [selectedCollectionFolderId, setSelectedCollectionFolderId] =
+    useState<string>('all')
   const [selectedSettingsCategory, setSelectedSettingsCategory] =
     useState<SettingsCategory>('general')
   const [isSidebarOpen, setIsSidebarOpen] = useState(
@@ -38,6 +49,9 @@ export function usePastelFlowApp() {
   const [workflowRunEvents, setWorkflowRunEvents] = useState<WorkflowRunEvent[]>(
     [],
   )
+  const [workflowRuns, setWorkflowRuns] = useState<WorkflowRun[]>([])
+  const [selectedWorkflowRunId, setSelectedWorkflowRunId] = useState<string | null>(null)
+  const [actionRuns, setActionRuns] = useState<ActionRun[]>([])
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const actionWorkflow = useActionWorkflowData(setErrorMessage)
@@ -78,7 +92,7 @@ export function usePastelFlowApp() {
       onOpenWorkflows: openWorkflowMode,
       onRefresh: () => void refreshWorkspaceData(),
       onRunSelectedWorkflow: (workflowId) =>
-        void actionWorkflow.runWorkflow(workflowId),
+        void handleRunWorkflow(workflowId),
     },
     selectedWorkflowId: actionWorkflow.selectedWorkflowId,
     shortcuts: settings.appSettings.shortcuts,
@@ -123,7 +137,7 @@ export function usePastelFlowApp() {
       secrets.loadSecrets(),
     ])
     if (actionWorkflow.selectedWorkflowId) {
-      await loadWorkflowRunEvents(actionWorkflow.selectedWorkflowId)
+      await loadWorkflowRunHistory(actionWorkflow.selectedWorkflowId)
     }
   }
 
@@ -134,18 +148,27 @@ export function usePastelFlowApp() {
 
   function openActionMode() {
     setCreateForm(createBrowserTaskForm(settings.appSettings))
+    setSelectedCollectionFolderId('all')
+    actionWorkflow.setSelectedActionId(null)
     setWorkspaceMode('actions')
     void actionWorkflow.loadActionWorkflowData()
   }
 
   function openWorkflowMode() {
+    setSelectedCollectionFolderId('all')
+    actionWorkflow.setSelectedWorkflowId(null)
+    clearWorkflowRunHistory()
     setWorkspaceMode('workflows')
     void actionWorkflow.loadActionWorkflowData()
   }
 
   function selectWorkflow(workflow: WorkflowDefinition) {
-    actionWorkflow.setSelectedWorkflowId(workflow.id)
-    void loadWorkflowRunEvents(workflow.id)
+    selectWorkflowById(workflow.id)
+  }
+
+  function selectWorkflowById(workflowId: string) {
+    actionWorkflow.setSelectedWorkflowId(workflowId)
+    void loadWorkflowRunHistory(workflowId)
   }
 
   function openSettingsMode() {
@@ -155,8 +178,121 @@ export function usePastelFlowApp() {
   }
 
   function openToolsMode() {
+    setSelectedCollectionFolderId('all')
+    tools.setSelectedToolId(null)
+    tools.setToolRunResult(null)
+    tools.setToolMessage(null)
     setWorkspaceMode('tools')
     void tools.loadToolModules()
+  }
+
+  async function updateWorkspaceFolders(
+    updater: (settings: AppSettings) => AppSettings,
+  ) {
+    await settings.updateSettings(updater(settings.appSettings))
+  }
+
+  async function createWorkspaceFolder(scope: WorkspaceFolderScope) {
+    await updateWorkspaceFolders((currentSettings) => {
+      const scopedFolders = currentSettings.workspaceFolders.filter(
+        (folder) => folder.scope === scope,
+      )
+      const folder: WorkspaceFolder = {
+        id: `folder_${crypto.randomUUID()}`,
+        name: '새 폴더',
+        scope,
+        order: scopedFolders.length,
+      }
+
+      setSelectedCollectionFolderId(folder.id)
+
+      return {
+        ...currentSettings,
+        workspaceFolders: [...currentSettings.workspaceFolders, folder],
+      }
+    })
+  }
+
+  async function renameWorkspaceFolder(folderId: string, name: string) {
+    const trimmedName = name.trim()
+    if (!trimmedName) {
+      return
+    }
+
+    await updateWorkspaceFolders((currentSettings) => ({
+      ...currentSettings,
+      workspaceFolders: currentSettings.workspaceFolders.map((folder) =>
+        folder.id === folderId ? { ...folder, name: trimmedName } : folder,
+      ),
+    }))
+  }
+
+  async function deleteWorkspaceFolder(folderId: string) {
+    await updateWorkspaceFolders((currentSettings) => {
+      const nextAssignments = { ...currentSettings.workspaceFolderAssignments }
+      Object.entries(nextAssignments).forEach(([itemId, currentFolderId]) => {
+        if (currentFolderId === folderId) {
+          delete nextAssignments[itemId]
+        }
+      })
+
+      setSelectedCollectionFolderId('all')
+
+      return {
+        ...currentSettings,
+        workspaceFolders: currentSettings.workspaceFolders
+          .filter((folder) => folder.id !== folderId)
+          .map((folder, index) => ({ ...folder, order: index })),
+        workspaceFolderAssignments: nextAssignments,
+      }
+    })
+  }
+
+  async function moveWorkspaceFolder(folderId: string, direction: -1 | 1) {
+    await updateWorkspaceFolders((currentSettings) => {
+      const folder = currentSettings.workspaceFolders.find(
+        (currentFolder) => currentFolder.id === folderId,
+      )
+      if (!folder) {
+        return currentSettings
+      }
+
+      const scopedFolders = currentSettings.workspaceFolders
+        .filter((currentFolder) => currentFolder.scope === folder.scope)
+        .sort((left, right) => left.order - right.order)
+      const index = scopedFolders.findIndex(
+        (currentFolder) => currentFolder.id === folderId,
+      )
+      const nextIndex = index + direction
+      if (index < 0 || nextIndex < 0 || nextIndex >= scopedFolders.length) {
+        return currentSettings
+      }
+
+      const reorderedScopedFolders = [...scopedFolders]
+      const [movedFolder] = reorderedScopedFolders.splice(index, 1)
+      if (!movedFolder) {
+        return currentSettings
+      }
+      reorderedScopedFolders.splice(nextIndex, 0, movedFolder)
+      const scopedOrder = new Map(
+        reorderedScopedFolders.map((currentFolder, currentIndex) => [
+          currentFolder.id,
+          currentIndex,
+        ]),
+      )
+
+      return {
+        ...currentSettings,
+        workspaceFolders: currentSettings.workspaceFolders.map((currentFolder) =>
+          currentFolder.scope === folder.scope
+            ? {
+                ...currentFolder,
+                order: scopedOrder.get(currentFolder.id) ?? currentFolder.order,
+              }
+            : currentFolder,
+        ),
+      }
+    })
   }
 
   function openCategory(category: NavigationCategory) {
@@ -179,6 +315,60 @@ export function usePastelFlowApp() {
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     }
+  }
+
+  async function loadWorkflowRunHistory(workflowId: string) {
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      const [events, runs] = await Promise.all([
+        window.pastelFlow.workflows.listEvents(workflowId),
+        window.pastelFlow.workflows.listRuns(workflowId),
+      ])
+      setWorkflowRunEvents(events)
+      setWorkflowRuns(runs)
+      const nextSelectedRunId = runs[0]?.id ?? null
+      setSelectedWorkflowRunId(nextSelectedRunId)
+      setActionRuns(
+        nextSelectedRunId
+          ? await window.pastelFlow.workflows.listActionRuns(nextSelectedRunId)
+          : [],
+      )
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    }
+  }
+
+  async function selectWorkflowRun(runId: string) {
+    if (!window.pastelFlow) {
+      return
+    }
+
+    try {
+      setSelectedWorkflowRunId(runId)
+      setActionRuns(await window.pastelFlow.workflows.listActionRuns(runId))
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    }
+  }
+
+  function clearWorkflowRunHistory() {
+    setWorkflowRunEvents([])
+    setWorkflowRuns([])
+    setSelectedWorkflowRunId(null)
+    setActionRuns([])
+  }
+
+  async function handleRunWorkflow(workflowId: string) {
+    await actionWorkflow.runWorkflow(workflowId)
+    await loadWorkflowRunHistory(workflowId)
+  }
+
+  async function handleStopWorkflow(workflowId: string) {
+    await actionWorkflow.stopWorkflow(workflowId)
+    await loadWorkflowRunHistory(workflowId)
   }
 
   async function handleCreateAction(event: FormEvent<HTMLFormElement>) {
@@ -244,6 +434,7 @@ export function usePastelFlowApp() {
     secrets: secrets.secrets,
     selectedActionId: actionWorkflow.selectedActionId,
     selectedCategory,
+    selectedCollectionFolderId,
     selectedSettingsCategory,
     selectedToolId: tools.selectedToolId,
     selectedWorkflowId: actionWorkflow.selectedWorkflowId,
@@ -254,7 +445,10 @@ export function usePastelFlowApp() {
     syncMessage: sync.syncMessage,
     syncResult: sync.syncResult,
     syncStatus: sync.syncStatus,
+    actionRuns,
     workflowRunEvents,
+    workflowRuns,
+    selectedWorkflowRunId,
     toolInputValues: tools.toolInputValues,
     toolMessage: tools.toolMessage,
     toolModules: tools.toolModules,
@@ -286,10 +480,10 @@ export function usePastelFlowApp() {
     handleImportSyncSnapshotFile: sync.handleImportSyncSnapshotFile,
     handlePruneWorkflowRunEvents: sync.handlePruneWorkflowRunEvents,
     handleRegisterToolModule: tools.handleRegisterToolModule,
-    handleRunWorkflow: actionWorkflow.runWorkflow,
+    handleRunWorkflow,
     handleRunToolModule: tools.handleRunToolModule,
     handleSaveSettings,
-    handleStopWorkflow: actionWorkflow.stopWorkflow,
+    handleStopWorkflow,
     handleTaskListDisplayModeChange:
       settings.handleTaskListDisplayModeChange,
     handleUpdateAction: actionWorkflow.updateAction,
@@ -304,10 +498,13 @@ export function usePastelFlowApp() {
     openWorkflowMode,
     refreshWorkspaceData,
     selectWorkflow,
+    selectWorkflowById,
+    selectWorkflowRun,
     setCreateForm,
     setIsSidebarOpen,
     setSecretForm: secrets.setSecretForm,
     setSelectedActionId: actionWorkflow.setSelectedActionId,
+    setSelectedCollectionFolderId,
     setSelectedSettingsCategory,
     setSelectedToolId: tools.setSelectedToolId,
     setSelectedWorkflowId: actionWorkflow.setSelectedWorkflowId,
@@ -315,6 +512,10 @@ export function usePastelFlowApp() {
     setToolInputValues: tools.setToolInputValues,
     setToolMessage: tools.setToolMessage,
     setToolRunResult: tools.setToolRunResult,
+    createWorkspaceFolder,
+    deleteWorkspaceFolder,
+    moveWorkspaceFolder,
+    renameWorkspaceFolder,
   }
 }
 

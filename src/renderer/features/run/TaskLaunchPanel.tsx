@@ -197,7 +197,7 @@ export function TaskLaunchPanel({
                     type="button"
                     onClick={() => onSelect(workflow)}
                   >
-                    선택
+                    수정
                   </Button>
                   {displayMode === 'list' ? (
                     <Button

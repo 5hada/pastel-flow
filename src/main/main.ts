@@ -32,12 +32,6 @@ app.on('activate', () => {
 })
 
 app.whenReady().then(async () => {
-  // try {
-  //   const ext = await installExtension(REDUX_DEVTOOLS)
-  //   console.log(`Added Extension: ${ext.name}`)
-  // } catch (err) {
-  //   console.log('An error occurred:', err)
-  // }
   Menu.setApplicationMenu(null)
 
   await initializeMainProcessServices(app.getPath('userData'))

@@ -1,10 +1,11 @@
-import { Button, Card, Input, ListBox, Select } from '@heroui/react'
+import { Button, Card, ListBox, Select } from '@heroui/react'
 import { useEffect, useState, type FormEvent } from 'react'
 import type { CurrentDevice } from '../../../../shared/devices'
 import type { LocalSecretMetadata } from '../../../../shared/secrets'
 import type {
   BrowserProfilePreset,
   DeveloperVisibilitySettings,
+  WorkspaceFolder,
 } from '../../../../shared/settings'
 import type { ActionDefinition } from '../../../../shared/actions'
 import type { WorkflowDefinition } from '../../../../shared/workflows'
@@ -21,6 +22,9 @@ import {
 import { CreateTaskPanel } from './CreateTaskPanel'
 import { TaskTypeConfigFields } from '../../../shared/task-fields'
 import { getActionTypeLabel, formatDate } from '../../../shared/utils/viewLabels'
+import { getCommonIcon } from '../../../shared/assets/icon'
+import { CollectionListPanel } from '../../../shared/components/CollectionListPanel'
+import { getWorkspaceFolderPathLabel } from '../../../shared/utils/workspaceFolderLabels'
 
 export type ActionWorkspacePanelProps = {
   actions: ActionDefinition[]
@@ -28,8 +32,11 @@ export type ActionWorkspacePanelProps = {
   currentDevice: CurrentDevice
   developerVisibility: DeveloperVisibilitySettings
   profilePresets: BrowserProfilePreset[]
+  selectedCollectionFolderId: string
   selectedActionId: string | null
   secrets: LocalSecretMetadata[]
+  workspaceFolderAssignments: Record<string, string>
+  workspaceFolders: WorkspaceFolder[]
   workflows: WorkflowDefinition[]
   onChange(value: BrowserTaskFormState): void
   onDeleteAction(actionId: string): Promise<void>
@@ -53,7 +60,10 @@ export function ActionWorkspacePanel({
   onUpdateAction,
   secrets,
   profilePresets,
+  selectedCollectionFolderId,
   selectedActionId,
+  workspaceFolderAssignments,
+  workspaceFolders,
   workflows,
 }: ActionWorkspacePanelProps) {
   const selectedAction =
@@ -68,13 +78,82 @@ export function ActionWorkspacePanel({
         ),
     )
   const [editForm, setEditForm] = useState<BrowserTaskFormState | null>(null)
+  const [editingActionNameId, setEditingActionNameId] = useState<string | null>(
+    null,
+  )
+  const [editName, setEditName] = useState('')
+  const [isCreatingAction, setIsCreatingAction] = useState(false)
   const editableTaskType = selectedAction
     ? getTaskTypeForActionType(selectedAction.type)
     : null
+  const visibleActions = filterByFolder(
+    actions,
+    selectedCollectionFolderId,
+    workspaceFolderAssignments,
+  )
 
   useEffect(() => {
     setEditForm(selectedAction ? createActionEditForm(selectedAction) : null)
+    setEditingActionNameId(null)
+    setEditName(selectedAction?.name ?? '')
+    if (selectedAction) {
+      setIsCreatingAction(false)
+    }
   }, [selectedAction])
+
+  async function handleRenameAction(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selectedAction || isSelectedActionLocked) {
+      return
+    }
+
+    const trimmedName = editName.trim()
+    if (!trimmedName || trimmedName === selectedAction.name) {
+      setEditingActionNameId(null)
+      setEditName(selectedAction.name)
+      return
+    }
+
+    await onUpdateAction(selectedAction.id, {
+      name: trimmedName,
+    })
+    setEditForm((currentForm) =>
+      currentForm ? { ...currentForm, name: trimmedName } : currentForm,
+    )
+    setEditingActionNameId(null)
+  }
+
+  if (!selectedAction && !isCreatingAction) {
+    return (
+      <CollectionListPanel
+        emptyText="표시할 Action이 없습니다."
+        eyebrow="ACTIONS"
+        folderLabel={getWorkspaceFolderPathLabel(
+          selectedCollectionFolderId,
+          workspaceFolders,
+        )}
+        headerAction={
+          <Button
+            aria-label="Action 추가"
+            isIconOnly
+            variant="ghost"
+            type="button"
+            onClick={() => setIsCreatingAction(true)}
+          >
+            {getCommonIcon('add')}
+          </Button>
+        }
+        items={visibleActions.map((action) => ({
+          id: action.id,
+          title: action.name,
+          meta: getActionTypeLabel(action.type),
+          message: `${action.secretRefs?.length ?? 0}개 Secret`,
+        }))}
+        title="Action 목록"
+        onEdit={onSelectAction}
+      />
+    )
+  }
 
   return (
     <Card
@@ -84,17 +163,70 @@ export function ActionWorkspacePanel({
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Actions</p>
-          <h2>{selectedAction ? selectedAction.name : '새 Action'}</h2>
+          {selectedAction && editingActionNameId === selectedAction.id ? (
+            <form className="workflow-title-form" onSubmit={handleRenameAction}>
+              <input
+                aria-label="Action 이름"
+                disabled={isSelectedActionLocked}
+                value={editName}
+                onChange={(event) => setEditName(event.target.value)}
+              />
+              <Button
+                isDisabled={isSelectedActionLocked || !editName.trim()}
+                variant="primary"
+                type="submit"
+              >
+                저장
+              </Button>
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={() => {
+                  setEditingActionNameId(null)
+                  setEditName(selectedAction.name)
+                }}
+              >
+                취소
+              </Button>
+            </form>
+          ) : selectedAction ? (
+            <div className="workflow-title-row">
+              <h2>{selectedAction.name}</h2>
+              <Button
+                aria-label="Action 이름 변경"
+                isDisabled={isSelectedActionLocked}
+                isIconOnly
+                variant="ghost"
+                type="button"
+                onClick={() => {
+                  if (isSelectedActionLocked) {
+                    return
+                  }
+                  setEditingActionNameId(selectedAction.id)
+                  setEditName(selectedAction.name)
+                }}
+              >
+                {getCommonIcon('edit')}
+              </Button>
+            </div>
+          ) : (
+            <h2>새 Action</h2>
+          )}
         </div>
-        <Button
-          aria-label="새 Action"
-          isIconOnly
-          variant="ghost"
-          type="button"
-          onClick={() => onSelectAction(null)}
-        >
-          +
-        </Button>
+        {selectedAction || isCreatingAction ? (
+          <Button
+            aria-label="목록으로 돌아가기"
+            isIconOnly
+            variant="ghost"
+            type="button"
+            onClick={() => {
+              setIsCreatingAction(false)
+              onSelectAction(null)
+            }}
+          >
+            {getCommonIcon('close')}
+          </Button>
+        ) : null}
       </div>
       <div className="editor-detail">
           {selectedAction ? (
@@ -127,19 +259,6 @@ export function ActionWorkspacePanel({
                   }}
                 >
                   <div className="form-grid">
-                    <label>
-                      이름
-                      <Input
-                        disabled={isSelectedActionLocked}
-                        value={editForm.name}
-                        onChange={(event) =>
-                          setEditForm({
-                            ...editForm,
-                            name: event.target.value,
-                          })
-                        }
-                      />
-                    </label>
                     {editableTaskType ? (
                       <label>
                         Action 타입
@@ -276,21 +395,37 @@ export function ActionWorkspacePanel({
                 ) : null}
               </dl>
             </div>
-          ) : (
+          ) : isCreatingAction ? (
             <CreateTaskPanel
               createForm={createForm}
               currentDevice={currentDevice}
               isEmbedded
               profilePresets={profilePresets}
               secrets={secrets}
-              onCancel={() => onSelectAction(actions[0]?.id ?? null)}
+              onCancel={() => setIsCreatingAction(false)}
               onChange={onChange}
               onSubmit={onSubmit}
             />
-          )}
+          ) : null}
       </div>
     </Card>
   )
+}
+
+function filterByFolder<TItem extends { id: string }>(
+  items: TItem[],
+  folderId: string,
+  assignments: Record<string, string>,
+): TItem[] {
+  if (folderId === 'all') {
+    return items
+  }
+
+  if (folderId === 'favorites') {
+    return []
+  }
+
+  return items.filter((item) => assignments[item.id] === folderId)
 }
 
 function DetailItem({ label, value }: { label: string; value: string }) {

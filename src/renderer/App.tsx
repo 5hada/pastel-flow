@@ -47,19 +47,33 @@ export default function App() {
         {app.isSidebarOpen ? (
           <WorkspaceSidebar
             actions={app.actions}
-            toolModules={app.toolModules}
-            workflows={app.workflows}
             currentMode={app.workspaceMode}
             selectedCategory={app.selectedCategory}
             selectedActionId={app.selectedActionId}
+            selectedCollectionFolderId={app.selectedCollectionFolderId}
             selectedSettingsCategory={app.selectedSettingsCategory}
             selectedToolId={app.selectedToolId}
             selectedWorkflowId={app.selectedWorkflowId}
+            toolModules={app.toolModules}
+            workflows={app.workflows}
+            workspaceFolders={app.appSettings.workspaceFolders}
             onCategorySelect={app.openCategory}
-            onCreateAction={() => app.setSelectedActionId(null)}
-            onCreateWorkflow={() => {
-              app.setSelectedWorkflowId(null)
+            onCollectionFolderSelect={(folderId) => {
+              app.setSelectedCollectionFolderId(folderId)
+              if (app.workspaceMode === 'actions') {
+                app.setSelectedActionId(null)
+              }
+              if (app.workspaceMode === 'workflows') {
+                app.setSelectedWorkflowId(null)
+              }
+              if (app.workspaceMode === 'tools') {
+                app.setSelectedToolId(null)
+              }
             }}
+            onCreateFolder={app.createWorkspaceFolder}
+            onDeleteFolder={app.deleteWorkspaceFolder}
+            onMoveFolder={app.moveWorkspaceFolder}
+            onRenameFolder={app.renameWorkspaceFolder}
             onSelectAction={app.setSelectedActionId}
             onSelectSettingsCategory={app.setSelectedSettingsCategory}
             onSelectTool={(tool) => {

@@ -91,6 +91,29 @@
   white-space: nowrap;
 }
 
+.status-running,
+.status-pending_confirmation {
+  border-color: color-mix(in srgb, #2472c8 42%, var(--border) 58%);
+  background: color-mix(in srgb, #2472c8 12%, var(--surface-muted) 88%);
+}
+
+.status-succeeded,
+.status-idle {
+  border-color: color-mix(in srgb, #23815f 40%, var(--border) 60%);
+  background: color-mix(in srgb, #23815f 12%, var(--surface-muted) 88%);
+}
+
+.status-failed {
+  border-color: color-mix(in srgb, #b23b4a 42%, var(--border) 58%);
+  background: color-mix(in srgb, #b23b4a 12%, var(--surface-muted) 88%);
+}
+
+.status-cancelled,
+.status-skipped {
+  border-color: color-mix(in srgb, #7d6a2f 38%, var(--border) 62%);
+  background: color-mix(in srgb, #7d6a2f 12%, var(--surface-muted) 88%);
+}
+
 .top-mode-bar {
   display: inline-grid;
   grid-template-columns: repeat(5, minmax(72px, 1fr));
@@ -144,6 +167,32 @@
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 4px;
+}
+
+.sidebar-heading-actions,
+.sidebar-folder-editor {
+  display: grid;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar-heading-actions {
+  grid-template-columns: 34px 34px;
+}
+
+.sidebar-folder-editor {
+  grid-template-columns: minmax(0, 1fr) 30px 30px 30px;
+  min-height: 38px;
+}
+
+.sidebar-folder-editor input {
+  min-width: 0;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 8px;
+  color: var(--text);
+  background: var(--control-bg);
 }
 
 .sidebar-item {
@@ -243,6 +292,33 @@
 .section-heading h2 {
   font-size: 1.34rem;
   line-height: 1.2;
+}
+
+.collection-list-panel .panel-heading {
+  align-items: center;
+}
+
+.collection-list-panel .eyebrow {
+  margin-bottom: 0;
+  color: var(--foreground, var(--text));
+  font-size: 1rem;
+}
+
+.collection-list-heading-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.collection-list-folder-path {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .section-actions {

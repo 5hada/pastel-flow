@@ -34,13 +34,13 @@ export function useActionWorkflowData(
         (currentActionId) =>
           loadedActions.some((action) => action.id === currentActionId)
             ? currentActionId
-            : loadedActions[0]?.id ?? null,
+            : null,
       )
       setSelectedWorkflowId(
         (currentWorkflowId) =>
           loadedWorkflows.some((workflow) => workflow.id === currentWorkflowId)
             ? currentWorkflowId
-            : loadedWorkflows[0]?.id ?? null,
+            : null,
       )
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
@@ -111,9 +111,7 @@ export function useActionWorkflowData(
           (workflow) => workflow.id !== workflowId,
         )
         setSelectedWorkflowId((currentWorkflowId) =>
-          currentWorkflowId === workflowId
-            ? nextWorkflows[0]?.id ?? null
-            : currentWorkflowId,
+          currentWorkflowId === workflowId ? null : currentWorkflowId,
         )
         return nextWorkflows
       })
@@ -215,9 +213,7 @@ export function useActionWorkflowData(
           (action) => action.id !== actionId,
         )
         setSelectedActionId((currentActionId) =>
-          currentActionId === actionId
-            ? nextActions[0]?.id ?? null
-            : currentActionId,
+          currentActionId === actionId ? null : currentActionId,
         )
         return nextActions
       })

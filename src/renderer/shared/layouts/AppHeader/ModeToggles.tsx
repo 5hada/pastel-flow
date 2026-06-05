@@ -1,5 +1,5 @@
 import { Button, ButtonGroup } from '@heroui/react'
-import { Hammer, Play, Gear, Route, LocationArrow } from '@gravity-ui/icons';
+import { getCommonIcon } from '../../assets/icon';
 import type { ReactNode } from 'react'
 import type { WorkspaceMode } from '../../state/taskFormState'
 
@@ -26,11 +26,11 @@ export function ModeToggles({
     label: string
     onClick(): void
   }[] = [
-    { id: 'run', icon: <Play/>, label: '실행', onClick: onRun },
-    { id: 'actions', icon: <LocationArrow/>, label: 'Action', onClick: onActions },
-    { id: 'workflows', icon: <Route/>, label: 'Workflow', onClick: onWorkflows },
-    { id: 'tools', icon: <Hammer/>, label: '도구', onClick: onTools },
-    { id: 'settings', icon: <Gear/>, label: '설정', onClick: onSettings },
+    { id: 'run', icon: getCommonIcon('run'), label: '실행', onClick: onRun },
+    { id: 'actions', icon: getCommonIcon('actions'), label: 'Action', onClick: onActions },
+    { id: 'workflows', icon: getCommonIcon('workflows'), label: 'Workflow', onClick: onWorkflows },
+    { id: 'tools', icon: getCommonIcon('tools'), label: '도구', onClick: onTools },
+    { id: 'settings', icon: getCommonIcon('settings'), label: '설정', onClick: onSettings },
   ]
 
   return (

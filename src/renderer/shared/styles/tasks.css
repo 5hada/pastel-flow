@@ -1,6 +1,9 @@
 .task-list,
 .workflow-run-group,
 .workflow-run-group-items,
+.workflow-run-history,
+.workflow-run-list,
+.action-run-list,
 .editor-list,
 .editor-detail,
 .workflow-action-list,
@@ -55,6 +58,8 @@
 }
 
 .workflow-run-card,
+.workflow-run-history-row,
+.action-run-row,
 .task-row,
 .workflow-action-row,
 .action-picker-row,
@@ -75,6 +80,8 @@
 }
 
 .workflow-run-card:hover,
+.workflow-run-history-row:hover,
+.action-run-row:hover,
 .task-row:hover,
 .workflow-action-row:hover,
 .action-picker-row:hover,
@@ -106,6 +113,8 @@
 }
 
 .workflow-run-card div,
+.workflow-run-history-row span,
+.action-run-row div,
 .task-row-summary,
 .workflow-action-row div,
 .action-picker-row div,
@@ -116,6 +125,8 @@
 }
 
 .workflow-run-card strong,
+.workflow-run-history-row strong,
+.action-run-heading strong,
 .task-row-title,
 .task-card-title strong,
 .editor-list-item strong {
@@ -124,6 +135,9 @@
 }
 
 .workflow-run-card small,
+.workflow-run-history-row small,
+.action-run-row small,
+.action-run-heading small,
 .task-row-meta,
 .workflow-action-row small,
 .action-picker-row small,
@@ -138,6 +152,47 @@
 .task-row {
   grid-template-columns: minmax(0, 1fr) auto auto auto auto;
   align-items: center;
+}
+
+.workflow-run-history {
+  grid-template-columns: minmax(220px, 0.44fr) minmax(0, 1fr);
+  align-items: start;
+}
+
+.workflow-run-history-row {
+  width: 100%;
+  min-height: 72px;
+  grid-template-columns: auto minmax(0, 1fr);
+  justify-content: stretch;
+  text-align: left;
+}
+
+.workflow-run-history-row.is-selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface) 92%);
+}
+
+.action-run-heading,
+.action-run-row {
+  display: grid;
+  gap: 6px;
+}
+
+.action-run-heading {
+  padding: 0 2px 2px;
+}
+
+.action-run-row {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface);
+}
+
+.collection-list-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
 }
 
 .workflow-action-row,
@@ -312,6 +367,7 @@
 
 .url-section,
 .last-error,
+.workflow-runs,
 .run-events,
 .danger-zone {
   margin-top: 20px;

@@ -1,9 +1,9 @@
 import { Button, Card } from '@heroui/react'
-import {Pencil} from '@gravity-ui/icons';
 import { useEffect, useState, type FormEvent } from 'react'
 import type {
   BrowserProfilePreset,
   DeveloperVisibilitySettings,
+  WorkspaceFolder,
 } from '../../../../shared/settings'
 import {
   getDeviceExecutionPolicyLabel,
@@ -11,15 +11,23 @@ import {
 } from '../../../../shared/devices'
 import type { ActionDefinition } from '../../../../shared/actions'
 import type { WorkflowDefinition } from '../../../../shared/workflows'
-import type { WorkflowRunEvent } from '../../../../shared/runStatus'
+import type {
+  ActionRun,
+  WorkflowRun,
+  WorkflowRunEvent,
+} from '../../../../shared/runStatus'
 import { WorkflowRunEventsPanel } from './WorkflowRunEventsPanel'
+import { WorkflowRunsPanel } from './WorkflowRunsPanel'
 import { WorkflowActionList } from './WorkflowActionList'
+import { CollectionListPanel } from '../../../shared/components/CollectionListPanel'
+import { getCommonIcon } from '../../../shared/assets/icon'
 import {
   formatDate,
   getTaskScheduleLabel,
   getTaskStatusLabel,
 } from '../../../shared/utils/viewLabels'
 import { DetailItem } from '../../../shared/components/DetailItem'
+import { getWorkspaceFolderPathLabel } from '../../../shared/utils/workspaceFolderLabels'
 
 export type EditWorkspaceProps = {
   actions: ActionDefinition[]
@@ -27,13 +35,21 @@ export type EditWorkspaceProps = {
   developerVisibility: DeveloperVisibilitySettings
   isLoading: boolean
   profilePresets: BrowserProfilePreset[]
+  selectedCollectionFolderId: string
   selectedWorkflowId: string | null
   runningWorkflowId: string | null
+  actionRuns: ActionRun[]
+  selectedWorkflowRunId: string | null
+  workflowRuns: WorkflowRun[]
   workflowRunEvents: WorkflowRunEvent[]
+  workspaceFolderAssignments: Record<string, string>
+  workspaceFolders: WorkspaceFolder[]
   workflows: WorkflowDefinition[]
   onCreateWorkflow(name?: string): Promise<void>
   onConfirmDeleteWorkflow(workflowId: string): Promise<void>
   onStartCreateWorkflow(): void
+  onSelectWorkflow(workflowId: string): void
+  onSelectWorkflowRun(runId: string): void
   onUpdateWorkflow(
     workflowId: string,
     input: Partial<WorkflowDefinition>,
@@ -47,11 +63,19 @@ export function EditWorkspace({
   isLoading,
   onConfirmDeleteWorkflow,
   onCreateWorkflow,
+  onSelectWorkflow,
   onStartCreateWorkflow,
   onUpdateWorkflow,
   runningWorkflowId,
+  actionRuns,
+  selectedCollectionFolderId,
+  selectedWorkflowRunId,
   selectedWorkflowId,
+  onSelectWorkflowRun,
   workflowRunEvents,
+  workflowRuns,
+  workspaceFolderAssignments,
+  workspaceFolders,
   workflows,
 }: EditWorkspaceProps) {
   const selectedWorkflow =
@@ -62,6 +86,12 @@ export function EditWorkspace({
   const [createName, setCreateName] = useState(defaultWorkflowName)
   const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
+  const [isCreatingWorkflow, setIsCreatingWorkflow] = useState(false)
+  const visibleWorkflows = filterByFolder(
+    workflows,
+    selectedCollectionFolderId,
+    workspaceFolderAssignments,
+  )
 
   useEffect(() => {
     if (!selectedWorkflow) {
@@ -73,6 +103,7 @@ export function EditWorkspace({
 
     setEditingWorkflowId(null)
     setEditName(selectedWorkflow.name)
+    setIsCreatingWorkflow(false)
   }, [defaultWorkflowName, selectedWorkflow])
 
   async function handleCreateWorkflow(event: FormEvent<HTMLFormElement>) {
@@ -114,14 +145,25 @@ export function EditWorkspace({
     )
   }
 
-  if (!selectedWorkflow) {
+  if (!selectedWorkflow && isCreatingWorkflow) {
     return (
-      <Card className="mode-panel workflow-empty-panel" aria-label="Workflow 선택">
-        <div className="empty-state empty-state-action">
+      <Card className="mode-panel workflow-empty-panel" aria-label="Workflow 생성">
+        <div className="panel-heading">
           <div>
             <p className="eyebrow">Workflows</p>
             <h2>새 Workflow</h2>
           </div>
+          <Button
+            aria-label="목록으로 돌아가기"
+            isIconOnly
+            variant="ghost"
+            type="button"
+            onClick={() => setIsCreatingWorkflow(false)}
+          >
+            {getCommonIcon('close')}
+          </Button>
+        </div>
+        <div className="empty-state empty-state-action">
           <form className="workflow-name-form" onSubmit={handleCreateWorkflow}>
             <label>
               이름
@@ -141,6 +183,43 @@ export function EditWorkspace({
           </form>
         </div>
       </Card>
+    )
+  }
+
+  if (!selectedWorkflow) {
+    return (
+      <CollectionListPanel
+        emptyText="표시할 Workflow가 없습니다."
+        eyebrow="WORKFLOWS"
+        folderLabel={getWorkspaceFolderPathLabel(
+          selectedCollectionFolderId,
+          workspaceFolders,
+        )}
+        headerAction={
+          <Button
+            aria-label="Workflow 추가"
+            isIconOnly
+            variant="ghost"
+            type="button"
+            onClick={() => setIsCreatingWorkflow(true)}
+          >
+            {getCommonIcon('add')}
+          </Button>
+        }
+        items={visibleWorkflows.map((workflow) => ({
+          id: workflow.id,
+          title: workflow.name,
+          meta: `Action ${workflow.actionRefs.length}개 · ${getTaskStatusLabel(
+            workflow.state.status,
+          )}`,
+          message:
+            workflow.state.lastError ??
+            workflow.state.lastMessage ??
+            '아직 실행 결과가 없습니다.',
+        }))}
+        title="Workflow 목록"
+        onEdit={onSelectWorkflow}
+      />
     )
   }
 
@@ -198,19 +277,19 @@ export function EditWorkspace({
                   }}
                   isDisabled={isSelectedWorkflowLocked}
                 >
-                  <Pencil/>
+                  {getCommonIcon('edit')}
                 </Button>
               </div>
             )}
           </div>
           <Button
-            aria-label="새 Workflow"
+            aria-label="목록으로 돌아가기"
             isIconOnly
             variant="ghost"
             type="button"
             onClick={onStartCreateWorkflow}
           >
-            +
+            {getCommonIcon('close')}
           </Button>
         </div>
         <div className="editor-detail">
@@ -326,6 +405,12 @@ export function EditWorkspace({
           </Card>
         ) : null}
 
+        <WorkflowRunsPanel
+          actionRuns={actionRuns}
+          runs={workflowRuns}
+          selectedRunId={selectedWorkflowRunId}
+          onSelectRun={onSelectWorkflowRun}
+        />
         <WorkflowRunEventsPanel events={workflowRunEvents} />
       </Card>
     </section>
@@ -388,4 +473,20 @@ function reorderWorkflowActionRefs(
       ...actionRef,
       order: index,
     }))
+}
+
+function filterByFolder<TItem extends { id: string }>(
+  items: TItem[],
+  folderId: string,
+  assignments: Record<string, string>,
+): TItem[] {
+  if (folderId === 'all') {
+    return items
+  }
+
+  if (folderId === 'favorites') {
+    return []
+  }
+
+  return items.filter((item) => assignments[item.id] === folderId)
 }

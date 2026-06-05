@@ -1,46 +1,38 @@
 import { Button } from '@heroui/react'
-import type { ReactNode } from 'react'
-import {
-  CurlyBrackets,
-  Database,
-  Bell,
-  ArrowsRotateLeft,
-  ShieldKeyhole,
-  Display,
-  Keyboard,
-  Magnifier,
-  Palette,
-  Circles4Square,
-  ListUl,
-  Star,
-  ClockArrowRotateLeft,
-  TriangleExclamation,
-  Arrows3RotateRight,
-  Ban
-} from '@gravity-ui/icons';
-import { useState } from 'react'
-import {
-  type ActionDefinition,
-} from '../../../shared/actions'
+import { useState, type ReactNode } from 'react'
+import type { ActionDefinition } from '../../../shared/actions'
 import { isRestrictedDevicePolicy } from '../../../shared/devices'
-import type { WorkflowDefinition } from '../../../shared/workflows'
+import type {
+  WorkspaceFolder,
+  WorkspaceFolderScope,
+} from '../../../shared/settings'
 import type { RegisteredToolModule } from '../../../shared/tools'
-import type { NavigationCategory, SettingsCategory, WorkspaceMode } from '../state/taskFormState'
-import { getActionTypeLabel } from '../utils/viewLabels'
+import type { WorkflowDefinition } from '../../../shared/workflows'
+import { getCommonIcon, getSettingsIcon } from '../assets/icon'
+import type {
+  NavigationCategory,
+  SettingsCategory,
+  WorkspaceMode,
+} from '../state/taskFormState'
 
 export type WorkspaceSidebarProps = {
+  actions: ActionDefinition[]
   currentMode: WorkspaceMode
   selectedCategory: NavigationCategory
-  selectedActionId: string | null
+  selectedCollectionFolderId: string
   selectedSettingsCategory: SettingsCategory
   selectedToolId: string | null
   selectedWorkflowId: string | null
-  actions: ActionDefinition[]
+  selectedActionId: string | null
   toolModules: RegisteredToolModule[]
   workflows: WorkflowDefinition[]
+  workspaceFolders: WorkspaceFolder[]
   onCategorySelect(category: NavigationCategory): void
-  onCreateAction(): void
-  onCreateWorkflow(): void
+  onCollectionFolderSelect(folderId: string): void
+  onCreateFolder(scope: WorkspaceFolderScope): Promise<void>
+  onDeleteFolder(folderId: string): Promise<void>
+  onMoveFolder(folderId: string, direction: -1 | 1): Promise<void>
+  onRenameFolder(folderId: string, name: string): Promise<void>
   onSelectAction(actionId: string): void
   onSelectSettingsCategory(category: SettingsCategory): void
   onSelectTool(tool: RegisteredToolModule): void
@@ -48,226 +40,118 @@ export type WorkspaceSidebarProps = {
 }
 
 export function WorkspaceSidebar({
-  toolModules,
   actions,
-  workflows,
   currentMode,
   selectedCategory,
-  selectedActionId,
+  selectedCollectionFolderId,
   selectedSettingsCategory,
-  selectedToolId,
-  selectedWorkflowId,
+  toolModules,
+  workflows,
+  workspaceFolders,
   onCategorySelect,
-  onCreateAction,
-  onCreateWorkflow,
-  onSelectAction,
+  onCollectionFolderSelect,
+  onCreateFolder,
+  onDeleteFolder,
+  onMoveFolder,
+  onRenameFolder,
   onSelectSettingsCategory,
-  onSelectTool,
-  onSelectWorkflow,
 }: WorkspaceSidebarProps) {
-  const [actionTypeFilter, setActionTypeFilter] = useState<
-    ActionDefinition['type'] | 'all'
-  >('all')
-  const restrictedCount = workflows.filter((workflow) =>
-    isRestrictedDevicePolicy(workflow.permissions),
-  ).length
-  const favoritesCount = 0
-  const runningCount = workflows.filter(
-    (workflow) => workflow.state.status === 'running',
-  ).length
-  const scheduledCount = workflows.filter((workflow) => workflow.schedule?.enabled).length
-  const failedCount = workflows.filter(
-    (workflow) => workflow.state.status === 'failed',
-  ).length
-  const secretCount = workflows.filter(
-    (workflow) => (workflow.permissions.secretRefs?.length ?? 0) > 0,
-  ).length
-  const runCategories: {
-    id: NavigationCategory
-    icon: ReactNode
-    label: string
-    count: number
-  }[] = [
-    { id: 'all', icon: <ListUl/>, label: '전체', count: workflows.length },
-    { id: 'favorites', icon: <Star/>, label: '즐겨찾기', count: favoritesCount },
-    { id: 'running', icon: <Arrows3RotateRight/>, label: '실행 중', count: runningCount },
-    { id: 'scheduled', icon: <ClockArrowRotateLeft/>, label: '예약됨', count: scheduledCount },
-    { id: 'failed', icon: <TriangleExclamation/>, label: '실패', count: failedCount },
-    { id: 'restricted', icon: <Ban/>, label: '제한됨', count: restrictedCount },
-    { id: 'secret_required', icon: <ShieldKeyhole/>, label: 'Secret 필요', count: secretCount },
-  ]
-  const settingsCategories: {
-    id: SettingsCategory
-    icon: ReactNode
-    label: string
-  }[] = [
-    { id: 'general', icon: <Circles4Square/>, label: '일반' },
-    { id: 'appearance', icon: <Palette/>, label: '모양' },
-    { id: 'browser', icon: <Magnifier/>, label: '브라우저' },
-    { id: 'shortcuts', icon: <Keyboard/>, label: '단축키' },
-    { id: 'devices', icon: <Display/>, label: '기기' },
-    { id: 'secrets', icon: <ShieldKeyhole/>, label: 'Secret' },
-    { id: 'sync', icon: <ArrowsRotateLeft/>, label: '동기화' },
-    { id: 'events', icon: <Bell/>, label: '실행 이벤트' },
-    { id: 'data', icon: <Database/>, label: '데이터 관리' },
-    { id: 'developer', icon: <CurlyBrackets/>, label: '개발자' },
-  ] 
-  const actionTypeOptions = Array.from(
-    new Set(actions.map((action) => action.type)),
-  )
-  const visibleActions = actions.filter(
-    (action) => actionTypeFilter === 'all' || action.type === actionTypeFilter,
-  )
+  const [isFolderEditMode, setIsFolderEditMode] = useState(false)
+  const runCategories = createRunCategories(workflows)
 
   return (
     <aside className="workspace-sidebar" aria-label="보조 패널">
       <div className="sidebar-group">
         {currentMode === 'run'
-          ? runCategories.map((category) => (
-              <Button
-                className={`sidebar-item${
-                  selectedCategory === category.id ? ' is-active' : ''
-                }`}
-                variant={selectedCategory === category.id ? 'secondary' : 'ghost'}
-                key={category.id}
-                type="button"
-                onClick={() => onCategorySelect(category.id)}
-              >
-                <span aria-hidden="true">{category.icon}</span>
-                <strong>{category.label}</strong>
-                <em>{category.count}</em>
-              </Button>
-            ))
+          ? (
+              <>
+                {runCategories.map((category) => (
+                  <FolderButton
+                    count={category.count}
+                    icon={category.icon}
+                    id={category.id}
+                    isSelected={
+                      selectedCategory === category.id &&
+                      selectedCollectionFolderId === 'all'
+                    }
+                    key={category.id}
+                    label={category.label}
+                    onSelect={(id) => {
+                      onCollectionFolderSelect('all')
+                      onCategorySelect(id as NavigationCategory)
+                    }}
+                  />
+                ))}
+                {workspaceFolders
+                  .filter((folder) => folder.scope === 'workflows')
+                  .sort((left, right) => left.order - right.order)
+                  .map((folder) => (
+                    <FolderButton
+                      count={0}
+                      icon={getCommonIcon('folderClose')}
+                      id={folder.id}
+                      isSelected={selectedCollectionFolderId === folder.id}
+                      key={folder.id}
+                      label={folder.name}
+                      onSelect={(folderId) => {
+                        onCategorySelect('all')
+                        onCollectionFolderSelect(folderId)
+                      }}
+                    />
+                  ))}
+              </>
+            )
           : null}
 
         {currentMode === 'actions' ? (
-          <>
-            <div className="sidebar-heading compact-sidebar-heading">
-              <p className="sidebar-label">Action 목록</p>
-              <Button
-                aria-label="새 Action"
-                className="sidebar-mini-button"
-                isIconOnly
-                variant="ghost"
-                type="button"
-                onClick={onCreateAction}
-              >
-                +
-              </Button>
-            </div>
-            {actions.length === 0 ? (
-              <div className="sidebar-empty">
-                <strong>Action</strong>
-                <span>저장된 Action이 없습니다.</span>
-              </div>
-            ) : (
-              <>
-                <div className="sidebar-filter-bar">
-                  <Button
-                    className={actionTypeFilter === 'all' ? 'is-active' : ''}
-                    variant={actionTypeFilter === 'all' ? 'secondary' : 'ghost'}
-                    type="button"
-                    onClick={() => setActionTypeFilter('all')}
-                  >
-                    전체
-                  </Button>
-                  {actionTypeOptions.map((actionType) => (
-                    <Button
-                      className={
-                        actionTypeFilter === actionType ? 'is-active' : ''
-                      }
-                      variant={actionTypeFilter === actionType ? 'secondary' : 'ghost'}
-                      key={actionType}
-                      type="button"
-                      onClick={() => setActionTypeFilter(actionType)}
-                    >
-                      {getActionTypeLabel(actionType)}
-                    </Button>
-                  ))}
-                </div>
-                {visibleActions.map((action) => (
-                  <Button
-                    className={`sidebar-item task-sidebar-item${
-                      selectedActionId === action.id ? ' is-active' : ''
-                    }`}
-                    variant={selectedActionId === action.id ? 'secondary' : 'ghost'}
-                    key={action.id}
-                    type="button"
-                    onClick={() => onSelectAction(action.id)}
-                  >
-                    <span aria-hidden="true">◇</span>
-                    <strong>{action.name}</strong>
-                    <em>{getActionTypeLabel(action.type)}</em>
-                  </Button>
-                ))}
-              </>
-            )}
-          </>
+          <FolderSidebarSection
+            count={actions.length}
+            editMode={isFolderEditMode}
+            folders={workspaceFolders}
+            scope="actions"
+            selectedFolderId={selectedCollectionFolderId}
+            title="Action 폴더"
+            onCreateFolder={onCreateFolder}
+            onDeleteFolder={onDeleteFolder}
+            onEditModeChange={setIsFolderEditMode}
+            onMoveFolder={onMoveFolder}
+            onRenameFolder={onRenameFolder}
+            onSelectFolder={onCollectionFolderSelect}
+          />
         ) : null}
 
         {currentMode === 'workflows' ? (
-          <>
-            <div className="sidebar-heading compact-sidebar-heading">
-              <p className="sidebar-label">Workflow 목록</p>
-              <Button
-                aria-label="새 Workflow"
-                className="sidebar-mini-button"
-                isIconOnly
-                variant="ghost"
-                type="button"
-                onClick={onCreateWorkflow}
-              >
-                +
-              </Button>
-            </div>
-            {workflows.length === 0 ? (
-              <div className="sidebar-empty">
-                <strong>Workflow</strong>
-                <span>저장된 Workflow가 없습니다.</span>
-              </div>
-            ) : (
-              workflows.map((workflow) => (
-                <Button
-                  className={`sidebar-item task-sidebar-item${
-                    selectedWorkflowId === workflow.id ? ' is-active' : ''
-                  }`}
-                  variant={selectedWorkflowId === workflow.id ? 'secondary' : 'ghost'}
-                  key={workflow.id}
-                  type="button"
-                  onClick={() => onSelectWorkflow(workflow)}
-                >
-                  <span aria-hidden="true">□</span>
-                  <strong>{workflow.name}</strong>
-                  <em>{workflow.actionRefs.length}개</em>
-                </Button>
-              ))
-            )}
-          </>
+          <FolderSidebarSection
+            count={workflows.length}
+            editMode={isFolderEditMode}
+            folders={workspaceFolders}
+            scope="workflows"
+            selectedFolderId={selectedCollectionFolderId}
+            title="Workflow 폴더"
+            onCreateFolder={onCreateFolder}
+            onDeleteFolder={onDeleteFolder}
+            onEditModeChange={setIsFolderEditMode}
+            onMoveFolder={onMoveFolder}
+            onRenameFolder={onRenameFolder}
+            onSelectFolder={onCollectionFolderSelect}
+          />
         ) : null}
 
         {currentMode === 'tools' ? (
-          toolModules.length === 0 ? (
-            <div className="sidebar-empty px-3 py-2">
-              <strong>Tool Module</strong><br/>
-              <span>등록된 도구가 없습니다.</span>
-            </div>
-          ) : (
-            toolModules.map((tool) => (
-              <Button
-                className={`sidebar-item task-sidebar-item${
-                  selectedToolId === tool.id ? ' is-active' : ''
-                }`}
-                variant={selectedToolId === tool.id ? 'secondary' : 'ghost'}
-                key={tool.id}
-                type="button"
-                onClick={() => onSelectTool(tool)}
-              >
-                <span aria-hidden="true">◇</span>
-                <strong>{tool.manifest.name}</strong>
-                <em>v{tool.manifest.version}</em>
-              </Button>
-            ))
-          )
+          <FolderSidebarSection
+            count={toolModules.length}
+            editMode={isFolderEditMode}
+            folders={workspaceFolders}
+            scope="tools"
+            selectedFolderId={selectedCollectionFolderId}
+            title="Tool 폴더"
+            onCreateFolder={onCreateFolder}
+            onDeleteFolder={onDeleteFolder}
+            onEditModeChange={setIsFolderEditMode}
+            onMoveFolder={onMoveFolder}
+            onRenameFolder={onRenameFolder}
+            onSelectFolder={onCollectionFolderSelect}
+          />
         ) : null}
 
         {currentMode === 'settings'
@@ -276,12 +160,14 @@ export function WorkspaceSidebar({
                 className={`sidebar-item${
                   selectedSettingsCategory === category.id ? ' is-active' : ''
                 }`}
-                variant={selectedSettingsCategory === category.id ? 'secondary' : 'ghost'}
+                variant={
+                  selectedSettingsCategory === category.id ? 'secondary' : 'ghost'
+                }
                 key={category.id}
                 type="button"
                 onClick={() => onSelectSettingsCategory(category.id)}
               >
-                <span aria-hidden="true">{category.icon}</span>
+                <span aria-hidden="true">{getSettingsIcon(category.id)}</span>
                 <strong>{category.label}</strong>
               </Button>
             ))
@@ -290,8 +176,269 @@ export function WorkspaceSidebar({
 
       <div className="sidebar-note">
         <span>Local first</span>
-        <strong>전용 프로필</strong>
+        <strong>Extension controlled</strong>
       </div>
     </aside>
   )
 }
+
+function FolderSidebarSection({
+  count,
+  editMode,
+  folders,
+  scope,
+  selectedFolderId,
+  title,
+  onCreateFolder,
+  onDeleteFolder,
+  onEditModeChange,
+  onMoveFolder,
+  onRenameFolder,
+  onSelectFolder,
+}: {
+  count: number
+  editMode: boolean
+  folders: WorkspaceFolder[]
+  scope: WorkspaceFolderScope
+  selectedFolderId: string
+  title: string
+  onCreateFolder(scope: WorkspaceFolderScope): Promise<void>
+  onDeleteFolder(folderId: string): Promise<void>
+  onEditModeChange(value: boolean): void
+  onMoveFolder(folderId: string, direction: -1 | 1): Promise<void>
+  onRenameFolder(folderId: string, name: string): Promise<void>
+  onSelectFolder(folderId: string): void
+}) {
+  const scopedFolders = folders
+    .filter((folder) => folder.scope === scope)
+    .sort((left, right) => left.order - right.order)
+
+  return (
+    <>
+      <div className="sidebar-heading compact-sidebar-heading">
+        <p className="sidebar-label">{title}</p>
+        <div className="sidebar-heading-actions">
+          <Button
+            aria-label="폴더 추가"
+            className="sidebar-mini-button"
+            isIconOnly
+            variant="ghost"
+            type="button"
+            onClick={() => void onCreateFolder(scope)}
+          >
+            {getCommonIcon('add')}
+          </Button>
+          <Button
+            aria-label="폴더 편집"
+            className="sidebar-mini-button"
+            isIconOnly
+            variant={editMode ? 'secondary' : 'ghost'}
+            type="button"
+            onClick={() => onEditModeChange(!editMode)}
+          >
+            {getCommonIcon('edit')}
+          </Button>
+        </div>
+      </div>
+      <FolderButton
+        count={count}
+        icon={getCommonIcon('list')}
+        id="all"
+        isSelected={selectedFolderId === 'all'}
+        label="전체"
+        onSelect={onSelectFolder}
+      />
+      <FolderButton
+        count={0}
+        icon={getCommonIcon('starred')}
+        id="favorites"
+        isSelected={selectedFolderId === 'favorites'}
+        label="즐겨찾기"
+        onSelect={onSelectFolder}
+      />
+      {scopedFolders.map((folder, index) =>
+        editMode ? (
+          <EditableFolderRow
+            folder={folder}
+            isFirst={index === 0}
+            isLast={index === scopedFolders.length - 1}
+            key={folder.id}
+            onDeleteFolder={onDeleteFolder}
+            onMoveFolder={onMoveFolder}
+            onRenameFolder={onRenameFolder}
+          />
+        ) : (
+          <FolderButton
+            count={0}
+            icon={getCommonIcon('folderClose')}
+            id={folder.id}
+            isSelected={selectedFolderId === folder.id}
+            key={folder.id}
+            label={folder.name}
+            onSelect={onSelectFolder}
+          />
+        ),
+      )}
+    </>
+  )
+}
+
+function EditableFolderRow({
+  folder,
+  isFirst,
+  isLast,
+  onDeleteFolder,
+  onMoveFolder,
+  onRenameFolder,
+}: {
+  folder: WorkspaceFolder
+  isFirst: boolean
+  isLast: boolean
+  onDeleteFolder(folderId: string): Promise<void>
+  onMoveFolder(folderId: string, direction: -1 | 1): Promise<void>
+  onRenameFolder(folderId: string, name: string): Promise<void>
+}) {
+  const [name, setName] = useState(folder.name)
+
+  return (
+    <div className="sidebar-folder-editor">
+      <input
+        value={name}
+        onBlur={() => void onRenameFolder(folder.id, name)}
+        onChange={(event) => setName(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.currentTarget.blur()
+          }
+        }}
+      />
+      <Button
+        aria-label="위로 이동"
+        isDisabled={isFirst}
+        isIconOnly
+        variant="ghost"
+        type="button"
+        onClick={() => void onMoveFolder(folder.id, -1)}
+      >
+        ↑
+      </Button>
+      <Button
+        aria-label="아래로 이동"
+        isDisabled={isLast}
+        isIconOnly
+        variant="ghost"
+        type="button"
+        onClick={() => void onMoveFolder(folder.id, 1)}
+      >
+        ↓
+      </Button>
+      <Button
+        aria-label="폴더 삭제"
+        isIconOnly
+        variant="danger"
+        type="button"
+        onClick={() => void onDeleteFolder(folder.id)}
+      >
+        {getCommonIcon('close')}
+      </Button>
+    </div>
+  )
+}
+
+function FolderButton({
+  count,
+  icon,
+  id,
+  isSelected,
+  label,
+  onSelect,
+}: {
+  count: number
+  icon: ReactNode
+  id: string
+  isSelected: boolean
+  label: string
+  onSelect(id: string): void
+}) {
+  return (
+    <Button
+      className={`sidebar-item${isSelected ? ' is-active' : ''}`}
+      variant={isSelected ? 'secondary' : 'ghost'}
+      type="button"
+      onClick={() => onSelect(id)}
+    >
+      <span aria-hidden="true">{icon}</span>
+      <strong>{label}</strong>
+      <em>{count}</em>
+    </Button>
+  )
+}
+
+function createRunCategories(workflows: WorkflowDefinition[]): {
+  id: NavigationCategory
+  icon: ReactNode
+  label: string
+  count: number
+}[] {
+  return [
+    {
+      id: 'all',
+      icon: getCommonIcon('list'),
+      label: '전체',
+      count: workflows.length,
+    },
+    { id: 'favorites', icon: getCommonIcon('starred'), label: '즐겨찾기', count: 0 },
+    {
+      id: 'running',
+      icon: getCommonIcon('running'),
+      label: '실행 중',
+      count: workflows.filter((workflow) => workflow.state.status === 'running')
+        .length,
+    },
+    {
+      id: 'scheduled',
+      icon: getCommonIcon('scheduled'),
+      label: '예약됨',
+      count: workflows.filter((workflow) => workflow.schedule?.enabled).length,
+    },
+    {
+      id: 'failed',
+      icon: getCommonIcon('warning'),
+      label: '실패',
+      count: workflows.filter((workflow) => workflow.state.status === 'failed')
+        .length,
+    },
+    {
+      id: 'restricted',
+      icon: getCommonIcon('blocked'),
+      label: '제한됨',
+      count: workflows.filter((workflow) =>
+        isRestrictedDevicePolicy(workflow.permissions),
+      ).length,
+    },
+    {
+      id: 'secret_required',
+      icon: getCommonIcon('secret'),
+      label: 'Secret 필요',
+      count: workflows.filter(
+        (workflow) => (workflow.permissions.secretRefs?.length ?? 0) > 0,
+      ).length,
+    },
+  ]
+}
+
+const settingsCategories: {
+  id: SettingsCategory
+  label: string
+}[] = [
+  { id: 'general', label: '일반' },
+  { id: 'appearance', label: '모양' },
+  { id: 'browser', label: '브라우저' },
+  { id: 'shortcuts', label: '단축키' },
+  { id: 'devices', label: '기기' },
+  { id: 'secrets', label: 'Secret' },
+  { id: 'sync', label: '동기화' },
+  { id: 'events', label: '실행 이벤트' },
+  { id: 'data', label: '데이터 관리' },
+  { id: 'developer', label: '개발자' },
+]

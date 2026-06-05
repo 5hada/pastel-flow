@@ -274,6 +274,7 @@ function normalizeWorkflowRunEvent(value: unknown): WorkflowRunEvent {
 
   return {
     id: value.id.trim(),
+    runId: optionalString(value.runId),
     workflowId: value.workflowId.trim(),
     actionRunId: optionalString(value.actionRunId),
     deviceId: value.deviceId.trim(),

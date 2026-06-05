@@ -153,6 +153,12 @@ const pastelFlowApi = {
     stop(id: string) {
       return invoke(ipcRequestChannels.workflows.stop, id)
     },
+    listRuns(workflowId?: string) {
+      return invoke(ipcRequestChannels.workflows.listRuns, workflowId)
+    },
+    listActionRuns(runId: string) {
+      return invoke(ipcRequestChannels.workflows.listActionRuns, runId)
+    },
     listEvents(workflowId?: string) {
       return invoke(ipcRequestChannels.workflows.listEvents, workflowId)
     },

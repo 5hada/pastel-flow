@@ -26,7 +26,7 @@ export function useToolModulesData(
     try {
       const tools = await window.pastelFlow.tools.list()
       const selectedTool =
-        tools.find((tool) => tool.id === selectedToolId) ?? tools[0] ?? null
+        tools.find((tool) => tool.id === selectedToolId) ?? null
       setToolModules(tools)
       setSelectedToolId(selectedTool?.id ?? null)
 

@@ -22,6 +22,7 @@
 
   .workspace-grid,
   .editor-layout,
+  .workflow-run-history,
   .appearance-theme-grid,
   .appearance-display-grid {
     grid-template-columns: minmax(0, 1fr);

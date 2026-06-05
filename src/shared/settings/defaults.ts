@@ -8,6 +8,8 @@ import type {
   ThemeColorKey,
   ThemeMode,
   WorkflowListDisplayMode,
+  WorkspaceFolder,
+  WorkspaceFolderScope,
 } from './types'
 import type {
   BrowserKind,
@@ -29,6 +31,8 @@ export const defaultAppSettings: AppSettings = {
   workflowGridColumnCount: 5,
   startAtLogin: false,
   workflowHierarchy: ['기본'],
+  workspaceFolders: [],
+  workspaceFolderAssignments: {},
   browserProfilePresets: [],
   browserExecutablePaths: {},
   developerVisibility: {
@@ -95,6 +99,10 @@ export function normalizeAppSettings(
     workflowHierarchy: normalizeStringList(settings?.workflowHierarchy, [
       '기본',
     ]),
+    workspaceFolders: normalizeWorkspaceFolders(settings?.workspaceFolders),
+    workspaceFolderAssignments: normalizeWorkspaceFolderAssignments(
+      settings?.workspaceFolderAssignments,
+    ),
     browserProfilePresets: normalizeBrowserProfilePresets(
       settings?.browserProfilePresets,
     ),
@@ -291,6 +299,58 @@ function normalizeStringList(value: unknown, fallback: string[]): string[] {
   return items.length > 0 ? [...new Set(items)] : fallback
 }
 
+function normalizeWorkspaceFolders(value: unknown): WorkspaceFolder[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((folder, index): WorkspaceFolder | null => {
+      const candidate = folder as Partial<WorkspaceFolder>
+      const id = normalizeOptionalPath(candidate.id) ?? createFallbackFolderId()
+      const name = normalizeOptionalPath(candidate.name)
+      const scope = isWorkspaceFolderScope(candidate.scope)
+        ? candidate.scope
+        : undefined
+
+      return name && scope
+        ? {
+            id,
+            name,
+            scope,
+            order:
+              typeof candidate.order === 'number' &&
+              Number.isFinite(candidate.order)
+                ? candidate.order
+                : index,
+          }
+        : null
+    })
+    .filter((folder): folder is WorkspaceFolder => folder !== null)
+    .sort((left, right) => left.order - right.order)
+    .map((folder, index) => ({ ...folder, order: index }))
+}
+
+function normalizeWorkspaceFolderAssignments(
+  value: unknown,
+): Record<string, string> {
+  if (!value || typeof value !== 'object') {
+    return {}
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(
+        (entry): entry is [string, string] =>
+          typeof entry[0] === 'string' &&
+          typeof entry[1] === 'string' &&
+          Boolean(entry[0].trim()) &&
+          Boolean(entry[1].trim()),
+      )
+      .map(([itemId, folderId]) => [itemId.trim(), folderId.trim()]),
+  )
+}
+
 function normalizeOptionalPath(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined
@@ -319,6 +379,10 @@ function isWorkflowListDisplayMode(
   return value === 'grid' || value === 'list'
 }
 
+function isWorkspaceFolderScope(value: unknown): value is WorkspaceFolderScope {
+  return value === 'actions' || value === 'tools' || value === 'workflows'
+}
+
 function isBrowserRunMode(value: unknown): value is BrowserRunMode {
   return (
     value === 'dedicated_profile' ||
@@ -337,4 +401,12 @@ function createFallbackProfileId(): string {
   }
 
   return `profile_${Math.random().toString(36).slice(2, 10)}`
+}
+
+function createFallbackFolderId(): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return `folder_${globalThis.crypto.randomUUID()}`
+  }
+
+  return `folder_${Math.random().toString(36).slice(2, 10)}`
 }

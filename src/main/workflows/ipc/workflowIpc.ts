@@ -8,6 +8,7 @@ import { ipcRequestChannels } from '../../../shared/ipcChannels'
 import type { DeviceStore } from '../../devices/store/deviceStore'
 import type { AppSettingsStore } from '../../settings/store/appSettingsStore'
 import type { WorkflowRunEventStore } from '../store/workflowRunEventStore'
+import type { WorkflowRunStore } from '../store/workflowRunStore'
 import type { WorkflowStore } from '../store/workflowStore'
 import type { WorkflowRunner } from '../workflowRunner'
 
@@ -16,6 +17,7 @@ export function registerWorkflowIpc(
   WorkflowStore: WorkflowStore,
   workflowRunner: WorkflowRunner,
   WorkflowRunEventStore: WorkflowRunEventStore,
+  workflowRunStore: WorkflowRunStore,
   appSettingsStore: AppSettingsStore,
   deviceStore: DeviceStore,
 ): void {
@@ -69,6 +71,31 @@ export function registerWorkflowIpc(
     return events.filter(
       (event) => event.workflowId && visibleWorkflowIds.has(event.workflowId),
     )
+  }
+
+  async function listWorkflowRuns(workflowId?: string) {
+    const workflows = await listVisibleWorkflows()
+    const visibleWorkflowIds = new Set(
+      workflows.map((workflow) => workflow.id),
+    )
+
+    if (workflowId && !visibleWorkflowIds.has(workflowId)) {
+      return []
+    }
+
+    const runs = await workflowRunStore.listRuns(workflowId)
+    return runs.filter((run) => visibleWorkflowIds.has(run.workflowId))
+  }
+
+  async function listActionRuns(runId: string) {
+    const visibleRuns = await listWorkflowRuns()
+    const run = visibleRuns.find((currentRun) => currentRun.id === runId)
+
+    if (!run) {
+      return []
+    }
+
+    return workflowRunStore.listActionRuns(runId)
   }
 
   ipcMain.handle(ipcRequestChannels.actions.list, async () => {
@@ -216,6 +243,12 @@ export function registerWorkflowIpc(
 
     return workflowRunner.stopWorkflow(workflowId)
   })
+  ipcMain.handle(ipcRequestChannels.workflows.listRuns, (_event, workflowId?: string) =>
+    listWorkflowRuns(workflowId),
+  )
+  ipcMain.handle(ipcRequestChannels.workflows.listActionRuns, (_event, runId) =>
+    listActionRuns(assertString(runId, 'Workflow run ID')),
+  )
   ipcMain.handle(ipcRequestChannels.workflows.listEvents, (_event, workflowId?: string) =>
     listWorkflowEvents(workflowId),
   )

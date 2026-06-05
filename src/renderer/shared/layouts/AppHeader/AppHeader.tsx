@@ -1,5 +1,5 @@
 import { Button } from '@heroui/react'
-import {ArrowRotateRight} from '@gravity-ui/icons';
+import { getCommonIcon } from '../../assets/icon'
 import { getWorkspaceModeLabel } from '../../utils/viewLabels'
 import {
   ModeToggles,
@@ -52,7 +52,7 @@ export function AppHeader({
         variant="ghost"
         onClick={() => void onRefresh()}
       >
-        {isLoading ? '...' : <ArrowRotateRight/>}
+        {isLoading ? '...' : getCommonIcon('reload')}
       </Button>
     </header>
   )

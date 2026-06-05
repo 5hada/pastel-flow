@@ -6,14 +6,26 @@ import { SettingsWorkspace } from '../../../features/settings/SettingsWorkspace'
 import { ToolsWorkspace } from '../../../features/tools/ToolsWorkspace'
 import { WorkflowsWorkspace } from '../../../features/workflows/WorkflowsWorkspace'
 import type { WorkspaceContext, WorkspaceTemplate } from './types'
+import type { WorkflowDefinition } from '../../../../shared/workflows'
+import type { RegisteredToolModule } from '../../../../shared/tools'
+import { createToolInputDefaults } from '../../utils/viewLabels'
 
 export const workspaceTemplates: WorkspaceTemplate[] = [
   {
     type: 'run',
     render(context: WorkspaceContext) {
+      const visibleWorkflows = filterByFolder(
+        context.workflows,
+        context.selectedCollectionFolderId,
+        context.appSettings.workspaceFolderAssignments,
+      )
+      const selectedFolder = context.appSettings.workspaceFolders.find(
+        (folder) => folder.id === context.selectedCollectionFolderId,
+      )
       const props = {
-        workflows: context.workflows,
-        categoryLabel: getNavigationCategoryLabel(context.selectedCategory),
+        workflows: visibleWorkflows,
+        categoryLabel:
+          selectedFolder?.name ?? getNavigationCategoryLabel(context.selectedCategory),
         displayMode: context.appSettings.workflowListDisplayMode,
         isLoading: context.isLoading,
         runningWorkflowId: context.runningWorkflowId,
@@ -26,7 +38,10 @@ export const workspaceTemplates: WorkspaceTemplate[] = [
         onGridColumnCountChange: context.handleWorkflowGridColumnCountChange,
         onRun: context.handleRunWorkflow,
         onStop: context.handleStopWorkflow,
-        onSelect: context.selectWorkflow,
+        onSelect(workflow: WorkflowDefinition) {
+          context.openWorkflowMode()
+          context.selectWorkflow(workflow)
+        },
       }
 
       return <RunWorkspace {...props} />
@@ -41,8 +56,11 @@ export const workspaceTemplates: WorkspaceTemplate[] = [
         currentDevice: context.currentDevice,
         developerVisibility: context.appSettings.developerVisibility,
         profilePresets: context.appSettings.browserProfilePresets,
+        selectedCollectionFolderId: context.selectedCollectionFolderId,
         selectedActionId: context.selectedActionId,
         secrets: context.secrets,
+        workspaceFolderAssignments: context.appSettings.workspaceFolderAssignments,
+        workspaceFolders: context.appSettings.workspaceFolders,
         workflows: context.workflows,
         onChange: context.setCreateForm,
         onDeleteAction: context.handleDeleteAction,
@@ -64,12 +82,20 @@ export const workspaceTemplates: WorkspaceTemplate[] = [
         defaultWorkflowName: context.appSettings.defaultWorkflowName,
         isLoading: context.isLoading,
         runningWorkflowId: context.runningWorkflowId,
+        actionRuns: context.actionRuns,
+        selectedCollectionFolderId: context.selectedCollectionFolderId,
+        selectedWorkflowRunId: context.selectedWorkflowRunId,
         selectedWorkflowId: context.selectedWorkflowId,
         onConfirmDeleteWorkflow: context.handleDeleteWorkflow,
         onCreateWorkflow: context.handleCreateWorkflow,
+        onSelectWorkflow: context.selectWorkflowById,
+        onSelectWorkflowRun: context.selectWorkflowRun,
         onStartCreateWorkflow: () => context.setSelectedWorkflowId(null),
         onUpdateWorkflow: context.handleUpdateWorkflow,
         workflowRunEvents: context.workflowRunEvents,
+        workflowRuns: context.workflowRuns,
+        workspaceFolderAssignments: context.appSettings.workspaceFolderAssignments,
+        workspaceFolders: context.appSettings.workspaceFolders,
         workflows: context.workflows,
       }
 
@@ -81,14 +107,28 @@ export const workspaceTemplates: WorkspaceTemplate[] = [
     render(context: WorkspaceContext) {
       const props = {
         selectedToolId: context.selectedToolId,
+        selectedCollectionFolderId: context.selectedCollectionFolderId,
         toolInputValues: context.toolInputValues,
         toolMessage: context.toolMessage,
         toolModules: context.toolModules,
         toolRunResult: context.toolRunResult,
         showToolMetadata: context.appSettings.developerVisibility.showToolMetadata,
+        workspaceFolderAssignments: context.appSettings.workspaceFolderAssignments,
+        workspaceFolders: context.appSettings.workspaceFolders,
         onCreateToolAction: context.handleCreateToolAction,
+        onClearSelectedTool() {
+          context.setSelectedToolId(null)
+          context.setToolRunResult(null)
+          context.setToolMessage(null)
+        },
         onRegisterToolModule: context.handleRegisterToolModule,
         onRunToolModule: context.handleRunToolModule,
+        onSelectTool(tool: RegisteredToolModule) {
+          context.setSelectedToolId(tool.id)
+          context.setToolRunResult(null)
+          context.setToolMessage(null)
+          context.setToolInputValues(createToolInputDefaults(tool))
+        },
         onToolInputChange(key: string, value: unknown) {
           context.setToolInputValues((currentValues) => ({
             ...currentValues,
@@ -135,6 +175,22 @@ export const workspaceTemplates: WorkspaceTemplate[] = [
     },
   },
 ]
+
+function filterByFolder<TItem extends { id: string }>(
+  items: TItem[],
+  folderId: string,
+  assignments: Record<string, string>,
+): TItem[] {
+  if (folderId === 'all') {
+    return items
+  }
+
+  if (folderId === 'favorites') {
+    return []
+  }
+
+  return items.filter((item) => assignments[item.id] === folderId)
+}
 
 export type WorkspaceRegistry = {
   getWorkspace(type: WorkspaceMode): WorkspaceTemplate

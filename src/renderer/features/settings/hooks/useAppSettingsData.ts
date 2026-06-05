@@ -195,5 +195,6 @@ export function useAppSettingsData(
     setSettingsErrorMessage,
     setSettingsForm,
     setSettingsSaveState,
+    updateSettings,
   }
 }

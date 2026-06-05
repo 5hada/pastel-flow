@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto'
 import type { WorkflowDefinition, WorkflowState } from '../../shared/workflows'
 import type { ActionDefinition, ActionRuntimeState } from '../../shared/actions'
 import type { AppSettingsStore } from '../settings/store/appSettingsStore'
@@ -6,6 +5,7 @@ import type { ActionAdapterRegistry } from '../actions/adapters/actionAdapterReg
 import type { WorkflowRunEventStore } from './store/workflowRunEventStore'
 import type { WorkflowStore } from './store/workflowStore'
 import type { ToolModuleRunner } from '../tools/runner/toolModuleRunner'
+import type { WorkflowRunStore } from './store/workflowRunStore'
 
 const workflowRunLocks = new Set<string>()
 
@@ -21,6 +21,7 @@ export type WorkflowRunnerOptions = {
   appSettingsStore: AppSettingsStore
   toolModuleRunner: ToolModuleRunner
   workflowRunEventStore: WorkflowRunEventStore
+  workflowRunStore: WorkflowRunStore
   dataDir: string
   deviceId: string
 }
@@ -31,6 +32,7 @@ export function createWorkflowRunner({
   dataDir,
   deviceId,
   workflowRunEventStore,
+  workflowRunStore,
   workflowStore,
   toolModuleRunner,
 }: WorkflowRunnerOptions): WorkflowRunner {
@@ -78,6 +80,7 @@ export function createWorkflowRunner({
           deviceId,
           appSettingsStore,
           workflowRunEventStore,
+          workflowRunStore,
           workflowStore,
           toolModuleRunner,
         })
@@ -160,6 +163,7 @@ async function runActionWorkflow(
     dataDir: string
     deviceId: string
     workflowRunEventStore: WorkflowRunEventStore
+    workflowRunStore: WorkflowRunStore
     workflowStore: WorkflowStore
     toolModuleRunner: ToolModuleRunner
   },
@@ -169,17 +173,28 @@ async function runActionWorkflow(
     .filter((actionRef) => actionRef.enabled)
     .sort((left, right) => left.order - right.order)
   let outputScope: Record<string, unknown> = {}
+  let currentActionRunId: string | undefined
+  const runStartedAt = new Date().toISOString()
+  const workflowRun = await context.workflowRunStore.createRun({
+    workflowId: workflow.id,
+    actorType: 'user',
+    triggerSource: 'manual',
+    status: 'running',
+    startedAt: runStartedAt,
+    workflowSnapshot: createWorkflowRunSnapshot(workflow, actions),
+  })
 
   await context.workflowStore.updateWorkflow(workflow.id, {
     state: {
       ...workflow.state,
       status: 'running',
-      startedAt: new Date().toISOString(),
+      startedAt: runStartedAt,
       lastMessage: 'Workflow 실행을 시작했습니다.',
       lastError: undefined,
     },
   })
   await context.workflowRunEventStore.appendEvent({
+    runId: workflowRun.id,
     workflowId: workflow.id,
     deviceId: context.deviceId,
     status: 'running',
@@ -195,7 +210,17 @@ async function runActionWorkflow(
 
       if (action.type !== 'tool_action') {
         const adapter = context.adapterRegistry.getAdapter(action.type)
-        const actionRunId = randomUUID()
+        const actionRun = await context.workflowRunStore.createActionRun({
+          runId: workflowRun.id,
+          workflowId: workflow.id,
+          actionRefId: actionRef.id,
+          actionId: action.id,
+          order: actionRef.order,
+          status: 'running',
+          startedAt: new Date().toISOString(),
+          inputSummary: summarizeValue(action.config),
+        })
+        currentActionRunId = actionRun.id
         const actionStartedAt = new Date().toISOString()
         await adapter.validateConfig(action.config)
         await context.workflowStore.updateWorkflow(workflow.id, {
@@ -241,6 +266,15 @@ async function runActionWorkflow(
           },
         })
         const resultState = result.state as WorkflowState
+        const actionEndedAt =
+          resultState.status === 'running' ? undefined : new Date().toISOString()
+        await context.workflowRunStore.updateActionRun(actionRun.id, {
+          status: mapRunStatusToActionRunStatus(resultState.status),
+          endedAt: actionEndedAt,
+          outputSummary: summarizeValue(resultState),
+          error: resultState.lastError,
+        })
+        currentActionRunId = undefined
         const currentWorkflow = await context.workflowStore
           .listWorkflows()
           .then((workflows) =>
@@ -254,7 +288,7 @@ async function runActionWorkflow(
             endedAt:
               resultState.status === 'running'
                 ? undefined
-                : new Date().toISOString(),
+                : actionEndedAt,
           },
         )
         outputScope = {
@@ -262,8 +296,9 @@ async function runActionWorkflow(
           [actionRef.id]: resultState,
         }
         await context.workflowRunEventStore.appendEvent({
+          runId: workflowRun.id,
           workflowId: workflow.id,
-          actionRunId,
+          actionRunId: actionRun.id,
           deviceId: context.deviceId,
           status: resultState.status,
           message: result.message ?? `${action.name} Action 실행을 처리했습니다.`,
@@ -294,12 +329,31 @@ async function runActionWorkflow(
         throw new Error('tool_action config.toolId가 필요합니다.')
       }
 
-      const result = await context.toolModuleRunner.runTool(config.toolId, {
+      const toolInput = {
         ...(config.inputDefaults ?? {}),
         ...resolveInputMapping(actionRef.inputMapping, outputScope),
+      }
+      const toolActionRun = await context.workflowRunStore.createActionRun({
+        runId: workflowRun.id,
+        workflowId: workflow.id,
+        actionRefId: actionRef.id,
+        actionId: action.id,
+        order: actionRef.order,
+        status: 'running',
+        startedAt: new Date().toISOString(),
+        inputSummary: summarizeValue(toolInput),
       })
-      const toolActionRunId = randomUUID()
+      currentActionRunId = toolActionRun.id
+      const result = await context.toolModuleRunner.runTool(config.toolId, {
+        ...toolInput,
+      })
       const completedAt = new Date().toISOString()
+      await context.workflowRunStore.updateActionRun(toolActionRun.id, {
+        status: 'succeeded',
+        endedAt: completedAt,
+        outputSummary: summarizeValue(result.output),
+      })
+      currentActionRunId = undefined
       await context.workflowStore.updateWorkflow(workflow.id, {
         state: mergeWorkflowState(
           await getLatestWorkflowState(context.workflowStore, workflow.id),
@@ -317,8 +371,9 @@ async function runActionWorkflow(
         [actionRef.id]: result.output,
       }
       await context.workflowRunEventStore.appendEvent({
+        runId: workflowRun.id,
         workflowId: workflow.id,
-        actionRunId: toolActionRunId,
+        actionRunId: toolActionRun.id,
         deviceId: context.deviceId,
         status: 'idle',
         message: `${action.name} Tool Action 실행을 완료했습니다.`,
@@ -333,7 +388,13 @@ async function runActionWorkflow(
         lastMessage: `${enabledActionRefs.length}개 Action 실행을 완료했습니다.`,
       },
     })
+    await context.workflowRunStore.updateRun(workflowRun.id, {
+      status: 'succeeded',
+      endedAt: completedWorkflow.state.endedAt,
+      summary: completedWorkflow.state.lastMessage,
+    })
     await context.workflowRunEventStore.appendEvent({
+      runId: workflowRun.id,
       workflowId: workflow.id,
       deviceId: context.deviceId,
       status: 'idle',
@@ -342,6 +403,13 @@ async function runActionWorkflow(
 
     return completedWorkflow
   } catch (error) {
+    if (currentActionRunId) {
+      await context.workflowRunStore.updateActionRun(currentActionRunId, {
+        status: 'failed',
+        endedAt: new Date().toISOString(),
+        error: getErrorMessage(error),
+      })
+    }
     const failedWorkflow = await context.workflowStore.updateWorkflow(workflow.id, {
       state: {
         ...(await getLatestWorkflowState(context.workflowStore, workflow.id)),
@@ -350,7 +418,13 @@ async function runActionWorkflow(
         lastError: getErrorMessage(error),
       },
     })
+    await context.workflowRunStore.updateRun(workflowRun.id, {
+      status: 'failed',
+      endedAt: failedWorkflow.state.endedAt,
+      error: failedWorkflow.state.lastError,
+    })
     await context.workflowRunEventStore.appendEvent({
+      runId: workflowRun.id,
       workflowId: workflow.id,
       deviceId: context.deviceId,
       status: 'failed',
@@ -406,6 +480,91 @@ function resolveInputMapping(
       outputScope[outputPath],
     ]),
   )
+}
+
+function mapRunStatusToActionRunStatus(
+  status: ActionRuntimeState['status'],
+) {
+  switch (status) {
+    case 'idle':
+    case 'succeeded':
+      return 'succeeded'
+    case 'running':
+      return 'running'
+    case 'failed':
+      return 'failed'
+  }
+}
+
+function createWorkflowRunSnapshot(
+  workflow: WorkflowDefinition,
+  actions: ActionDefinition[],
+): unknown {
+  const actionIds = new Set(
+    workflow.actionRefs.map((actionRef) => actionRef.actionId),
+  )
+
+  return {
+    workflow: sanitizeSnapshotValue(workflow),
+    actions: actions
+      .filter((action) => actionIds.has(action.id))
+      .map((action) => sanitizeSnapshotValue(action)),
+  }
+}
+
+function summarizeValue(value: unknown): unknown {
+  if (value === null || value === undefined) {
+    return { type: String(value) }
+  }
+
+  if (Array.isArray(value)) {
+    return {
+      type: 'array',
+      length: value.length,
+      preview: value.slice(0, 3).map(summarizeValue),
+    }
+  }
+
+  if (typeof value === 'object') {
+    return {
+      type: 'object',
+      keys: Object.keys(value).slice(0, 20),
+    }
+  }
+
+  if (typeof value === 'string') {
+    return {
+      type: 'string',
+      length: value.length,
+      preview: value.slice(0, 120),
+    }
+  }
+
+  return {
+    type: typeof value,
+    value,
+  }
+}
+
+function sanitizeSnapshotValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeSnapshotValue)
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [
+      key,
+      isSensitiveSnapshotKey(key) ? '[redacted]' : sanitizeSnapshotValue(item),
+    ]),
+  )
+}
+
+function isSensitiveSnapshotKey(key: string): boolean {
+  return /secret|password|token|api[_-]?key|credential/i.test(key)
 }
 
 function getErrorMessage(error: unknown): string {

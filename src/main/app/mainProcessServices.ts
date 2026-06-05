@@ -18,9 +18,11 @@ import { createMockSyncStore } from '../sync/store/mockSyncStore'
 import { registerToolModuleIpc } from '../tools/ipc/toolModuleIpc'
 import { createToolModuleRunner } from '../tools/runner/toolModuleRunner'
 import { createToolModuleStore } from '../tools/store/toolModuleStore'
+import { createSqliteDatabase } from '../storage/sqliteDatabase'
 import { registerWorkflowIpc } from '../workflows/ipc/workflowIpc'
 import { createWorkflowScheduler } from '../workflows/scheduler/workflowScheduler'
 import { createWorkflowRunEventStore } from '../workflows/store/workflowRunEventStore'
+import { createWorkflowRunStore } from '../workflows/store/workflowRunStore'
 import { createWorkflowStore } from '../workflows/store/workflowStore'
 import { createWorkflowRunner } from '../workflows/workflowRunner'
 import { applyLoginItemSettings } from './loginItems'
@@ -28,6 +30,7 @@ import { createObservedWorkflowStore } from './workflowStoreEvents'
 import { resetStaleRunningWorkflows } from './workflowStartup'
 
 export async function initializeMainProcessServices(dataDir: string): Promise<void> {
+  const database = createSqliteDatabase({ dataDir })
   const appSettingsStore = createAppSettingsStore({
     dataDir,
   })
@@ -53,11 +56,14 @@ export async function initializeMainProcessServices(dataDir: string): Promise<vo
     toolModuleStore,
   })
   const workflowRunEventStore = createWorkflowRunEventStore({
-    dataDir,
+    database,
     async getRetentionLimit() {
       const snapshot = await appSettingsStore.getSnapshot()
       return snapshot.settings.workflowRunEventRetentionLimit
     },
+  })
+  const workflowRunStore = createWorkflowRunStore({
+    database,
   })
   const secretStore = createSecretStore({
     dataDir,
@@ -91,6 +97,7 @@ export async function initializeMainProcessServices(dataDir: string): Promise<vo
     dataDir,
     deviceId: currentDevice.id,
     workflowRunEventStore,
+    workflowRunStore,
     workflowStore,
     toolModuleRunner,
   })
@@ -111,6 +118,7 @@ export async function initializeMainProcessServices(dataDir: string): Promise<vo
     workflowStore,
     workflowRunner,
     workflowRunEventStore,
+    workflowRunStore,
     appSettingsStore,
     deviceStore,
   )

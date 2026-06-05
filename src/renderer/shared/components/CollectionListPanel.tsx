@@ -1,0 +1,84 @@
+import { Button, Card } from '@heroui/react'
+import type { ReactNode } from 'react'
+
+export type CollectionListItem = {
+  id: string
+  title: string
+  meta?: ReactNode
+  status?: ReactNode
+  message?: ReactNode
+}
+
+export type CollectionListPanelProps = {
+  emptyAction?: ReactNode
+  emptyText: string
+  eyebrow: string
+  folderLabel?: ReactNode
+  headerAction?: ReactNode
+  isFramed?: boolean
+  items: CollectionListItem[]
+  title: string
+  onEdit(id: string): void
+}
+
+export function CollectionListPanel({
+  emptyAction,
+  emptyText,
+  folderLabel,
+  headerAction,
+  eyebrow,
+  isFramed = true,
+  items,
+  onEdit,
+  title,
+}: CollectionListPanelProps) {
+  const Wrapper = isFramed ? Card : 'div'
+
+  return (
+    <Wrapper
+      aria-label={title}
+      className={isFramed ? 'mode-panel collection-list-panel' : 'collection-list-panel'}
+    >
+      <div className="panel-heading">
+        <p className="eyebrow">{eyebrow}</p>
+        <div className="collection-list-heading-actions">
+          {folderLabel ? (
+            <span className="collection-list-folder-path">{folderLabel}</span>
+          ) : null}
+          {headerAction}
+        </div>
+      </div>
+      {items.length === 0 ? (
+        <div className="empty-state empty-state-action">
+          <p>{emptyText}</p>
+          {emptyAction}
+        </div>
+      ) : (
+        <div className="task-list">
+          {items.map((item) => (
+            <article className="task-row collection-list-row" key={item.id}>
+              <div className="task-row-summary">
+                <span className="task-row-title">{item.title}</span>
+                {item.meta ? (
+                  <span className="task-row-meta">{item.meta}</span>
+                ) : null}
+                {item.message ? (
+                  <span className="task-row-meta">{item.message}</span>
+                ) : null}
+              </div>
+              {item.status ? <div>{item.status}</div> : null}
+              <Button
+                className="px-6"
+                type="button"
+                variant="secondary"
+                onClick={() => onEdit(item.id)}
+              >
+                수정
+              </Button>
+            </article>
+          ))}
+        </div>
+      )}
+    </Wrapper>
+  )
+}

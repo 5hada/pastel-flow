@@ -49,11 +49,12 @@ export function ModeToggles({
       {modes.map((mode) => (
         <Button fullWidth
           aria-label={mode.label}
-          className={currentMode === mode.id ? 'is-active' : ''}
+          className={currentMode === mode.id ? 'is-active px-2' : 'px-2'}
           variant={currentMode === mode.id ? 'secondary' : 'ghost'}
           key={mode.id}
           type="button"
           onClick={mode.onClick}
+          size='sm'
         >
           <span aria-hidden="true">{mode.icon}</span>
           <strong>{mode.label}</strong>

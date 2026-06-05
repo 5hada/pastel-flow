@@ -91,7 +91,8 @@ export function WorkspaceSidebar({
                   .map((folder) => (
                     <FolderButton
                       count={0}
-                      icon={getCommonIcon('folderClose')}
+                      icon={getCommonIcon('folderOpen')}
+                      iconClosed={getCommonIcon('folderClose')}
                       id={folder.id}
                       isSelected={selectedCollectionFolderId === folder.id}
                       key={folder.id}
@@ -273,7 +274,8 @@ function FolderSidebarSection({
         ) : (
           <FolderButton
             count={0}
-            icon={getCommonIcon('folderClose')}
+            icon={getCommonIcon('folderOpen')}
+            iconClosed={getCommonIcon('folderClose')}
             id={folder.id}
             isSelected={selectedFolderId === folder.id}
             key={folder.id}
@@ -351,6 +353,7 @@ function EditableFolderRow({
 function FolderButton({
   count,
   icon,
+  iconClosed,
   id,
   isSelected,
   label,
@@ -358,6 +361,7 @@ function FolderButton({
 }: {
   count: number
   icon: ReactNode
+  iconClosed?: ReactNode
   id: string
   isSelected: boolean
   label: string
@@ -370,7 +374,7 @@ function FolderButton({
       type="button"
       onClick={() => onSelect(id)}
     >
-      <span aria-hidden="true">{icon}</span>
+      <span aria-hidden="true">{isSelected ? icon : iconClosed ?? icon}</span>
       <strong>{label}</strong>
       <em>{count}</em>
     </Button>

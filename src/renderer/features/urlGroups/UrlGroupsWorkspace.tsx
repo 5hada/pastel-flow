@@ -11,7 +11,12 @@ export type UrlGroupsWorkspaceProps = {
   isLoading: boolean
   selectedUrlGroupId: string | null
   urlGroups: UrlGroup[]
-  onCreateUrlGroup(input: { name: string; items: UrlGroupItem[] }): Promise<void>
+  onCreateUrlGroup(input: {
+    name: string
+    description?: string
+    tags?: string[]
+    items: UrlGroupItem[]
+  }): Promise<void>
   onDeleteUrlGroup(id: string): Promise<void>
   onSelectUrlGroup(id: string | null): void
   onUpdateUrlGroup(
@@ -51,6 +56,8 @@ export function UrlGroupsWorkspace({
     } else {
       await onCreateUrlGroup({
         name: input.name,
+        description: input.description,
+        tags: input.tags,
         items: input.items ?? [],
       })
     }

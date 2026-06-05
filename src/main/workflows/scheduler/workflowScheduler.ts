@@ -73,7 +73,11 @@ export function createWorkflowScheduler({
             nextRunAt: getNextRunAt(now, schedule),
           },
         })
-        void workflowRunner.runWorkflow(workflow.id)
+        void workflowRunner.runWorkflow(workflow.id, {
+          actorType: 'schedule',
+          actorId: currentDevice.id,
+          triggerSource: 'schedule',
+        })
       }
     } finally {
       isTicking = false

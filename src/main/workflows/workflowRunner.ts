@@ -1,5 +1,9 @@
 import type { WorkflowDefinition, WorkflowState } from '../../shared/workflows'
 import type { ActionDefinition, ActionRuntimeState } from '../../shared/actions'
+import type {
+  WorkflowRunActorType,
+  WorkflowRunTriggerSource,
+} from '../../shared/runStatus'
 import {
   parseMappingSource,
   validateWorkflowInputMappings,
@@ -18,8 +22,17 @@ const workflowRunLocks = new Set<string>()
 
 export type WorkflowRunner = {
   getWorkflow(id: string): Promise<WorkflowDefinition>
-  runWorkflow(id: string): Promise<WorkflowDefinition>
+  runWorkflow(
+    id: string,
+    options?: RunWorkflowOptions,
+  ): Promise<WorkflowDefinition>
   stopWorkflow(id: string): Promise<WorkflowDefinition>
+}
+
+export type RunWorkflowOptions = {
+  actorType?: WorkflowRunActorType
+  actorId?: string
+  triggerSource?: WorkflowRunTriggerSource
 }
 
 export type WorkflowRunnerOptions = {
@@ -73,7 +86,7 @@ export function createWorkflowRunner({
 
   return {
     getWorkflow,
-    async runWorkflow(id) {
+    async runWorkflow(id, options) {
       if (workflowRunLocks.has(id)) {
         return getWorkflow(id)
       }
@@ -92,8 +105,11 @@ export function createWorkflowRunner({
         }
         return await runActionWorkflow(workflow, actions, {
           adapterRegistry,
+          actorId: options?.actorId,
+          actorType: options?.actorType ?? 'user',
           dataDir,
           deviceId,
+          triggerSource: options?.triggerSource ?? 'manual',
           appSettingsStore,
           workflowRunEventStore,
           workflowRunStore,
@@ -177,9 +193,12 @@ async function runActionWorkflow(
   actions: ActionDefinition[],
   context: {
     adapterRegistry: ActionAdapterRegistry
+    actorId?: string
+    actorType: WorkflowRunActorType
     appSettingsStore: AppSettingsStore
     dataDir: string
     deviceId: string
+    triggerSource: WorkflowRunTriggerSource
     workflowRunEventStore: WorkflowRunEventStore
     workflowRunStore: WorkflowRunStore
     workflowArtifactWriter: WorkflowArtifactWriter
@@ -197,8 +216,9 @@ async function runActionWorkflow(
   const runStartedAt = new Date().toISOString()
   const workflowRun = await context.workflowRunStore.createRun({
     workflowId: workflow.id,
-    actorType: 'user',
-    triggerSource: 'manual',
+    actorType: context.actorType,
+    actorId: context.actorId,
+    triggerSource: context.triggerSource,
     status: 'running',
     startedAt: runStartedAt,
     workflowSnapshot: createWorkflowRunSnapshot(workflow, actions),

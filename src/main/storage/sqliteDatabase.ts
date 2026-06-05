@@ -188,4 +188,29 @@ const migrations: Array<{
         .run()
     },
   },
+  {
+    id: '005_create_url_groups',
+    up(database) {
+      database
+        .prepare(
+          `
+          CREATE TABLE url_groups (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT,
+            tags TEXT NOT NULL,
+            items TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          )
+          `,
+        )
+        .run()
+      database
+        .prepare(
+          'CREATE INDEX url_groups_updated_idx ON url_groups (updated_at DESC)',
+        )
+        .run()
+    },
+  },
 ]

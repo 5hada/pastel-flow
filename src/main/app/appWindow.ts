@@ -24,9 +24,9 @@ export function createAppWindow(environment: AppEnvironment): BrowserWindow {
     browserWindow.loadFile(path.join(environment.rendererDist, 'index.html'))
   }
     browserWindow.webContents.on('did-finish-load', () => {
-    browserWindow.webContents.openDevTools({
-      mode: 'detach',
-    })
+    // browserWindow.webContents.openDevTools({
+    //   mode: 'detach',
+    // })
   })
 
   return browserWindow

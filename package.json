@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node --unhandled-rejections=strict --trace-warnings node_modules/vite/bin/vite.js",
+    "dev": "vite",
     "typecheck": "tsc --noEmit",
     "postinstall": "electron-builder install-app-deps",
     "build": "vite build && electron-builder",

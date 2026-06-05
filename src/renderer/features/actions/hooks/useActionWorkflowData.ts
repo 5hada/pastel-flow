@@ -4,6 +4,14 @@ import type { WorkflowDefinition } from '../../../../shared/workflows'
 import type { DevicePolicy } from '../../../../shared/devices'
 import { getErrorMessage } from '../../../shared/utils/viewLabels'
 
+type CreateActionInput = {
+  name: string
+  type: ActionDefinition['type']
+  config: unknown
+  inputSchema?: ActionDefinition['inputSchema']
+  outputSchema?: ActionDefinition['outputSchema']
+}
+
 export function useActionWorkflowData(
   setErrorMessage: (message: string | null) => void,
 ) {
@@ -117,6 +125,23 @@ export function useActionWorkflowData(
       })
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
+    }
+  }
+
+  async function createAction(
+    input: CreateActionInput,
+  ): Promise<ActionDefinition | null> {
+    if (!window.pastelFlow) {
+      return null
+    }
+
+    try {
+      const action = await window.pastelFlow.actions.create(input)
+      setActions((currentActions) => [...currentActions, action])
+      return action
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+      return null
     }
   }
 
@@ -280,6 +305,7 @@ export function useActionWorkflowData(
     selectedWorkflowId,
     stoppingWorkflowId,
     createWorkflow,
+    createAction,
     deleteWorkflow,
     deleteAction,
     loadActionWorkflowData,

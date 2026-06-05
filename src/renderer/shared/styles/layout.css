@@ -116,8 +116,8 @@
 
 .top-mode-bar {
   display: inline-grid;
-  grid-template-columns: repeat(5, minmax(72px, 1fr));
-  width: min(100%, 540px);
+  grid-template-columns: repeat(6, minmax(64px, 1fr));
+  width: min(100%, 620px);
   justify-self: center;
 }
 

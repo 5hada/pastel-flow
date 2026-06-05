@@ -28,6 +28,12 @@ export const ipcRequestChannels = {
     update: 'actions:update',
     delete: 'actions:delete',
   },
+  urlGroups: {
+    list: 'url-groups:list',
+    create: 'url-groups:create',
+    update: 'url-groups:update',
+    delete: 'url-groups:delete',
+  },
   tasks: {
     list: 'tasks:list',
     create: 'tasks:create',

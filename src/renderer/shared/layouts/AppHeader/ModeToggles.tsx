@@ -8,6 +8,7 @@ export type ModeTogglesProps = {
   onRun(): void
   onActions(): void
   onWorkflows(): void
+  onUrlGroups(): void
   onTools(): void
   onSettings(): void
 }
@@ -18,6 +19,7 @@ export function ModeToggles({
   onRun,
   onSettings,
   onTools,
+  onUrlGroups,
   onWorkflows,
 }: ModeTogglesProps) {
   const modes: {
@@ -29,6 +31,7 @@ export function ModeToggles({
     { id: 'run', icon: getCommonIcon('run'), label: '실행', onClick: onRun },
     { id: 'actions', icon: getCommonIcon('actions'), label: 'Action', onClick: onActions },
     { id: 'workflows', icon: getCommonIcon('workflows'), label: 'Workflow', onClick: onWorkflows },
+    { id: 'urlGroups', icon: getCommonIcon('urlGroups'), label: 'URLs', onClick: onUrlGroups },
     { id: 'tools', icon: getCommonIcon('tools'), label: '도구', onClick: onTools },
     { id: 'settings', icon: getCommonIcon('settings'), label: '설정', onClick: onSettings },
   ]

@@ -3,6 +3,7 @@ import { createActionAdapterRegistry } from '../actions/adapters/actionAdapterRe
 import { browserAdapter } from '../actions/adapters/browserAdapter'
 import { initializeBrowserActionGroupRuntime } from '../browsers/browserActionGroupRuntime'
 import { crawlerAdapter } from '../actions/adapters/crawlerAdapter'
+import { transformAdapter } from '../actions/adapters/transformAdapter'
 import {
   discordBotAdapter,
   notionSyncAdapter,
@@ -19,6 +20,9 @@ import { registerToolModuleIpc } from '../tools/ipc/toolModuleIpc'
 import { createToolModuleRunner } from '../tools/runner/toolModuleRunner'
 import { createToolModuleStore } from '../tools/store/toolModuleStore'
 import { createSqliteDatabase } from '../storage/sqliteDatabase'
+import { registerUrlGroupIpc } from '../urlGroups/ipc/urlGroupIpc'
+import { createUrlGroupStore } from '../urlGroups/store/urlGroupStore'
+import { createWorkflowArtifactWriter } from '../workflows/artifacts/workflowArtifactWriter'
 import { registerWorkflowIpc } from '../workflows/ipc/workflowIpc'
 import { createWorkflowScheduler } from '../workflows/scheduler/workflowScheduler'
 import { createWorkflowArtifactStore } from '../workflows/store/workflowArtifactStore'
@@ -69,6 +73,13 @@ export async function initializeMainProcessServices(dataDir: string): Promise<vo
   const workflowArtifactStore = createWorkflowArtifactStore({
     database,
   })
+  const urlGroupStore = createUrlGroupStore({
+    database,
+  })
+  const workflowArtifactWriter = createWorkflowArtifactWriter({
+    artifactStore: workflowArtifactStore,
+    dataDir,
+  })
   const secretStore = createSecretStore({
     dataDir,
     encryptionAvailable: safeStorage.isEncryptionAvailable(),
@@ -86,6 +97,7 @@ export async function initializeMainProcessServices(dataDir: string): Promise<vo
     discordBotAdapter,
     notionSyncAdapter,
     tradingBotAdapter,
+    transformAdapter,
   ])
   await initializeBrowserActionGroupRuntime(dataDir)
   const mockSyncStore = createMockSyncStore({
@@ -102,7 +114,9 @@ export async function initializeMainProcessServices(dataDir: string): Promise<vo
     deviceId: currentDevice.id,
     workflowRunEventStore,
     workflowRunStore,
+    workflowArtifactWriter,
     workflowStore,
+    urlGroupStore,
     toolModuleRunner,
   })
 
@@ -117,6 +131,7 @@ export async function initializeMainProcessServices(dataDir: string): Promise<vo
     toolModuleRunner,
     workflowStore,
   )
+  registerUrlGroupIpc(ipcMain, urlGroupStore)
   registerWorkflowIpc(
     ipcMain,
     workflowStore,

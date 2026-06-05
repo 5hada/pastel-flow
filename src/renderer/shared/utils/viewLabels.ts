@@ -58,6 +58,8 @@ export function getTaskTypeLabel(taskType: TaskType): string {
       return 'Notion sync'
     case 'trading_bot':
       return 'Trading bot'
+    case 'transform':
+      return 'Transform'
   }
 }
 
@@ -73,6 +75,8 @@ export function getActionTypeLabel(actionType: ActionDefinition['type']): string
       return 'Notion dry-run'
     case 'trading_dry_run_action':
       return 'Trading dry-run'
+    case 'transform_action':
+      return 'Transform Action'
     case 'tool_action':
       return 'Tool Action'
   }
@@ -106,6 +110,8 @@ export function getTaskConfigSummary(task: TaskTemplate): string {
         config.symbol || 'symbol 미지정'
       }`
     }
+    case 'transform':
+      return '입출력 변환'
   }
 }
 
@@ -208,6 +214,8 @@ export function getWorkspaceModeLabel(workspaceMode: WorkspaceMode): string {
       return 'Action'
     case 'workflows':
       return 'Workflow'
+    case 'urlGroups':
+      return 'URL Groups'
     case 'tools':
       return '도구'
     case 'settings':

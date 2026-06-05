@@ -39,6 +39,10 @@ export function normalizeBrowserTabGroupConfig(
         ? config.browserGroupId.trim()
         : `browser-group-${config.profileId ?? 'default'}`,
     profileId: config.profileId ?? '',
+    urlGroupId:
+      typeof config.urlGroupId === 'string' && config.urlGroupId.trim()
+        ? config.urlGroupId.trim()
+        : undefined,
     initialUrls: Array.isArray(config.initialUrls)
       ? normalizeBrowserNavigationUrls(config.initialUrls)
       : [],

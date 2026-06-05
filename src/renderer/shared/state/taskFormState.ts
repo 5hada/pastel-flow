@@ -20,6 +20,7 @@ export type BrowserTaskFormState = {
   profileSource: BrowserProfileSource
   profilePresetId: string
   existingProfilePath: string
+  urlGroupId: string
   initialUrls: string
   dynamicTemplateUpdates: boolean
   crawlerUrls: string
@@ -28,6 +29,9 @@ export type BrowserTaskFormState = {
   notionDatabaseId: string
   tradingExchange: string
   tradingSymbol: string
+  transformMode: 'json_to_string' | 'string_to_json' | 'pick_field' | 'join' | 'split'
+  transformPath: string
+  transformSeparator: string
   scheduleEnabled: boolean
   scheduleMode: TaskScheduleMode
   scheduleIntervalMinutes: number
@@ -47,7 +51,13 @@ export type SecretFormState = {
 
 export type SettingsSaveState = 'saved' | 'failed' | null
 
-export type WorkspaceMode = 'run' | 'actions' | 'workflows' | 'tools' | 'settings'
+export type WorkspaceMode =
+  | 'run'
+  | 'actions'
+  | 'workflows'
+  | 'urlGroups'
+  | 'tools'
+  | 'settings'
 
 export type NavigationCategory =
   | 'all'
@@ -86,6 +96,7 @@ export function createBrowserTaskForm(
     profileSource: settings.defaultBrowserProfileSource,
     profilePresetId: '',
     existingProfilePath: '',
+    urlGroupId: '',
     initialUrls: '',
     dynamicTemplateUpdates: false,
     crawlerUrls: '',
@@ -94,6 +105,9 @@ export function createBrowserTaskForm(
     notionDatabaseId: '',
     tradingExchange: '',
     tradingSymbol: '',
+    transformMode: 'json_to_string',
+    transformPath: '',
+    transformSeparator: '\n',
     scheduleEnabled: false,
     scheduleMode: 'interval',
     scheduleIntervalMinutes: 60,
@@ -126,6 +140,7 @@ export const defaultEditForm: BrowserTaskFormState = {
   profileSource: 'action_profile',
   profilePresetId: '',
   existingProfilePath: '',
+  urlGroupId: '',
   initialUrls: '',
   dynamicTemplateUpdates: false,
   crawlerUrls: '',
@@ -134,6 +149,9 @@ export const defaultEditForm: BrowserTaskFormState = {
   notionDatabaseId: '',
   tradingExchange: '',
   tradingSymbol: '',
+  transformMode: 'json_to_string',
+  transformPath: '',
+  transformSeparator: '\n',
   scheduleEnabled: false,
   scheduleMode: 'interval',
   scheduleIntervalMinutes: 60,

@@ -5,6 +5,8 @@ import {
   type OpenDialogOptions,
 } from 'electron'
 import { ipcRequestChannels } from '../../../shared/ipcChannels'
+import type { ActionIOField } from '../../../shared/actions'
+import type { ToolModuleField } from '../../../shared/tools'
 import type { ToolModuleRunner } from '../runner/toolModuleRunner'
 import type { ToolModuleStore } from '../store/toolModuleStore'
 import type { WorkflowStore } from '../../workflows/store/workflowStore'
@@ -51,19 +53,45 @@ export function registerToolModuleIpc(
       inputSchema: tool.manifest.inputs.map((field) => ({
         id: field.key,
         name: field.key,
-        type: field.type === 'json' ? 'json' : 'string',
+        type: mapToolFieldTypeToActionIoType(field),
         required: field.required,
         description: field.description,
       })),
       outputSchema: tool.manifest.outputs.map((field) => ({
         id: field.key,
         name: field.key,
-        type: field.type === 'json' ? 'json' : 'string',
+        type: mapToolFieldTypeToActionIoType(field),
         required: field.required,
         description: field.description,
       })),
     })
   })
+}
+
+function mapToolFieldTypeToActionIoType(
+  field: ToolModuleField,
+): ActionIOField['type'] {
+  switch (field.type) {
+    case 'record[]':
+      return 'json'
+    case 'color':
+    case 'color[]':
+      return 'string'
+    case 'string':
+    case 'number':
+    case 'boolean':
+    case 'boolean[]':
+    case 'string[]':
+    case 'number[]':
+    case 'json':
+    case 'file':
+    case 'file[]':
+    case 'image':
+    case 'image[]':
+    case 'url':
+    case 'url[]':
+      return field.type
+  }
 }
 
 function assertString(value: unknown, label: string): string {

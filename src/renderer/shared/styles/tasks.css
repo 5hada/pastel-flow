@@ -4,6 +4,7 @@
 .workflow-run-history,
 .workflow-run-list,
 .action-run-list,
+.artifact-list,
 .editor-list,
 .editor-detail,
 .workflow-action-list,
@@ -60,6 +61,7 @@
 .workflow-run-card,
 .workflow-run-history-row,
 .action-run-row,
+.artifact-row,
 .task-row,
 .workflow-action-row,
 .action-picker-row,
@@ -82,6 +84,7 @@
 .workflow-run-card:hover,
 .workflow-run-history-row:hover,
 .action-run-row:hover,
+.artifact-row:hover,
 .task-row:hover,
 .workflow-action-row:hover,
 .action-picker-row:hover,
@@ -115,6 +118,7 @@
 .workflow-run-card div,
 .workflow-run-history-row span,
 .action-run-row div,
+.artifact-row div,
 .task-row-summary,
 .workflow-action-row div,
 .action-picker-row div,
@@ -137,6 +141,7 @@
 .workflow-run-card small,
 .workflow-run-history-row small,
 .action-run-row small,
+.artifact-row small,
 .action-run-heading small,
 .task-row-meta,
 .workflow-action-row small,
@@ -147,6 +152,121 @@
   color: var(--text-muted);
   font-size: 0.82rem;
   line-height: 1.35;
+}
+
+.action-schema-summary,
+.action-schema-columns,
+.action-schema-list,
+.action-input-mapping-editor,
+.transform-config-editor {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.action-schema-summary {
+  margin-top: 4px;
+}
+
+.action-schema-detail {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.action-schema-detail h3 {
+  margin: 0 0 12px;
+}
+
+.action-schema-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.action-schema-list {
+  align-content: start;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface-muted);
+}
+
+.action-schema-list strong,
+.action-schema-list small {
+  width: 100%;
+}
+
+.action-input-mapping-editor {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.action-input-mapping-editor label,
+.transform-config-editor label {
+  display: grid;
+  min-width: min(280px, 100%);
+  flex: 1 1 280px;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.action-input-mapping-editor select,
+.transform-config-editor select,
+.transform-config-editor input {
+  min-width: 0;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 8px;
+  color: var(--text);
+  background: var(--control-bg);
+}
+
+.transform-config-editor {
+  grid-column: 1 / -1;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.action-picker-section {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface-muted);
+}
+
+.action-picker-transform-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 8px;
+}
+
+.schema-pill {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 24px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 8px;
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.schema-pill-warning {
+  border-color: color-mix(in srgb, #b23b4a 42%, var(--border) 58%);
+  background: color-mix(in srgb, #b23b4a 10%, var(--surface-muted) 90%);
+  color: var(--foreground, var(--text));
 }
 
 .task-row {
@@ -185,6 +305,23 @@
 .action-run-row {
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface);
+}
+
+.artifact-list {
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.artifact-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px;

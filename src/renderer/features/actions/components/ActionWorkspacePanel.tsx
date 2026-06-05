@@ -7,8 +7,14 @@ import type {
   DeveloperVisibilitySettings,
   WorkspaceFolder,
 } from '../../../../shared/settings'
-import type { ActionDefinition } from '../../../../shared/actions'
+import {
+  getActionInputSchema,
+  getActionOutputSchema,
+  type ActionDefinition,
+  type ActionIOField,
+} from '../../../../shared/actions'
 import type { WorkflowDefinition } from '../../../../shared/workflows'
+import type { UrlGroup } from '../../../../shared/urlGroups'
 import {
   taskTypeOptions,
   type BrowserTaskFormState,
@@ -32,6 +38,7 @@ export type ActionWorkspacePanelProps = {
   currentDevice: CurrentDevice
   developerVisibility: DeveloperVisibilitySettings
   profilePresets: BrowserProfilePreset[]
+  urlGroups: UrlGroup[]
   selectedCollectionFolderId: string
   selectedActionId: string | null
   secrets: LocalSecretMetadata[]
@@ -60,6 +67,7 @@ export function ActionWorkspacePanel({
   onUpdateAction,
   secrets,
   profilePresets,
+  urlGroups,
   selectedCollectionFolderId,
   selectedActionId,
   workspaceFolderAssignments,
@@ -91,6 +99,12 @@ export function ActionWorkspacePanel({
     selectedCollectionFolderId,
     workspaceFolderAssignments,
   )
+  const selectedActionInputSchema = selectedAction
+    ? getActionInputSchema(selectedAction)
+    : []
+  const selectedActionOutputSchema = selectedAction
+    ? getActionOutputSchema(selectedAction)
+    : []
 
   useEffect(() => {
     setEditForm(selectedAction ? createActionEditForm(selectedAction) : null)
@@ -309,6 +323,7 @@ export function ActionWorkspacePanel({
                       form={editForm}
                       isDisabled={isSelectedActionLocked}
                       profilePresets={profilePresets}
+                      urlGroups={urlGroups}
                       onChange={setEditForm}
                     />
                   ) : (
@@ -388,12 +403,16 @@ export function ActionWorkspacePanel({
                 {developerVisibility.showToolMetadata ? (
                   <DetailItem
                     label="입력 / 출력"
-                    value={`${selectedAction.inputSchema?.length ?? 0} / ${
-                      selectedAction.outputSchema?.length ?? 0
+                    value={`${selectedActionInputSchema.length} / ${
+                      selectedActionOutputSchema.length
                     }`}
                   />
                 ) : null}
               </dl>
+              <ActionSchemaDetail
+                inputSchema={selectedActionInputSchema}
+                outputSchema={selectedActionOutputSchema}
+              />
             </div>
           ) : isCreatingAction ? (
             <CreateTaskPanel
@@ -401,6 +420,7 @@ export function ActionWorkspacePanel({
               currentDevice={currentDevice}
               isEmbedded
               profilePresets={profilePresets}
+              urlGroups={urlGroups}
               secrets={secrets}
               onCancel={() => setIsCreatingAction(false)}
               onChange={onChange}
@@ -409,6 +429,48 @@ export function ActionWorkspacePanel({
           ) : null}
       </div>
     </Card>
+  )
+}
+
+function ActionSchemaDetail({
+  inputSchema,
+  outputSchema,
+}: {
+  inputSchema: ActionIOField[]
+  outputSchema: ActionIOField[]
+}) {
+  return (
+    <section className="action-schema-detail" aria-label="Action 입출력">
+      <h3>입출력</h3>
+      <div className="action-schema-columns">
+        <ActionSchemaList fields={inputSchema} title="Input" />
+        <ActionSchemaList fields={outputSchema} title="Output" />
+      </div>
+    </section>
+  )
+}
+
+function ActionSchemaList({
+  fields,
+  title,
+}: {
+  fields: ActionIOField[]
+  title: string
+}) {
+  return (
+    <div className="action-schema-list">
+      <strong>{title}</strong>
+      {fields.length === 0 ? (
+        <small>없음</small>
+      ) : (
+        fields.map((field) => (
+          <span className="schema-pill" key={field.id}>
+            {field.id}:{field.type}
+            {field.required ? ' *' : ''}
+          </span>
+        ))
+      )}
+    </div>
   )
 }
 

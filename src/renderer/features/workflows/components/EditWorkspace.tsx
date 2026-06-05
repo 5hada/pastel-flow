@@ -9,13 +9,22 @@ import {
   getDeviceExecutionPolicyLabel,
   getDeviceVisibilityPolicyLabel,
 } from '../../../../shared/devices'
-import type { ActionDefinition } from '../../../../shared/actions'
+import type {
+  ActionDefinition,
+  TransformActionConfig,
+} from '../../../../shared/actions'
 import type { WorkflowDefinition } from '../../../../shared/workflows'
 import type {
   ActionRun,
   WorkflowRun,
   WorkflowRunEvent,
 } from '../../../../shared/runStatus'
+import {
+  canMapActionField,
+  getActionInputSchema,
+  getActionOutputSchema,
+} from '../../../../shared/actions'
+import type { WorkflowArtifact } from '../../../../shared/artifacts'
 import { WorkflowRunEventsPanel } from './WorkflowRunEventsPanel'
 import { WorkflowRunsPanel } from './WorkflowRunsPanel'
 import { WorkflowActionList } from './WorkflowActionList'
@@ -40,11 +49,15 @@ export type EditWorkspaceProps = {
   runningWorkflowId: string | null
   actionRuns: ActionRun[]
   selectedWorkflowRunId: string | null
+  workflowArtifacts: WorkflowArtifact[]
   workflowRuns: WorkflowRun[]
   workflowRunEvents: WorkflowRunEvent[]
   workspaceFolderAssignments: Record<string, string>
   workspaceFolders: WorkspaceFolder[]
   workflows: WorkflowDefinition[]
+  onCreateTransformAction(
+    mode: TransformActionConfig['mode'],
+  ): Promise<ActionDefinition | null>
   onCreateWorkflow(name?: string): Promise<void>
   onConfirmDeleteWorkflow(workflowId: string): Promise<void>
   onStartCreateWorkflow(): void
@@ -54,6 +67,10 @@ export type EditWorkspaceProps = {
     workflowId: string,
     input: Partial<WorkflowDefinition>,
   ): Promise<void>
+  onUpdateAction(
+    actionId: string,
+    input: Partial<ActionDefinition>,
+  ): Promise<void>
 }
 
 export function EditWorkspace({
@@ -62,16 +79,19 @@ export function EditWorkspace({
   developerVisibility,
   isLoading,
   onConfirmDeleteWorkflow,
+  onCreateTransformAction,
   onCreateWorkflow,
   onSelectWorkflow,
   onStartCreateWorkflow,
   onUpdateWorkflow,
+  onUpdateAction,
   runningWorkflowId,
   actionRuns,
   selectedCollectionFolderId,
   selectedWorkflowRunId,
   selectedWorkflowId,
   onSelectWorkflowRun,
+  workflowArtifacts,
   workflowRunEvents,
   workflowRuns,
   workspaceFolderAssignments,
@@ -301,13 +321,20 @@ export function EditWorkspace({
                 if (!selectedWorkflow || isSelectedWorkflowLocked) {
                   return
                 }
+                const actionRefs = selectedWorkflow.actionRefs
+                const actionRefId = crypto.randomUUID()
                 void onUpdateWorkflow(selectedWorkflow.id, {
                   actionRefs: [
-                    ...selectedWorkflow.actionRefs,
+                    ...actionRefs,
                     {
-                      id: crypto.randomUUID(),
+                      id: actionRefId,
                       actionId,
-                      order: selectedWorkflow.actionRefs.length,
+                      order: actionRefs.length,
+                      inputMapping: createAutoInputMapping(
+                        actionId,
+                        actionRefs,
+                        actions,
+                      ),
                       enabled: true,
                     },
                   ],
@@ -345,6 +372,49 @@ export function EditWorkspace({
                     (actionRef) => actionRef.id !== actionRefId,
                   ),
                 })
+              }}
+              onUpdateInputMapping={(actionRefId, inputMapping) => {
+                if (!selectedWorkflow || isSelectedWorkflowLocked) {
+                  return
+                }
+                void onUpdateWorkflow(selectedWorkflow.id, {
+                  actionRefs: selectedWorkflow.actionRefs.map((actionRef) =>
+                    actionRef.id === actionRefId
+                      ? { ...actionRef, inputMapping }
+                      : actionRef,
+                  ),
+                })
+              }}
+              onCreateTransformAction={async (mode) => {
+                if (!selectedWorkflow || isSelectedWorkflowLocked) {
+                  return
+                }
+
+                const action = await onCreateTransformAction(mode)
+                if (!action) {
+                  return
+                }
+
+                const actionRefs = selectedWorkflow.actionRefs
+                void onUpdateWorkflow(selectedWorkflow.id, {
+                  actionRefs: [
+                    ...actionRefs,
+                    {
+                      id: crypto.randomUUID(),
+                      actionId: action.id,
+                      order: actionRefs.length,
+                      inputMapping: createAutoInputMapping(
+                        action.id,
+                        actionRefs,
+                        [...actions, action],
+                      ),
+                      enabled: true,
+                    },
+                  ],
+                })
+              }}
+              onUpdateActionConfig={(actionId, config) => {
+                void onUpdateAction(actionId, { config })
               }}
               onToggleAction={(actionRefId) => {
                 if (!selectedWorkflow || isSelectedWorkflowLocked) {
@@ -407,6 +477,7 @@ export function EditWorkspace({
 
         <WorkflowRunsPanel
           actionRuns={actionRuns}
+          artifacts={workflowArtifacts}
           runs={workflowRuns}
           selectedRunId={selectedWorkflowRunId}
           onSelectRun={onSelectWorkflowRun}
@@ -489,4 +560,35 @@ function filterByFolder<TItem extends { id: string }>(
   }
 
   return items.filter((item) => assignments[item.id] === folderId)
+}
+
+function createAutoInputMapping(
+  actionId: string,
+  previousActionRefs: WorkflowDefinition['actionRefs'],
+  actions: ActionDefinition[],
+): Record<string, string> | undefined {
+  const actionMap = new Map(actions.map((action) => [action.id, action]))
+  const action = actionMap.get(actionId)
+  if (!action) {
+    return undefined
+  }
+
+  const mapping = Object.fromEntries(
+    getActionInputSchema(action).flatMap((inputField) => {
+      const candidates = previousActionRefs.flatMap((actionRef) => {
+        const sourceAction = actionMap.get(actionRef.actionId)
+        if (!sourceAction) {
+          return []
+        }
+
+        return getActionOutputSchema(sourceAction)
+          .filter((outputField) => canMapActionField(outputField, inputField))
+          .map((outputField) => `${actionRef.id}.${outputField.id}`)
+      })
+
+      return candidates.length === 1 ? [[inputField.id, candidates[0]]] : []
+    }),
+  )
+
+  return Object.keys(mapping).length > 0 ? mapping : undefined
 }

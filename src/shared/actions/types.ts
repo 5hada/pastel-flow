@@ -7,12 +7,27 @@ export type ActionType =
   | 'discord_dry_run_action'
   | 'notion_dry_run_action'
   | 'trading_dry_run_action'
+  | 'transform_action'
   | 'tool_action'
 
 export type ActionIOField = {
   id: string
   name: string
-  type: 'string' | 'number' | 'boolean' | 'json' | 'secret_ref'
+  type:
+    | 'string'
+    | 'number'
+    | 'boolean'
+    | 'json'
+    | 'secret_ref'
+    | 'string[]'
+    | 'number[]'
+    | 'boolean[]'
+    | 'file'
+    | 'file[]'
+    | 'image'
+    | 'image[]'
+    | 'url'
+    | 'url[]'
   required?: boolean
   description?: string
 }
@@ -57,4 +72,17 @@ export type TradingBotConfig = {
   dryRun: boolean
   exchange?: string
   symbol?: string
+}
+
+export type TransformMode =
+  | 'json_to_string'
+  | 'string_to_json'
+  | 'pick_field'
+  | 'join'
+  | 'split'
+
+export type TransformActionConfig = {
+  mode: TransformMode
+  path?: string
+  separator?: string
 }

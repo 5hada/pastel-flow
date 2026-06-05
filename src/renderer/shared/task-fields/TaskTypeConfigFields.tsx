@@ -11,6 +11,7 @@ export function TaskTypeConfigFields({
   isDisabled = false,
   onChange,
   profilePresets,
+  urlGroups,
 }: TaskFieldsProps) {
   switch (form.taskType) {
     case 'browser_tab_group':
@@ -19,6 +20,7 @@ export function TaskTypeConfigFields({
           form={form}
           isDisabled={isDisabled}
           profilePresets={profilePresets}
+          urlGroups={urlGroups}
           onChange={onChange}
         />
       )
@@ -30,6 +32,8 @@ export function TaskTypeConfigFields({
       return <NotionSyncConfigFields form={form} isDisabled={isDisabled} onChange={onChange} />
     case 'trading_bot':
       return <TradingBotConfigFields form={form} isDisabled={isDisabled} onChange={onChange} />
+    case 'transform':
+      return <TransformConfigFields form={form} isDisabled={isDisabled} onChange={onChange} />
   }
 }
 
@@ -38,6 +42,7 @@ function BrowserConfigFields({
   isDisabled = false,
   onChange,
   profilePresets = [],
+  urlGroups = [],
 }: TaskFieldsProps) {
   const selectedProfilePresetId =
     form.profilePresetId ||
@@ -152,9 +157,42 @@ function BrowserConfigFields({
         )
       ) : null}
       <label>
+        URL Group
+        <Select
+          isDisabled={isDisabled}
+          selectedKey={form.urlGroupId}
+          onSelectionChange={(key) =>
+            onChange({ ...form, urlGroupId: String(key) })
+          }
+        >
+          <Select.Trigger>
+            <Select.Value />
+            <Select.Indicator />
+          </Select.Trigger>
+          <Select.Popover>
+            <ListBox>
+              <ListBox.Item id="" textValue="직접 입력">
+                직접 입력
+                <ListBox.ItemIndicator />
+              </ListBox.Item>
+              {urlGroups.map((urlGroup) => (
+                <ListBox.Item
+                  id={urlGroup.id}
+                  key={urlGroup.id}
+                  textValue={urlGroup.name}
+                >
+                  {urlGroup.name}
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+              ))}
+            </ListBox>
+          </Select.Popover>
+        </Select>
+      </label>
+      <label>
         초기 URL
         <TextArea
-          disabled={isDisabled}
+          disabled={isDisabled || Boolean(form.urlGroupId)}
           value={form.initialUrls}
           onChange={(event) => onChange({ ...form, initialUrls: event.target.value })}
           placeholder="한 줄에 하나씩 입력"
@@ -266,6 +304,73 @@ function TradingBotConfigFields({ form, isDisabled = false, onChange }: TaskFiel
             }
           />
         </label>
+      </div>
+    </fieldset>
+  )
+}
+
+function TransformConfigFields({ form, isDisabled = false, onChange }: TaskFieldsProps) {
+  return (
+    <fieldset className="settings-fieldset">
+      <legend>Transform</legend>
+      <div className="form-grid">
+        <Select
+          isDisabled={isDisabled}
+          selectedKey={form.transformMode}
+          onSelectionChange={(key) =>
+            onChange({
+              ...form,
+              transformMode: String(key) as typeof form.transformMode,
+            })
+          }
+        >
+          <Label>변환 모드</Label>
+          <Select.Trigger>
+            <Select.Value />
+            <Select.Indicator />
+          </Select.Trigger>
+          <Select.Popover>
+            <ListBox>
+              {[
+                ['json_to_string', 'JSON to string'],
+                ['string_to_json', 'String to JSON'],
+                ['pick_field', 'Pick field'],
+                ['join', 'Join'],
+                ['split', 'Split'],
+              ].map(([value, label]) => (
+                <ListBox.Item id={value} key={value} textValue={label}>
+                  {label}
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+              ))}
+            </ListBox>
+          </Select.Popover>
+        </Select>
+        {form.transformMode === 'pick_field' ? (
+          <label>
+            Dot path
+            <Input
+              disabled={isDisabled}
+              placeholder="items.0.title"
+              value={form.transformPath}
+              onChange={(event) =>
+                onChange({ ...form, transformPath: event.target.value })
+              }
+            />
+          </label>
+        ) : null}
+        {form.transformMode === 'join' || form.transformMode === 'split' ? (
+          <label>
+            Separator
+            <Input
+              disabled={isDisabled}
+              value={form.transformSeparator}
+              onChange={(event) =>
+                onChange({ ...form, transformSeparator: event.target.value })
+              }
+            />
+          </label>
+        ) : null}
       </div>
     </fieldset>
   )

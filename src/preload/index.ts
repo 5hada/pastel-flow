@@ -134,6 +134,20 @@ const pastelFlowApi = {
       return subscribe(ipcEventChannels.actions.deleted, listener)
     },
   },
+  urlGroups: {
+    list() {
+      return invoke(ipcRequestChannels.urlGroups.list)
+    },
+    create(input: unknown) {
+      return invoke(ipcRequestChannels.urlGroups.create, input)
+    },
+    update(id: string, input: unknown) {
+      return invoke(ipcRequestChannels.urlGroups.update, id, input)
+    },
+    delete(id: string) {
+      return invoke(ipcRequestChannels.urlGroups.delete, id)
+    },
+  },
   workflows: {
     list() {
       return invoke(ipcRequestChannels.workflows.list)

@@ -58,6 +58,9 @@ export function WorkspaceSidebar({
 }: WorkspaceSidebarProps) {
   const [isFolderEditMode, setIsFolderEditMode] = useState(false)
   const runCategories = createRunCategories(workflows)
+  const visibleActionCount = actions.filter(
+    (action) => action.type !== 'transform_action',
+  ).length
 
   return (
     <aside className="workspace-sidebar" aria-label="보조 패널">
@@ -105,7 +108,7 @@ export function WorkspaceSidebar({
 
         {currentMode === 'actions' ? (
           <FolderSidebarSection
-            count={actions.length}
+            count={visibleActionCount}
             editMode={isFolderEditMode}
             folders={workspaceFolders}
             scope="actions"

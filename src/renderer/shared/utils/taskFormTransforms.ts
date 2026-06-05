@@ -18,6 +18,7 @@ import type {
   DiscordBotConfig,
   NotionSyncConfig,
   TradingBotConfig,
+  TransformActionConfig,
 } from '../../../shared/actions'
 import type { SecretRef } from '../../../shared/secrets'
 import type { TaskSchedule, TaskTemplate, TaskType } from '../state/taskTypes'
@@ -53,7 +54,8 @@ export function createTaskConfigFromForm(
   | CrawlerConfig
   | DiscordBotConfig
   | NotionSyncConfig
-  | TradingBotConfig {
+  | TradingBotConfig
+  | TransformActionConfig {
   switch (form.taskType) {
     case 'browser_tab_group': {
       const currentConfig =
@@ -68,6 +70,7 @@ export function createTaskConfigFromForm(
         runMode: form.runMode,
         profileSource: form.profileSource,
         existingProfilePath: form.existingProfilePath.trim() || undefined,
+        urlGroupId: form.urlGroupId.trim() || undefined,
         initialUrls: parseInitialUrls(form.initialUrls),
         dynamicTemplateUpdates: form.dynamicTemplateUpdates,
       }
@@ -92,6 +95,12 @@ export function createTaskConfigFromForm(
         dryRun: true,
         exchange: form.tradingExchange.trim() || undefined,
         symbol: form.tradingSymbol.trim() || undefined,
+      }
+    case 'transform':
+      return {
+        mode: form.transformMode,
+        path: form.transformPath.trim() || undefined,
+        separator: form.transformSeparator,
       }
   }
 }
@@ -187,6 +196,7 @@ export function createTaskEditForm(task: TaskTemplate): BrowserTaskFormState {
   const discordConfig = task.config as Partial<DiscordBotConfig>
   const notionConfig = task.config as Partial<NotionSyncConfig>
   const tradingConfig = task.config as Partial<TradingBotConfig>
+  const transformConfig = task.config as Partial<TransformActionConfig>
 
   return {
     taskType: task.type,
@@ -197,6 +207,7 @@ export function createTaskEditForm(task: TaskTemplate): BrowserTaskFormState {
     profileSource: browserConfig.profileSource,
     profilePresetId: '',
     existingProfilePath: browserConfig.existingProfilePath ?? '',
+    urlGroupId: browserConfig.urlGroupId ?? '',
     initialUrls: browserConfig.initialUrls.join('\n'),
     dynamicTemplateUpdates: browserConfig.dynamicTemplateUpdates,
     crawlerUrls: crawlerConfig.urls.join('\n'),
@@ -205,6 +216,9 @@ export function createTaskEditForm(task: TaskTemplate): BrowserTaskFormState {
     notionDatabaseId: notionConfig.databaseId ?? '',
     tradingExchange: tradingConfig.exchange ?? '',
     tradingSymbol: tradingConfig.symbol ?? '',
+    transformMode: transformConfig.mode ?? 'json_to_string',
+    transformPath: transformConfig.path ?? '',
+    transformSeparator: transformConfig.separator ?? '\n',
     scheduleEnabled: task.schedule?.enabled ?? false,
     scheduleMode: task.schedule?.mode ?? 'interval',
     scheduleIntervalMinutes: task.schedule?.intervalMinutes ?? 60,
@@ -257,6 +271,8 @@ export function getTaskTypeForActionType(
       return 'notion_sync'
     case 'trading_dry_run_action':
       return 'trading_bot'
+    case 'transform_action':
+      return 'transform'
     case 'tool_action':
       return null
   }
@@ -274,6 +290,8 @@ export function getActionTypeForTaskType(taskType: TaskType): ActionType {
       return 'notion_dry_run_action'
     case 'trading_bot':
       return 'trading_dry_run_action'
+    case 'transform':
+      return 'transform_action'
   }
 }
 

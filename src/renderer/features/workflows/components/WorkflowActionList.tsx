@@ -1,7 +1,15 @@
 import { Button, Card, Input, Label, ListBox, Select, Switch } from '@heroui/react'
 import { ArrowLeftToLine, ArrowRightToLine, XmarkShape } from '@gravity-ui/icons';
 import { useEffect, useState } from 'react'
-import type { ActionDefinition } from '../../../../shared/actions'
+import {
+  getActionInputSchema,
+  getActionOutputSchema,
+  getMissingRequiredActionInputs,
+  canMapActionField,
+  type ActionDefinition,
+  type ActionIOField,
+  type TransformActionConfig,
+} from '../../../../shared/actions'
 import type { WorkflowDefinition } from '../../../../shared/workflows'
 import { getActionTypeLabel } from '../../../shared/utils/viewLabels'
 
@@ -10,9 +18,15 @@ export type WorkflowActionListProps = {
   workflow: WorkflowDefinition | null
   isLocked?: boolean
   onAddAction(actionId: string): void
+  onCreateTransformAction(mode: TransformActionConfig['mode']): Promise<void>
   onMoveAction(actionRefId: string, position: 'top' | 'bottom'): void
   onRemoveAction(actionRefId: string): void
   onReorderActions(actionRefIds: string[]): void
+  onUpdateActionConfig(actionId: string, config: unknown): void
+  onUpdateInputMapping(
+    actionRefId: string,
+    inputMapping: Record<string, string> | undefined,
+  ): void
   onToggleAction(actionRefId: string): void
 }
 
@@ -20,9 +34,12 @@ export function WorkflowActionList({
   actions,
   isLocked = false,
   onAddAction,
+  onCreateTransformAction,
   onMoveAction,
   onReorderActions,
   onRemoveAction,
+  onUpdateActionConfig,
+  onUpdateInputMapping,
   onToggleAction,
   workflow,
 }: WorkflowActionListProps) {
@@ -92,6 +109,11 @@ export function WorkflowActionList({
       ) : (
         sortedActionRefs.map((actionRef, index) => {
           const action = actionMap.get(actionRef.actionId)
+          const inputSchema = action ? getActionInputSchema(action) : []
+          const outputSchema = action ? getActionOutputSchema(action) : []
+          const missingInputs = action
+            ? getMissingRequiredActionInputs(action, actionRef.inputMapping)
+            : []
 
           return (
             <div
@@ -133,6 +155,13 @@ export function WorkflowActionList({
               <div>
                 <strong>{action?.name ?? actionRef.actionId}</strong>
                 <small>{action ? getActionTypeLabel(action.type) : '연결 끊김'}</small>
+                {action ? (
+                  <ActionSchemaSummary
+                    inputSchema={inputSchema}
+                    missingInputs={missingInputs}
+                    outputSchema={outputSchema}
+                  />
+                ) : null}
               </div>
               <Switch
                 aria-label="Action 활성화"
@@ -171,6 +200,23 @@ export function WorkflowActionList({
               >
                 <XmarkShape/>
               </Button>
+              {action && inputSchema.length > 0 ? (
+                <ActionInputMappingEditor
+                  actionRef={actionRef}
+                  actionRefsBefore={sortedActionRefs.slice(0, index)}
+                  actionMap={actionMap}
+                  inputSchema={inputSchema}
+                  isLocked={isLocked}
+                  onUpdateInputMapping={onUpdateInputMapping}
+                />
+              ) : null}
+              {action?.type === 'transform_action' ? (
+                <TransformActionConfigEditor
+                  action={action}
+                  isLocked={isLocked}
+                  onUpdateActionConfig={onUpdateActionConfig}
+                />
+              ) : null}
             </div>
           )
         })
@@ -238,6 +284,25 @@ export function WorkflowActionList({
               </Select>
             </div>
             <div className="action-picker-list">
+              <div className="action-picker-section">
+                <strong>Built-in transforms</strong>
+                <div className="action-picker-transform-grid">
+                  {transformOptions.map((option) => (
+                    <Button
+                      isDisabled={isLocked}
+                      key={option.mode}
+                      variant="secondary"
+                      type="button"
+                      onClick={() => {
+                        void onCreateTransformAction(option.mode)
+                        setIsPickerOpen(false)
+                      }}
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
               {filteredActions.map((action) => (
                 <div className="action-picker-row" key={action.id}>
                   <div>
@@ -263,6 +328,217 @@ export function WorkflowActionList({
       ) : null}
     </div>
   )
+}
+
+const transformOptions: Array<{
+  label: string
+  mode: TransformActionConfig['mode']
+}> = [
+  { label: 'JSON to string', mode: 'json_to_string' },
+  { label: 'String to JSON', mode: 'string_to_json' },
+  { label: 'Pick field', mode: 'pick_field' },
+  { label: 'Join', mode: 'join' },
+  { label: 'Split', mode: 'split' },
+]
+
+function TransformActionConfigEditor({
+  action,
+  isLocked,
+  onUpdateActionConfig,
+}: {
+  action: ActionDefinition
+  isLocked: boolean
+  onUpdateActionConfig(actionId: string, config: unknown): void
+}) {
+  const config = normalizeTransformConfig(action.config)
+
+  function updateConfig(input: Partial<TransformActionConfig>) {
+    onUpdateActionConfig(action.id, {
+      ...config,
+      ...input,
+    })
+  }
+
+  return (
+    <div className="transform-config-editor">
+      <label>
+        <span>Mode</span>
+        <select
+          disabled={isLocked}
+          value={config.mode}
+          onChange={(event) =>
+            updateConfig({
+              mode: event.target.value as TransformActionConfig['mode'],
+            })
+          }
+        >
+          {transformOptions.map((option) => (
+            <option key={option.mode} value={option.mode}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {config.mode === 'pick_field' ? (
+        <label>
+          <span>Dot path</span>
+          <input
+            disabled={isLocked}
+            placeholder="items.0.title"
+            value={config.path ?? ''}
+            onChange={(event) => updateConfig({ path: event.target.value })}
+          />
+        </label>
+      ) : null}
+      {config.mode === 'join' || config.mode === 'split' ? (
+        <label>
+          <span>Separator</span>
+          <input
+            disabled={isLocked}
+            value={config.separator ?? '\n'}
+            onChange={(event) => updateConfig({ separator: event.target.value })}
+          />
+        </label>
+      ) : null}
+    </div>
+  )
+}
+
+function normalizeTransformConfig(config: unknown): TransformActionConfig {
+  const candidate = isRecord(config) ? config : {}
+  const mode = isTransformMode(candidate.mode)
+    ? candidate.mode
+    : 'json_to_string'
+
+  return {
+    mode,
+    path: typeof candidate.path === 'string' ? candidate.path : undefined,
+    separator:
+      typeof candidate.separator === 'string' ? candidate.separator : undefined,
+  }
+}
+
+function ActionInputMappingEditor({
+  actionMap,
+  actionRef,
+  actionRefsBefore,
+  inputSchema,
+  isLocked,
+  onUpdateInputMapping,
+}: {
+  actionMap: Map<string, ActionDefinition>
+  actionRef: WorkflowDefinition['actionRefs'][number]
+  actionRefsBefore: WorkflowDefinition['actionRefs']
+  inputSchema: ActionIOField[]
+  isLocked: boolean
+  onUpdateInputMapping(
+    actionRefId: string,
+    inputMapping: Record<string, string> | undefined,
+  ): void
+}) {
+  const outputOptions = actionRefsBefore.flatMap((sourceActionRef) => {
+    const sourceAction = actionMap.get(sourceActionRef.actionId)
+    if (!sourceAction) {
+      return []
+    }
+
+    return getActionOutputSchema(sourceAction).map((outputField) => ({
+      actionName: sourceAction.name,
+      actionRefId: sourceActionRef.id,
+      outputField,
+      value: `${sourceActionRef.id}.${outputField.id}`,
+    }))
+  })
+
+  function updateMapping(inputId: string, value: string) {
+    const nextMapping = {
+      ...(actionRef.inputMapping ?? {}),
+    }
+
+    if (value) {
+      nextMapping[inputId] = value
+    } else {
+      delete nextMapping[inputId]
+    }
+
+    onUpdateInputMapping(
+      actionRef.id,
+      Object.keys(nextMapping).length > 0 ? nextMapping : undefined,
+    )
+  }
+
+  return (
+    <div className="action-input-mapping-editor">
+      {inputSchema.map((inputField) => (
+        <label key={inputField.id}>
+          <span>
+            {inputField.name}
+            {inputField.required ? ' *' : ''} · {inputField.type}
+          </span>
+          <select
+            disabled={isLocked}
+            value={actionRef.inputMapping?.[inputField.id] ?? ''}
+            onChange={(event) => updateMapping(inputField.id, event.target.value)}
+          >
+            <option value="">연결 없음</option>
+            {outputOptions.map((option) => (
+              <option
+                disabled={!canMapActionField(option.outputField, inputField)}
+                key={`${inputField.id}-${option.value}`}
+                value={option.value}
+              >
+                {option.actionName}.{option.outputField.id} · {option.outputField.type}
+              </option>
+            ))}
+          </select>
+        </label>
+      ))}
+    </div>
+  )
+}
+
+function isTransformMode(value: unknown): value is TransformActionConfig['mode'] {
+  return (
+    value === 'json_to_string' ||
+    value === 'string_to_json' ||
+    value === 'pick_field' ||
+    value === 'join' ||
+    value === 'split'
+  )
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function ActionSchemaSummary({
+  inputSchema,
+  missingInputs,
+  outputSchema,
+}: {
+  inputSchema: ActionIOField[]
+  missingInputs: ActionIOField[]
+  outputSchema: ActionIOField[]
+}) {
+  return (
+    <div className="action-schema-summary">
+      <span className="schema-pill">IN {formatSchemaTypes(inputSchema)}</span>
+      <span className="schema-pill">OUT {formatSchemaTypes(outputSchema)}</span>
+      {missingInputs.length > 0 ? (
+        <span className="schema-pill schema-pill-warning">
+          누락 {missingInputs.map((field) => field.name).join(', ')}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+function formatSchemaTypes(fields: ActionIOField[]): string {
+  if (fields.length === 0) {
+    return '-'
+  }
+
+  return fields.map((field) => `${field.id}:${field.type}`).join(', ')
 }
 
 function moveActionRefByDrop(

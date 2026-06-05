@@ -62,6 +62,7 @@ export type BrowserTabGroupStateSnapshot = {
 export type BrowserTabGroupConfig = {
   browserGroupId: string
   profileId: string
+  urlGroupId?: string
   initialUrls: string[]
   browserKind: BrowserKind
   restorePolicy: RestorePolicy

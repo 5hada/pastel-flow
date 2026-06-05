@@ -4,6 +4,7 @@ import { ActionsWorkspace } from '../../../features/actions/ActionsWorkspace'
 import { RunWorkspace } from '../../../features/run/RunWorkspace'
 import { SettingsWorkspace } from '../../../features/settings/SettingsWorkspace'
 import { ToolsWorkspace } from '../../../features/tools/ToolsWorkspace'
+import { UrlGroupsWorkspace } from '../../../features/urlGroups/UrlGroupsWorkspace'
 import { WorkflowsWorkspace } from '../../../features/workflows/WorkflowsWorkspace'
 import type { WorkspaceContext, WorkspaceTemplate } from './types'
 import type { WorkflowDefinition } from '../../../../shared/workflows'
@@ -51,11 +52,14 @@ export const workspaceTemplates: WorkspaceTemplate[] = [
     type: 'actions',
     render(context: WorkspaceContext) {
       const props = {
-        actions: context.actions,
+        actions: context.actions.filter(
+          (action) => action.type !== 'transform_action',
+        ),
         createForm: context.createForm,
         currentDevice: context.currentDevice,
         developerVisibility: context.appSettings.developerVisibility,
         profilePresets: context.appSettings.browserProfilePresets,
+        urlGroups: context.urlGroups,
         selectedCollectionFolderId: context.selectedCollectionFolderId,
         selectedActionId: context.selectedActionId,
         secrets: context.secrets,
@@ -87,19 +91,38 @@ export const workspaceTemplates: WorkspaceTemplate[] = [
         selectedWorkflowRunId: context.selectedWorkflowRunId,
         selectedWorkflowId: context.selectedWorkflowId,
         onConfirmDeleteWorkflow: context.handleDeleteWorkflow,
+        onCreateTransformAction: context.handleCreateTransformAction,
         onCreateWorkflow: context.handleCreateWorkflow,
         onSelectWorkflow: context.selectWorkflowById,
         onSelectWorkflowRun: context.selectWorkflowRun,
         onStartCreateWorkflow: () => context.setSelectedWorkflowId(null),
+        onUpdateAction: context.handleUpdateAction,
         onUpdateWorkflow: context.handleUpdateWorkflow,
         workflowRunEvents: context.workflowRunEvents,
         workflowRuns: context.workflowRuns,
+        workflowArtifacts: context.workflowArtifacts,
         workspaceFolderAssignments: context.appSettings.workspaceFolderAssignments,
         workspaceFolders: context.appSettings.workspaceFolders,
         workflows: context.workflows,
       }
 
       return <WorkflowsWorkspace {...props} />
+    },
+  },
+  {
+    type: 'urlGroups',
+    render(context: WorkspaceContext) {
+      const props = {
+        isLoading: context.isLoading,
+        selectedUrlGroupId: context.selectedUrlGroupId,
+        urlGroups: context.urlGroups,
+        onCreateUrlGroup: context.handleCreateUrlGroup,
+        onDeleteUrlGroup: context.handleDeleteUrlGroup,
+        onSelectUrlGroup: context.setSelectedUrlGroupId,
+        onUpdateUrlGroup: context.handleUpdateUrlGroup,
+      }
+
+      return <UrlGroupsWorkspace {...props} />
     },
   },
   {

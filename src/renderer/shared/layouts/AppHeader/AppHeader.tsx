@@ -39,6 +39,7 @@ export function AppHeader({
         onRun={modeTogglesProps.onRun}
         onSettings={modeTogglesProps.onSettings}
         onTools={modeTogglesProps.onTools}
+        onUrlGroups={modeTogglesProps.onUrlGroups}
         onWorkflows={modeTogglesProps.onWorkflows}
       />
 

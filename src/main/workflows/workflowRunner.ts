@@ -1,11 +1,18 @@
 import type { WorkflowDefinition, WorkflowState } from '../../shared/workflows'
 import type { ActionDefinition, ActionRuntimeState } from '../../shared/actions'
+import {
+  parseMappingSource,
+  validateWorkflowInputMappings,
+} from '../../shared/actions'
 import type { AppSettingsStore } from '../settings/store/appSettingsStore'
 import type { ActionAdapterRegistry } from '../actions/adapters/actionAdapterRegistry'
 import type { WorkflowRunEventStore } from './store/workflowRunEventStore'
 import type { WorkflowStore } from './store/workflowStore'
 import type { ToolModuleRunner } from '../tools/runner/toolModuleRunner'
 import type { WorkflowRunStore } from './store/workflowRunStore'
+import type { WorkflowArtifactWriter } from './artifacts/workflowArtifactWriter'
+import type { WorkflowArtifactRef } from '../../shared/artifacts'
+import type { UrlGroupStore } from '../urlGroups/store/urlGroupStore'
 
 const workflowRunLocks = new Set<string>()
 
@@ -22,6 +29,8 @@ export type WorkflowRunnerOptions = {
   toolModuleRunner: ToolModuleRunner
   workflowRunEventStore: WorkflowRunEventStore
   workflowRunStore: WorkflowRunStore
+  workflowArtifactWriter: WorkflowArtifactWriter
+  urlGroupStore: UrlGroupStore
   dataDir: string
   deviceId: string
 }
@@ -33,7 +42,9 @@ export function createWorkflowRunner({
   deviceId,
   workflowRunEventStore,
   workflowRunStore,
+  workflowArtifactWriter,
   workflowStore,
+  urlGroupStore,
   toolModuleRunner,
 }: WorkflowRunnerOptions): WorkflowRunner {
   async function getWorkflow(id: string): Promise<WorkflowDefinition> {
@@ -74,14 +85,21 @@ export function createWorkflowRunner({
           return workflow
         }
         getRunnableActionRefs(workflow)
-        return await runActionWorkflow(workflow, await workflowStore.listActions(), {
+        const actions = await workflowStore.listActions()
+        const mappingValidation = validateWorkflowInputMappings(workflow, actions)
+        if (!mappingValidation.ok) {
+          throw new Error(mappingValidation.errors.join('\n'))
+        }
+        return await runActionWorkflow(workflow, actions, {
           adapterRegistry,
           dataDir,
           deviceId,
           appSettingsStore,
           workflowRunEventStore,
           workflowRunStore,
+          workflowArtifactWriter,
           workflowStore,
+          urlGroupStore,
           toolModuleRunner,
         })
       } finally {
@@ -164,7 +182,9 @@ async function runActionWorkflow(
     deviceId: string
     workflowRunEventStore: WorkflowRunEventStore
     workflowRunStore: WorkflowRunStore
+    workflowArtifactWriter: WorkflowArtifactWriter
     workflowStore: WorkflowStore
+    urlGroupStore: UrlGroupStore
     toolModuleRunner: ToolModuleRunner
   },
 ): Promise<WorkflowDefinition> {
@@ -235,8 +255,20 @@ async function runActionWorkflow(
           ),
         })
         const appSettingsSnapshot = await context.appSettingsStore.getSnapshot()
+        const actionWithMappedInput =
+          action.type === 'transform_action'
+            ? {
+                ...action,
+                config: {
+                  ...(isRecord(action.config) ? action.config : {}),
+                  input: resolveInputMapping(actionRef.inputMapping, outputScope),
+                },
+              }
+            : action.type === 'browser_action'
+              ? await resolveBrowserActionUrlGroup(action, context.urlGroupStore)
+              : action
         const result = await adapter.run({
-          action: action,
+          action: actionWithMappedInput,
           deviceId: context.deviceId,
           dataDir: context.dataDir,
           appSettings: appSettingsSnapshot.settings,
@@ -293,7 +325,7 @@ async function runActionWorkflow(
         )
         outputScope = {
           ...outputScope,
-          [actionRef.id]: resultState,
+          [actionRef.id]: getActionOutputScopeValue(action, resultState),
         }
         await context.workflowRunEventStore.appendEvent({
           runId: workflowRun.id,
@@ -348,10 +380,17 @@ async function runActionWorkflow(
         ...toolInput,
       })
       const completedAt = new Date().toISOString()
+      const outputArtifacts =
+        await context.workflowArtifactWriter.saveOutputArtifacts({
+          runId: workflowRun.id,
+          workflowId: workflow.id,
+          actionRunId: toolActionRun.id,
+          output: result.output,
+        })
       await context.workflowRunStore.updateActionRun(toolActionRun.id, {
         status: 'succeeded',
         endedAt: completedAt,
-        outputSummary: summarizeValue(result.output),
+        outputSummary: summarizeValueWithArtifacts(result.output, outputArtifacts),
       })
       currentActionRunId = undefined
       await context.workflowStore.updateWorkflow(workflow.id, {
@@ -466,6 +505,44 @@ function mergeWorkflowState(
   }
 }
 
+function getActionOutputScopeValue(
+  action: ActionDefinition,
+  state: WorkflowState,
+): unknown {
+  const stateRecord = state as unknown
+  if (
+    action.type === 'transform_action' &&
+    isRecord(stateRecord) &&
+    isRecord(stateRecord.output)
+  ) {
+    return stateRecord.output
+  }
+
+  return state
+}
+
+async function resolveBrowserActionUrlGroup(
+  action: ActionDefinition,
+  urlGroupStore: UrlGroupStore,
+): Promise<ActionDefinition> {
+  if (!isRecord(action.config) || typeof action.config.urlGroupId !== 'string') {
+    return action
+  }
+
+  const urlGroup = await urlGroupStore.getUrlGroup(action.config.urlGroupId)
+  const initialUrls = urlGroup.items
+    .filter((item) => item.enabled)
+    .map((item) => item.url)
+
+  return {
+    ...action,
+    config: {
+      ...action.config,
+      initialUrls,
+    },
+  }
+}
+
 function resolveInputMapping(
   inputMapping: Record<string, string> | undefined,
   outputScope: Record<string, unknown>,
@@ -475,10 +552,17 @@ function resolveInputMapping(
   }
 
   return Object.fromEntries(
-    Object.entries(inputMapping).map(([inputKey, outputPath]) => [
-      inputKey,
-      outputScope[outputPath],
-    ]),
+    Object.entries(inputMapping).map(([inputKey, outputPath]) => {
+      const source = parseMappingSource(outputPath)
+      const sourceValue = outputScope[source.actionRefId]
+
+      return [
+        inputKey,
+        source.outputKey && isRecord(sourceValue)
+          ? sourceValue[source.outputKey]
+          : sourceValue,
+      ]
+    }),
   )
 }
 
@@ -546,6 +630,22 @@ function summarizeValue(value: unknown): unknown {
   }
 }
 
+function summarizeValueWithArtifacts(
+  value: unknown,
+  artifacts: WorkflowArtifactRef[],
+): unknown {
+  const summary = summarizeValue(value)
+
+  if (!summary || typeof summary !== 'object' || Array.isArray(summary)) {
+    return { summary, artifacts }
+  }
+
+  return {
+    ...summary,
+    artifacts,
+  }
+}
+
 function sanitizeSnapshotValue(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(sanitizeSnapshotValue)
@@ -565,6 +665,10 @@ function sanitizeSnapshotValue(value: unknown): unknown {
 
 function isSensitiveSnapshotKey(key: string): boolean {
   return /secret|password|token|api[_-]?key|credential/i.test(key)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
 function getErrorMessage(error: unknown): string {

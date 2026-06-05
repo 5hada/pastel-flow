@@ -1,9 +1,11 @@
 import { Button } from '@heroui/react'
 import type { ActionRun, WorkflowRun } from '../../../../shared/runStatus'
+import type { WorkflowArtifact } from '../../../../shared/artifacts'
 import { formatDate } from '../../../shared/utils/viewLabels'
 
 export type WorkflowRunsPanelProps = {
   actionRuns: ActionRun[]
+  artifacts: WorkflowArtifact[]
   runs: WorkflowRun[]
   selectedRunId: string | null
   onSelectRun(runId: string): void
@@ -11,6 +13,7 @@ export type WorkflowRunsPanelProps = {
 
 export function WorkflowRunsPanel({
   actionRuns,
+  artifacts,
   runs,
   selectedRunId,
   onSelectRun,
@@ -82,11 +85,44 @@ export function WorkflowRunsPanel({
                 </div>
               ))
             )}
+
+            {artifacts.length > 0 ? (
+              <div className="artifact-list" aria-label="Artifact 목록">
+                <strong>Artifacts</strong>
+                {artifacts.map((artifact) => (
+                  <div className="artifact-row" key={artifact.id}>
+                    <span className="status-pill">{artifact.type}</span>
+                    <div>
+                      <strong>{artifact.summary ?? artifact.path}</strong>
+                      <small>
+                        {formatArtifactSize(artifact.size)} · {formatDate(artifact.createdAt)}
+                      </small>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
       )}
     </section>
   )
+}
+
+function formatArtifactSize(size?: number): string {
+  if (size === undefined) {
+    return '크기 미기록'
+  }
+
+  if (size < 1024) {
+    return `${size} B`
+  }
+
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`
+  }
+
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
 function getWorkflowRunStatusLabel(status: WorkflowRun['status']): string {

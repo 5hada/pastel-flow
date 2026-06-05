@@ -21,6 +21,7 @@ export type TaskType =
   | 'crawler'
   | 'notion_sync'
   | 'trading_bot'
+  | 'transform'
 
 export type TaskScheduleMode = WorkflowScheduleMode
 export type TaskSchedule = WorkflowSchedule

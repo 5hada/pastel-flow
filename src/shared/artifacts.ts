@@ -17,6 +17,13 @@ export type WorkflowArtifact = {
   createdAt: string
 }
 
+export type WorkflowArtifactRef = {
+  artifactId: string
+  type: WorkflowArtifactType
+  summary?: string
+  size?: number
+}
+
 export type CreateWorkflowArtifactInput = {
   runId: string
   workflowId: string

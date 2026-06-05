@@ -418,7 +418,16 @@ function isActionIoFieldType(value: unknown): value is ActionIOField['type'] {
     value === 'number' ||
     value === 'boolean' ||
     value === 'json' ||
-    value === 'secret_ref'
+    value === 'secret_ref' ||
+    value === 'string[]' ||
+    value === 'number[]' ||
+    value === 'boolean[]' ||
+    value === 'file' ||
+    value === 'file[]' ||
+    value === 'image' ||
+    value === 'image[]' ||
+    value === 'url' ||
+    value === 'url[]'
   )
 }
 

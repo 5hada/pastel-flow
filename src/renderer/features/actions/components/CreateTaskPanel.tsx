@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import type { CurrentDevice } from '../../../../shared/devices'
 import type { BrowserProfilePreset } from '../../../../shared/settings'
 import type { LocalSecretMetadata } from '../../../../shared/secrets'
+import type { UrlGroup } from '../../../../shared/urlGroups'
 import { taskTypeOptions, type BrowserTaskFormState } from '../../../shared/state/taskFormState'
 import { getTaskTypeLabel } from '../../../shared/utils/viewLabels'
 import { TaskTypeConfigFields, ScheduleFields, PolicyFields } from '../../../shared/task-fields'
@@ -12,6 +13,7 @@ export type CreateTaskPanelProps = {
   currentDevice: CurrentDevice
   isEmbedded?: boolean
   profilePresets?: BrowserProfilePreset[]
+  urlGroups?: UrlGroup[]
   secrets: LocalSecretMetadata[]
   onCancel(): void
   onChange(value: BrowserTaskFormState): void
@@ -27,6 +29,7 @@ export function CreateTaskPanel({
   onSubmit,
   profilePresets,
   secrets,
+  urlGroups,
 }: CreateTaskPanelProps) {
   return (
     <section
@@ -99,6 +102,7 @@ export function CreateTaskPanel({
         <TaskTypeConfigFields
           form={createForm}
           profilePresets={profilePresets}
+          urlGroups={urlGroups}
           onChange={onChange}
         />
         <Checkbox

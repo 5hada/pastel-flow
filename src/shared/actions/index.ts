@@ -7,4 +7,15 @@ export type {
   DiscordBotConfig,
   NotionSyncConfig,
   TradingBotConfig,
+  TransformActionConfig,
+  TransformMode,
 } from './types'
+export {
+  canMapActionField,
+  getActionInputSchema,
+  getMissingRequiredActionInputs,
+  getActionOutputSchema,
+  parseMappingSource,
+  validateWorkflowInputMappings,
+} from './schema'
+export type { WorkflowMappingValidationResult } from './schema'

@@ -5,11 +5,14 @@ import { useAppSettingsData } from '../../features/settings/hooks/useAppSettings
 import { useSecretsData } from '../../features/secrets/hooks/useSecretsData'
 import { useSyncData } from '../../features/sync/hooks/useSyncData'
 import { useToolModulesData } from '../../features/tools/hooks/useToolModulesData'
+import { useUrlGroupsData } from '../../features/urlGroups/hooks/useUrlGroupsData'
+import type { WorkflowsApi } from '../../features/workflows/workflowsApi'
 import type {
   ActionRun,
   WorkflowRun,
   WorkflowRunEvent,
 } from '../../../shared/runStatus'
+import type { TransformActionConfig } from '../../../shared/actions'
 import {
   createBrowserTaskForm,
   defaultCreateForm,
@@ -22,6 +25,7 @@ import type {
   WorkspaceFolder,
   WorkspaceFolderScope,
 } from '../../../shared/settings'
+import type { WorkflowArtifact } from '../../../shared/artifacts'
 import {
   createDevicePolicyFromForm,
   createTaskConfigFromForm,
@@ -52,6 +56,7 @@ export function usePastelFlowApp() {
   const [workflowRuns, setWorkflowRuns] = useState<WorkflowRun[]>([])
   const [selectedWorkflowRunId, setSelectedWorkflowRunId] = useState<string | null>(null)
   const [actionRuns, setActionRuns] = useState<ActionRun[]>([])
+  const [workflowArtifacts, setWorkflowArtifacts] = useState<WorkflowArtifact[]>([])
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const actionWorkflow = useActionWorkflowData(setErrorMessage)
@@ -64,6 +69,7 @@ export function usePastelFlowApp() {
     setErrorMessage,
     actionWorkflow.loadActionWorkflowData,
   )
+  const urlGroups = useUrlGroupsData(setErrorMessage)
   const sync = useSyncData({
     loadAppSettings: settings.loadAppSettings,
     loadWorkflowRunEvents,
@@ -78,6 +84,7 @@ export function usePastelFlowApp() {
     void secrets.loadSecretStorageStatus()
     void sync.loadSyncStatus()
     void tools.loadToolModules()
+    void urlGroups.loadUrlGroups()
     void actionWorkflow.loadActionWorkflowData()
     // Bootstrap once; the called loaders own their domain state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -133,6 +140,7 @@ export function usePastelFlowApp() {
     await Promise.all([
       actionWorkflow.loadActionWorkflowData(),
       tools.loadToolModules(),
+      urlGroups.loadUrlGroups(),
       settings.loadAppSettings(),
       secrets.loadSecrets(),
     ])
@@ -160,6 +168,13 @@ export function usePastelFlowApp() {
     clearWorkflowRunHistory()
     setWorkspaceMode('workflows')
     void actionWorkflow.loadActionWorkflowData()
+  }
+
+  function openUrlGroupsMode() {
+    setSelectedCollectionFolderId('all')
+    urlGroups.setSelectedUrlGroupId(null)
+    setWorkspaceMode('urlGroups')
+    void urlGroups.loadUrlGroups()
   }
 
   function selectWorkflow(workflow: WorkflowDefinition) {
@@ -323,6 +338,15 @@ export function usePastelFlowApp() {
     }
 
     try {
+      if (!hasWorkflowRunHistoryApi(window.pastelFlow.workflows)) {
+        await loadWorkflowRunEvents(workflowId)
+        setWorkflowRuns([])
+        setSelectedWorkflowRunId(null)
+        setActionRuns([])
+        setWorkflowArtifacts([])
+        return
+      }
+
       const [events, runs] = await Promise.all([
         window.pastelFlow.workflows.listEvents(workflowId),
         window.pastelFlow.workflows.listRuns(workflowId),
@@ -331,11 +355,16 @@ export function usePastelFlowApp() {
       setWorkflowRuns(runs)
       const nextSelectedRunId = runs[0]?.id ?? null
       setSelectedWorkflowRunId(nextSelectedRunId)
-      setActionRuns(
-        nextSelectedRunId
-          ? await window.pastelFlow.workflows.listActionRuns(nextSelectedRunId)
-          : [],
-      )
+      const [nextActionRuns, nextArtifacts] = nextSelectedRunId
+        ? await Promise.all([
+            window.pastelFlow.workflows.listActionRuns(nextSelectedRunId),
+            window.pastelFlow.workflows.listArtifacts({
+              runId: nextSelectedRunId,
+            }),
+          ])
+        : [[], []]
+      setActionRuns(nextActionRuns)
+      setWorkflowArtifacts(nextArtifacts)
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     }
@@ -347,8 +376,20 @@ export function usePastelFlowApp() {
     }
 
     try {
+      if (!hasWorkflowRunHistoryApi(window.pastelFlow.workflows)) {
+        setSelectedWorkflowRunId(null)
+        setActionRuns([])
+        setWorkflowArtifacts([])
+        return
+      }
+
       setSelectedWorkflowRunId(runId)
-      setActionRuns(await window.pastelFlow.workflows.listActionRuns(runId))
+      const [nextActionRuns, nextArtifacts] = await Promise.all([
+        window.pastelFlow.workflows.listActionRuns(runId),
+        window.pastelFlow.workflows.listArtifacts({ runId }),
+      ])
+      setActionRuns(nextActionRuns)
+      setWorkflowArtifacts(nextArtifacts)
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     }
@@ -359,6 +400,7 @@ export function usePastelFlowApp() {
     setWorkflowRuns([])
     setSelectedWorkflowRunId(null)
     setActionRuns([])
+    setWorkflowArtifacts([])
   }
 
   async function handleRunWorkflow(workflowId: string) {
@@ -369,6 +411,19 @@ export function usePastelFlowApp() {
   async function handleStopWorkflow(workflowId: string) {
     await actionWorkflow.stopWorkflow(workflowId)
     await loadWorkflowRunHistory(workflowId)
+  }
+
+  async function handleCreateTransformAction(
+    mode: TransformActionConfig['mode'],
+  ) {
+    const action = await actionWorkflow.createAction({
+      name: getTransformActionName(mode),
+      type: 'transform_action',
+      config: createDefaultTransformConfig(mode),
+    })
+    await actionWorkflow.loadActionWorkflowData()
+
+    return action
   }
 
   async function handleCreateAction(event: FormEvent<HTMLFormElement>) {
@@ -448,8 +503,11 @@ export function usePastelFlowApp() {
     actionRuns,
     workflowRunEvents,
     workflowRuns,
+    workflowArtifacts,
     selectedWorkflowRunId,
     toolInputValues: tools.toolInputValues,
+    urlGroups: urlGroups.urlGroups,
+    selectedUrlGroupId: urlGroups.selectedUrlGroupId,
     toolMessage: tools.toolMessage,
     toolModules: tools.toolModules,
     toolRunResult: tools.toolRunResult,
@@ -472,6 +530,7 @@ export function usePastelFlowApp() {
       }),
     handleDeleteWorkflow: actionWorkflow.deleteWorkflow,
     handleCreateToolAction: tools.handleCreateToolAction,
+    handleCreateTransformAction,
     handleDeleteSecret: secrets.handleDeleteSecret,
     handleDeleteAction: actionWorkflow.deleteAction,
     handleExportSyncSnapshot: sync.handleExportSyncSnapshot,
@@ -495,6 +554,7 @@ export function usePastelFlowApp() {
     openRunMode,
     openSettingsMode,
     openToolsMode,
+    openUrlGroupsMode,
     openWorkflowMode,
     refreshWorkspaceData,
     selectWorkflow,
@@ -507,15 +567,44 @@ export function usePastelFlowApp() {
     setSelectedCollectionFolderId,
     setSelectedSettingsCategory,
     setSelectedToolId: tools.setSelectedToolId,
+    setSelectedUrlGroupId: urlGroups.setSelectedUrlGroupId,
     setSelectedWorkflowId: actionWorkflow.setSelectedWorkflowId,
     setSettingsForm: settings.setSettingsForm,
     setToolInputValues: tools.setToolInputValues,
     setToolMessage: tools.setToolMessage,
     setToolRunResult: tools.setToolRunResult,
     createWorkspaceFolder,
+    handleCreateUrlGroup: urlGroups.createUrlGroup,
+    handleDeleteUrlGroup: urlGroups.deleteUrlGroup,
+    handleUpdateUrlGroup: urlGroups.updateUrlGroup,
     deleteWorkspaceFolder,
     moveWorkspaceFolder,
     renameWorkspaceFolder,
+  }
+}
+
+function createDefaultTransformConfig(
+  mode: TransformActionConfig['mode'],
+): TransformActionConfig {
+  return {
+    mode,
+    path: mode === 'pick_field' ? '' : undefined,
+    separator: mode === 'join' || mode === 'split' ? '\n' : undefined,
+  }
+}
+
+function getTransformActionName(mode: TransformActionConfig['mode']): string {
+  switch (mode) {
+    case 'json_to_string':
+      return 'Transform: JSON to string'
+    case 'string_to_json':
+      return 'Transform: String to JSON'
+    case 'pick_field':
+      return 'Transform: Pick field'
+    case 'join':
+      return 'Transform: Join'
+    case 'split':
+      return 'Transform: Split'
   }
 }
 
@@ -524,5 +613,19 @@ function isCompactViewport(): boolean {
     typeof window !== 'undefined' &&
     typeof window.matchMedia === 'function' &&
     window.matchMedia(sidebarAutoCollapseQuery).matches
+  )
+}
+
+function hasWorkflowRunHistoryApi(
+  workflowsApi: WorkflowsApi,
+): workflowsApi is WorkflowsApi & {
+  listRuns: WorkflowsApi['listRuns']
+  listActionRuns: WorkflowsApi['listActionRuns']
+  listArtifacts: WorkflowsApi['listArtifacts']
+} {
+  return (
+    typeof workflowsApi.listRuns === 'function' &&
+    typeof workflowsApi.listActionRuns === 'function' &&
+    typeof workflowsApi.listArtifacts === 'function'
   )
 }

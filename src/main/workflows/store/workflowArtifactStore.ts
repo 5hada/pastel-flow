@@ -3,7 +3,7 @@ import type {
   CreateWorkflowArtifactInput,
   WorkflowArtifact,
 } from '../../../shared/artifacts'
-import type { SqliteDatabase } from '../../storage/sqliteDatabase'
+import type { SqliteDatabase } from '../../database/sqliteDatabase'
 
 export type WorkflowArtifactStore = {
   createArtifact(input: CreateWorkflowArtifactInput): Promise<WorkflowArtifact>

@@ -12,8 +12,12 @@ export const defaultDevicePolicy: DevicePolicy = {
 }
 
 export function normalizeDevicePolicy(
-  policy: Partial<DevicePolicy> | null | undefined,
+  source: unknown,
 ): DevicePolicy {
+  const policy =
+    source && typeof source === "object"
+      ? source as Partial<DevicePolicy>
+      : {};
   const allowedDeviceIds = Array.isArray(policy?.allowedDeviceIds)
     ? [
         ...new Set(

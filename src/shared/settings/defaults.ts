@@ -55,8 +55,12 @@ export const defaultAppSettings: AppSettings = {
 }
 
 export function normalizeAppSettings(
-  settings: Partial<AppSettings> | null | undefined,
+  source: unknown,
 ): AppSettings {
+  const settings =
+    source && typeof source === "object"
+      ? source as Partial<AppSettings>
+      : {};
   return {
     themeMode: isThemeMode(settings?.themeMode)
       ? settings.themeMode

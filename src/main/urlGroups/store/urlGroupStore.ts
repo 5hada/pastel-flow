@@ -6,7 +6,7 @@ import type {
   UrlGroupItem,
 } from '../../../shared/urlGroups'
 import { normalizeUrlGroupItems } from '../../../shared/urlGroups'
-import type { SqliteDatabase } from '../../storage/sqliteDatabase'
+import type { SqliteDatabase } from '../../database/sqliteDatabase'
 
 export type UrlGroupStore = {
   getUrlGroup(id: string): Promise<UrlGroup>

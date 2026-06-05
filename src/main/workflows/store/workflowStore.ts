@@ -13,7 +13,7 @@ import {
   type WorkflowState
 } from '../../../shared/workflows'
 import type { ActionDefinition } from '../../../shared/actions'
-import { createAtomicJsonFile } from '../../storage/atomicJsonFile'
+import { createAtomicJsonFile } from '../../database/atomicJsonFile'
 
 
 export type WorkflowStore = {

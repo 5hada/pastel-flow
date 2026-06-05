@@ -1,0 +1,1 @@
+/extension - only edit for adding browser extension's own features

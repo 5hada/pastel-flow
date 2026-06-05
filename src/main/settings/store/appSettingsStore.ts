@@ -5,7 +5,7 @@ import {
   type AppSettings,
   type AppSettingsSnapshot,
 } from '../../../shared/settings'
-import { createAtomicJsonFile } from '../../storage/atomicJsonFile'
+import { createAtomicJsonFile } from '../../database/atomicJsonFile'
 
 export type StoredAppSettingsSnapshot = Omit<AppSettingsSnapshot, 'currentDevice'>
 

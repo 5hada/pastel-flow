@@ -1,1 +1,1 @@
-업데이트 사항 발생 시 규모에 따른 버전명 변경을 필수적으로 진행할 것
+When updates occur, it is mandatory to change the version name according to the scale.

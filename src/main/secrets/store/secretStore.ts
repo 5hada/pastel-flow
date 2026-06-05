@@ -6,7 +6,7 @@ import type {
   SecretStorageStatus,
 } from '../../../shared/secrets'
 import { normalizeLocalSecretName } from '../../../shared/secrets'
-import { createAtomicJsonFile } from '../../storage/atomicJsonFile'
+import { createAtomicJsonFile } from '../../database/atomicJsonFile'
 
 export type SecretStore = {
   getStorageStatus(): Promise<SecretStorageStatus>

@@ -9,7 +9,7 @@ export function createAppWindow(environment: AppEnvironment): BrowserWindow {
     title: 'Pastel Flow',
     webPreferences: {
       preload: environment.preloadPath,
-      // contextIsolation: true,
+      contextIsolation: true,
       // nodeIntegration: false,
       // devTools: true,
     },

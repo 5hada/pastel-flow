@@ -15,6 +15,8 @@ Generally read file under /src, you can read also ./.heroui-doc whenever ONLY ne
 
 Use PowerShell only for file read/list/search.
 
+
+
 All document must be written by English, include ONLY neccessary information. be short.
 
 ## Validation

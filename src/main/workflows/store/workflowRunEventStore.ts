@@ -3,7 +3,7 @@ import type {
   CreateWorkflowRunEventInput,
   WorkflowRunEvent,
 } from '../../../shared/runStatus'
-import type { SqliteDatabase } from '../../storage/sqliteDatabase'
+import type { SqliteDatabase } from '../../database/sqliteDatabase'
 
 export type WorkflowRunEventStore = {
   listEvents(workflowId?: string, options?: ListWorkflowRunEventsOptions): Promise<WorkflowRunEvent[]>

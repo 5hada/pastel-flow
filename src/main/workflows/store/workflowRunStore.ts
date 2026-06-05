@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { SqliteDatabase } from '../../storage/sqliteDatabase'
+import type { SqliteDatabase } from '../../database/sqliteDatabase'
 import type {
   ActionRun,
   CreateActionRunInput,

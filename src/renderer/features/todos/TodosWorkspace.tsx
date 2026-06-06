@@ -1,4 +1,7 @@
-import { Button, Card } from '@heroui/react'
+import type { DateValue } from '@internationalized/date'
+
+import { parseDate } from '@internationalized/date'
+import { Button, Calendar, Card, DateField, DatePicker, Label } from '@heroui/react'
 import { useEffect, useState, type FormEvent } from 'react'
 import type { TodoItem } from '../../../shared/todos'
 import { CollectionListPanel } from '../../shared/components/CollectionListPanel'
@@ -40,9 +43,14 @@ export function TodosWorkspace({
   const selectedTodo = todos.find((todo) => todo.id === selectedTodoId) ?? null
   const [isCreating, setIsCreating] = useState(false)
   const [draft, setDraft] = useState(createDraft(selectedTodo))
+  const [selectedDate, setSelectedDate] = useState<DateValue | null>(
+    parseDueDateValue(draft.dueAt),
+  )
 
   useEffect(() => {
-    setDraft(createDraft(selectedTodo))
+    const nextDraft = createDraft(selectedTodo)
+    setDraft(nextDraft)
+    setSelectedDate(parseDueDateValue(nextDraft.dueAt))
     setIsCreating(false)
   }, [selectedTodo])
 
@@ -131,19 +139,53 @@ export function TodosWorkspace({
           />
         </label>
         <div className="form-grid">
-          <label>
-            Due
-            <input
-              type="datetime-local"
-              value={draft.dueAt}
-              onChange={(event) =>
+          <div>
+            <DatePicker
+            className='w-60'
+              value={selectedDate}
+              onChange={(date) => {
+                setSelectedDate(date)
+
                 setDraft((currentDraft) => ({
                   ...currentDraft,
-                  dueAt: event.target.value,
+                  dueAt: formatDueDateValue(date),
                 }))
-              }
-            />
-          </label>
+              }}
+            >
+              <Label>Due</Label>
+              <DateField.Group fullWidth>
+                <DateField.Input>{(segment) => <DateField.Segment segment={segment} />}</DateField.Input>
+                <DateField.Suffix>
+                  <DatePicker.Trigger>
+                    <DatePicker.TriggerIndicator />
+                  </DatePicker.Trigger>
+                </DateField.Suffix>
+              </DateField.Group>
+              <DatePicker.Popover className="flex">
+                <Calendar aria-label="Event date">
+                  <Calendar.Header>
+                    <Calendar.YearPickerTrigger>
+                      <Calendar.YearPickerTriggerHeading />
+                      <Calendar.YearPickerTriggerIndicator />
+                    </Calendar.YearPickerTrigger>
+                    <Calendar.NavButton slot="previous" />
+                    <Calendar.NavButton slot="next" />
+                  </Calendar.Header>
+                  <Calendar.Grid>
+                    <Calendar.GridHeader>
+                      {(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}
+                    </Calendar.GridHeader>
+                    <Calendar.GridBody>{(date) => <Calendar.Cell date={date} />}</Calendar.GridBody>
+                  </Calendar.Grid>
+                  <Calendar.YearPickerGrid>
+                    <Calendar.YearPickerGridBody>
+                      {({year}) => <Calendar.YearPickerCell year={year} />}
+                    </Calendar.YearPickerGridBody>
+                  </Calendar.YearPickerGrid>
+                </Calendar>
+              </DatePicker.Popover>
+            </DatePicker>
+          </div>
           <label>
             Category
             <input
@@ -236,7 +278,7 @@ type TodoDraft = {
 function createDraft(todo: TodoItem | null): TodoDraft {
   return {
     title: todo?.title ?? '',
-    dueAt: toDateTimeLocalValue(todo?.dueAt),
+    dueAt: todo?.dueAt ?? '',
     category: todo?.category ?? '',
     details: todo?.details ?? '',
     completed: todo?.completed ?? false,
@@ -246,31 +288,32 @@ function createDraft(todo: TodoItem | null): TodoDraft {
 function parseDraft(draft: TodoDraft) {
   return {
     title: draft.title.trim(),
-    dueAt: draft.dueAt ? new Date(draft.dueAt).toISOString() : undefined,
+    dueAt: draft.dueAt ? draft.dueAt : undefined,
     category: draft.category.trim() || undefined,
     details: draft.details.trim() || undefined,
     completed: draft.completed,
   }
 }
 
+function parseDueDateValue(dueAt: string): DateValue | null {
+  const date = dueAt.trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return null
+  }
+
+  try {
+    return parseDate(date)
+  } catch {
+    return null
+  }
+}
+
+function formatDueDateValue(date: DateValue | null): string {
+  return date?.toString() ?? ''
+}
+
 function getTodoMeta(todo: TodoItem): string {
   const status = todo.completed ? 'Done' : 'Open'
   const due = todo.dueAt ? formatDate(todo.dueAt) : 'No due date'
   return `${status} · ${due}`
-}
-
-function toDateTimeLocalValue(value?: string): string {
-  if (!value) {
-    return ''
-  }
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return ''
-  }
-
-  const timezoneOffsetMilliseconds = date.getTimezoneOffset() * 60_000
-  return new Date(date.getTime() - timezoneOffsetMilliseconds)
-    .toISOString()
-    .slice(0, 16)
 }

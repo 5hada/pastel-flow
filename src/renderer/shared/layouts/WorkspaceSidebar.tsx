@@ -180,6 +180,7 @@ export function WorkspaceSidebar({
 
       <div className="sidebar-note">
         <span>Local first</span>
+        <br/>
         <strong>Extension controlled</strong>
       </div>
     </aside>
@@ -219,8 +220,8 @@ function FolderSidebarSection({
 
   return (
     <>
-      <div className="sidebar-heading compact-sidebar-heading">
-        <p className="sidebar-label">{title}</p>
+      <div className="sidebar-heading compact-sidebar-heading align-center">
+        <p className="sidebar-label pt-2 px-3">{title}</p>
         <div className="sidebar-heading-actions">
           <Button
             aria-label="폴더 추가"

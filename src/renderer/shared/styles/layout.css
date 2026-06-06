@@ -173,16 +173,16 @@
 .sidebar-folder-editor {
   display: grid;
   align-items: center;
-  gap: 6px;
 }
 
 .sidebar-heading-actions {
-  grid-template-columns: 34px 34px;
+  grid-template-columns: 28px 28px;
 }
 
 .sidebar-folder-editor {
   grid-template-columns: minmax(0, 1fr) 30px 30px 30px;
   min-height: 38px;
+  gap: 6px;
 }
 
 .sidebar-folder-editor input {

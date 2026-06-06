@@ -1,4 +1,12 @@
-import { Button, Card, ListBox, Select } from '@heroui/react'
+import {
+  Button,
+  Card,
+  Input,
+  Label,
+  ListBox,
+  Select,
+  TextField,
+} from '@heroui/react'
 import { useEffect, useState, type FormEvent } from 'react'
 import type { CurrentDevice } from '../../../../shared/devices'
 import type { LocalSecretMetadata } from '../../../../shared/secrets'
@@ -30,6 +38,10 @@ import { TaskTypeConfigFields } from '../../../shared/task-fields'
 import { getActionTypeLabel, formatDate } from '../../../shared/utils/viewLabels'
 import { getCommonIcon } from '../../../shared/assets/icon'
 import { CollectionListPanel } from '../../../shared/components/CollectionListPanel'
+import {
+  FieldGrid,
+  SelectField,
+} from '../../../shared/components/HeroForm'
 import { getWorkspaceFolderPathLabel } from '../../../shared/utils/workspaceFolderLabels'
 
 export type ActionWorkspacePanelProps = {
@@ -179,12 +191,14 @@ export function ActionWorkspacePanel({
           <p className="eyebrow">Actions</p>
           {selectedAction && editingActionNameId === selectedAction.id ? (
             <form className="workflow-title-form" onSubmit={handleRenameAction}>
-              <input
+              <TextField
                 aria-label="Action 이름"
-                disabled={isSelectedActionLocked}
+                isDisabled={isSelectedActionLocked}
                 value={editName}
-                onChange={(event) => setEditName(event.target.value)}
-              />
+                onChange={setEditName}
+              >
+                <Input />
+              </TextField>
               <Button
                 isDisabled={isSelectedActionLocked || !editName.trim()}
                 variant="primary"
@@ -272,52 +286,30 @@ export function ActionWorkspacePanel({
                     )
                   }}
                 >
-                  <div className="form-grid">
+                  <FieldGrid>
                     {editableTaskType ? (
-                      <label>
-                        Action 타입
-                        <Select
-                          isDisabled={isSelectedActionLocked}
-                          selectedKey={editForm.taskType}
-                          onSelectionChange={(key) =>
-                            setEditForm({
-                              ...editForm,
-                              taskType: String(key) as typeof editForm.taskType,
-                            })
-                          }
-                        >
-                          <Select.Trigger>
-                            <Select.Value />
-                            <Select.Indicator />
-                          </Select.Trigger>
-                          <Select.Popover>
-                            <ListBox>
-                              {taskTypeOptions.map((taskType) => (
-                                <ListBox.Item
-                                  id={taskType}
-                                  key={taskType}
-                                  textValue={getActionTypeLabel(
-                                    createActionUpdateInputFromForm(
-                                      { ...editForm, taskType },
-                                      selectedAction,
-                                    ).type ?? selectedAction.type,
-                                  )}
-                                >
-                                  {getActionTypeLabel(
-                                    createActionUpdateInputFromForm(
-                                      { ...editForm, taskType },
-                                      selectedAction,
-                                    ).type ?? selectedAction.type,
-                                  )}
-                                  <ListBox.ItemIndicator />
-                                </ListBox.Item>
-                              ))}
-                            </ListBox>
-                          </Select.Popover>
-                        </Select>
-                      </label>
+                      <SelectField
+                        isDisabled={isSelectedActionLocked}
+                        label="Action 타입"
+                        options={taskTypeOptions.map((taskType) => ({
+                          value: taskType,
+                          label: getActionTypeLabel(
+                            createActionUpdateInputFromForm(
+                              { ...editForm, taskType },
+                              selectedAction,
+                            ).type ?? selectedAction.type,
+                          ),
+                        }))}
+                        selectedKey={editForm.taskType}
+                        onChange={(taskType) =>
+                          setEditForm({
+                            ...editForm,
+                            taskType,
+                          })
+                        }
+                      />
                     ) : null}
-                  </div>
+                  </FieldGrid>
                   {editableTaskType ? (
                     <TaskTypeConfigFields
                       form={editForm}
@@ -331,39 +323,37 @@ export function ActionWorkspacePanel({
                       Tool Action 설정은 도구 모듈 정의를 기준으로 관리됩니다.
                     </p>
                   )}
-                  <label>
-                    Secret 참조
-                    <Select
-                      isDisabled={isSelectedActionLocked}
-                      selectionMode="multiple"
-                      value={parseLines(editForm.secretRefIds)}
-                      onChange={(keys) =>
-                        setEditForm({
-                          ...editForm,
-                          secretRefIds: Array.from(keys).map(String).join('\n'),
-                        })
-                      }
-                    >
-                      <Select.Trigger>
-                        <Select.Value />
-                        <Select.Indicator />
-                      </Select.Trigger>
-                      <Select.Popover>
-                        <ListBox selectionMode="multiple">
-                          {secrets.map((secret) => (
-                            <ListBox.Item
-                              id={secret.id}
-                              key={secret.id}
-                              textValue={secret.name}
-                            >
-                              {secret.name}
-                              <ListBox.ItemIndicator />
-                            </ListBox.Item>
-                          ))}
-                        </ListBox>
-                      </Select.Popover>
-                    </Select>
-                  </label>
+                  <Select
+                    isDisabled={isSelectedActionLocked}
+                    selectionMode="multiple"
+                    value={parseLines(editForm.secretRefIds)}
+                    onChange={(keys) =>
+                      setEditForm({
+                        ...editForm,
+                        secretRefIds: Array.from(keys).map(String).join('\n'),
+                      })
+                    }
+                  >
+                    <Label>Secret 참조</Label>
+                    <Select.Trigger>
+                      <Select.Value />
+                      <Select.Indicator />
+                    </Select.Trigger>
+                    <Select.Popover>
+                      <ListBox selectionMode="multiple">
+                        {secrets.map((secret) => (
+                          <ListBox.Item
+                            id={secret.id}
+                            key={secret.id}
+                            textValue={secret.name}
+                          >
+                            {secret.name}
+                            <ListBox.ItemIndicator />
+                          </ListBox.Item>
+                        ))}
+                      </ListBox>
+                    </Select.Popover>
+                  </Select>
                   <div className="form-actions">
                     <Button
                       isDisabled={isSelectedActionLocked}

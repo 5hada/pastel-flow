@@ -1,8 +1,12 @@
-import { Button, Card, Input, ListBox, Select } from '@heroui/react'
+import { Button } from '@heroui/react'
 import type {
   AppSettings,
   BrowserProfilePreset,
 } from '../../../../shared/settings'
+import {
+  SelectField,
+  TextInputField,
+} from '../../../shared/components/HeroForm'
 
 export type ProfilePresetEditorProps = {
   form: AppSettings
@@ -24,7 +28,7 @@ export function ProfilePresetEditor({
   }
 
   return (
-    <Card className="settings-subsection" aria-label="사용자 지정 프로필">
+    <section className="settings-nested-section" aria-label="사용자 지정 프로필">
       <div className="section-heading compact-heading">
         <div>
           <p className="eyebrow">Profiles</p>
@@ -57,64 +61,46 @@ export function ProfilePresetEditor({
       ) : (
         <div className="profile-preset-list">
           {form.browserProfilePresets.map((profile, index) => (
-            <Card className="profile-preset-row" key={profile.id}>
-              <label>
-                이름
-                <Input
-                  value={profile.name}
-                  onChange={(event) =>
+            <div className="profile-preset-row" key={profile.id}>
+              <TextInputField
+                label="이름"
+                name={`${profile.id}-name`}
+                value={profile.name}
+                onChange={(value) =>
                     updateProfile(index, {
                       ...profile,
-                      name: event.target.value,
+                      name: value,
                     })
-                  }
-                />
-              </label>
-              <label>
-                브라우저
-                <Select
-                  selectedKey={profile.browserKind}
-                  onSelectionChange={(key) =>
+                }
+              />
+              <SelectField
+                label="브라우저"
+                selectedKey={profile.browserKind}
+                options={(['chrome', 'edge', 'chromium'] as const).map(
+                  (browserKind) => ({
+                    value: browserKind,
+                    label: getBrowserKindLabel(browserKind),
+                    textValue: browserKind,
+                  }),
+                )}
+                onChange={(browserKind) =>
                     updateProfile(index, {
                       ...profile,
-                      browserKind: String(key) as typeof profile.browserKind,
+                      browserKind,
                     })
-                  }
-                >
-                  <Select.Trigger>
-                    <Select.Value />
-                    <Select.Indicator />
-                  </Select.Trigger>
-                  <Select.Popover>
-                    <ListBox>
-                      {(['chrome', 'edge', 'chromium'] as const).map(
-                        (browserKind) => (
-                          <ListBox.Item
-                            id={browserKind}
-                            key={browserKind}
-                            textValue={browserKind}
-                          >
-                            {getBrowserKindLabel(browserKind)}
-                            <ListBox.ItemIndicator />
-                          </ListBox.Item>
-                        ),
-                      )}
-                    </ListBox>
-                  </Select.Popover>
-                </Select>
-              </label>
-              <label>
-                프로필 경로
-                <Input
-                  value={profile.profilePath}
-                  onChange={(event) =>
+                }
+              />
+              <TextInputField
+                label="프로필 경로"
+                name={`${profile.id}-path`}
+                value={profile.profilePath}
+                onChange={(value) =>
                     updateProfile(index, {
                       ...profile,
-                      profilePath: event.target.value,
+                      profilePath: value,
                     })
-                  }
-                />
-              </label>
+                }
+              />
               <Button
                 className="danger-button"
                 variant="danger"
@@ -130,11 +116,11 @@ export function ProfilePresetEditor({
               >
                 삭제
               </Button>
-            </Card>
+            </div>
           ))}
         </div>
       )}
-    </Card>
+    </section>
   )
 }
 

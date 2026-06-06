@@ -1,4 +1,12 @@
-import { Button, Card } from '@heroui/react'
+import {
+  Button,
+  Card,
+  Checkbox,
+  Input,
+  Label,
+  TextArea,
+  TextField,
+} from '@heroui/react'
 import { useEffect, useState, type FormEvent } from 'react'
 import type {
   BrowserProfilePreset,
@@ -193,14 +201,14 @@ export function EditWorkspace({
         </div>
         <div className="empty-state empty-state-action">
           <form className="workflow-name-form" onSubmit={handleCreateWorkflow}>
-            <label>
-              이름
-              <input
-                value={createName}
-                onChange={(event) => setCreateName(event.target.value)}
-                placeholder="Workflow 이름"
-              />
-            </label>
+            <TextField
+              name="workflow-name"
+              value={createName}
+              onChange={setCreateName}
+            >
+              <Label>이름</Label>
+              <Input placeholder="Workflow 이름" />
+            </TextField>
             <Button
               variant="primary"
               type="submit"
@@ -265,12 +273,14 @@ export function EditWorkspace({
                 className="workflow-title-form"
                 onSubmit={handleRenameWorkflow}
               >
-                <input
+                <TextField
                   aria-label="Workflow 이름"
+                  isDisabled={isSelectedWorkflowLocked}
                   value={editName}
-                  disabled={isSelectedWorkflowLocked}
-                  onChange={(event) => setEditName(event.target.value)}
-                />
+                  onChange={setEditName}
+                >
+                  <Input />
+                </TextField>
                 <Button
                   variant="primary"
                   type="submit"
@@ -577,75 +587,86 @@ function WorkflowRunPolicyEditor({
       </div>
       <div className="workflow-run-policy-actors">
         {workflowRunActorOptions.map((actorType) => (
-          <label className="inline-check" key={actorType}>
-            <input
-              checked={selectedActors.includes(actorType)}
-              disabled={isLocked}
-              type="checkbox"
-              onChange={() => toggleActor(actorType)}
-            />
-            {workflowRunActorLabels[actorType]}
-          </label>
+          <Checkbox
+            className="inline-check"
+            isDisabled={isLocked}
+            isSelected={selectedActors.includes(actorType)}
+            key={actorType}
+            onChange={() => toggleActor(actorType)}
+          >
+            <Checkbox.Control>
+              <Checkbox.Indicator />
+            </Checkbox.Control>
+            <Checkbox.Content>
+              <Label>{workflowRunActorLabels[actorType]}</Label>
+            </Checkbox.Content>
+          </Checkbox>
         ))}
       </div>
       <div className="form-grid">
-        <label className="inline-check">
-          <input
-            checked={runPolicy?.allowSchedule !== false}
-            disabled={isLocked}
-            type="checkbox"
-            onChange={(event) =>
-              updateRunPolicy({
-                allowSchedule: event.target.checked ? undefined : false,
-              })
-            }
-          />
-          Schedule 실행 허용
-        </label>
-        <label className="inline-check">
-          <input
-            checked={runPolicy?.requiresConfirmation === true}
-            disabled={isLocked}
-            type="checkbox"
-            onChange={(event) =>
-              updateRunPolicy({
-                requiresConfirmation: event.target.checked ? true : undefined,
-              })
-            }
-          />
-          외부 실행 전 확인 필요
-        </label>
-        <label>
-          시간당 최대 실행
-          <input
-            disabled={isLocked}
-            min={0}
-            type="number"
-            value={runPolicy?.maxRunsPerHour ?? ''}
-            onChange={(event) =>
-              updateRunPolicy({
-                maxRunsPerHour: event.target.value
-                  ? Number(event.target.value)
-                  : undefined,
-              })
-            }
-          />
-        </label>
-        <label>
-          외부 client IDs
-          <textarea
-            disabled={isLocked}
-            placeholder="client id per line"
-            value={externalClientIdsText}
-            onChange={(event) =>
-              updateRunPolicy({
-                allowedExternalClientIds: splitExternalClientIds(
-                  event.target.value,
-                ),
-              })
-            }
-          />
-        </label>
+        <Checkbox
+          className="inline-check"
+          isDisabled={isLocked}
+          isSelected={runPolicy?.allowSchedule !== false}
+          onChange={(isSelected) =>
+            updateRunPolicy({
+              allowSchedule: isSelected ? undefined : false,
+            })
+          }
+        >
+          <Checkbox.Control>
+            <Checkbox.Indicator />
+          </Checkbox.Control>
+          <Checkbox.Content>
+            <Label>Schedule 실행 허용</Label>
+          </Checkbox.Content>
+        </Checkbox>
+        <Checkbox
+          className="inline-check"
+          isDisabled={isLocked}
+          isSelected={runPolicy?.requiresConfirmation === true}
+          onChange={(isSelected) =>
+            updateRunPolicy({
+              requiresConfirmation: isSelected ? true : undefined,
+            })
+          }
+        >
+          <Checkbox.Control>
+            <Checkbox.Indicator />
+          </Checkbox.Control>
+          <Checkbox.Content>
+            <Label>외부 실행 전 확인 필요</Label>
+          </Checkbox.Content>
+        </Checkbox>
+        <TextField
+          isDisabled={isLocked}
+          name="workflow-max-runs-per-hour"
+          type="number"
+          value={String(runPolicy?.maxRunsPerHour ?? '')}
+          onChange={(value) =>
+            updateRunPolicy({
+              maxRunsPerHour: value
+                ? Number(value)
+                : undefined,
+            })
+          }
+        >
+          <Label>시간당 최대 실행</Label>
+          <Input min={0} />
+        </TextField>
+        <TextField
+          isDisabled={isLocked}
+          name="workflow-external-client-ids"
+          value={externalClientIdsText}
+          onChange={(value) =>
+            updateRunPolicy({
+              allowedExternalClientIds: splitExternalClientIds(value),
+            })
+          }
+        >
+          <Label>외부 client IDs</Label>
+          <TextArea placeholder="client id per line" />
+        </TextField>
       </div>
     </div>
   )

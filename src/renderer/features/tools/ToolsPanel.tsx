@@ -1,4 +1,12 @@
-import { Button, Card, Input, Label, ListBox, Radio, RadioGroup, Select, TextArea } from '@heroui/react'
+import {
+  Button,
+  Card,
+  Input,
+  Label,
+  Radio,
+  RadioGroup,
+  TextField,
+} from '@heroui/react'
 import type {
   RegisteredToolModule,
   ToolModuleField,
@@ -8,6 +16,13 @@ import type {
 import type { WorkspaceFolder } from '../../../shared/settings'
 import { DetailItem } from '../../shared/components/DetailItem'
 import { CollectionListPanel } from '../../shared/components/CollectionListPanel'
+import {
+  CheckboxField,
+  FormFieldset,
+  SelectField,
+  TextAreaField,
+  TextInputField,
+} from '../../shared/components/HeroForm'
 import { getCommonIcon } from '../../shared/assets/icon'
 import { getWorkspaceFolderPathLabel } from '../../shared/utils/workspaceFolderLabels'
 
@@ -365,62 +380,49 @@ function ToolInputField({ field, onChange, value }: ToolInputFieldProps) {
 
   if (control === 'toggle' || control === 'checkbox' || field.type === 'boolean') {
     return (
-      <label className="tool-field toggle-field">
-        <span>
-          {label}
-          {field.required ? ' *' : ''}
-        </span>
-        <span className="toggle-switch">
-          <input
-            checked={value === true || value === 'true'}
-            type="checkbox"
-            onChange={(event) => onChange(event.target.checked)}
-          />
-          <span aria-hidden="true" />
-        </span>
-      </label>
+      <CheckboxField
+        className="tool-field toggle-field"
+        isSelected={value === true || value === 'true'}
+        label={
+          <>
+            {label}
+            {field.required ? ' *' : ''}
+          </>
+        }
+        onChange={onChange}
+      />
     )
   }
 
   if (control === 'select' && field.ui?.options?.length) {
     return (
-      <label>
-        {label}
-        {field.required ? ' *' : ''}
-        <Select
-          selectedKey={String(value ?? '')}
-          onSelectionChange={(key) => onChange(String(key))}
-        >
-          <Select.Trigger>
-            <Select.Value />
-            <Select.Indicator />
-          </Select.Trigger>
-          <Select.Popover>
-            <ListBox>
-              {field.ui.options.map((option) => (
-                <ListBox.Item
-                  id={String(option.value)}
-                  key={String(option.value)}
-                  textValue={option.label}
-                >
-                  {option.label}
-                  <ListBox.ItemIndicator />
-                </ListBox.Item>
-              ))}
-            </ListBox>
-          </Select.Popover>
-        </Select>
-      </label>
+      <SelectField
+        label={
+          <>
+            {label}
+            {field.required ? ' *' : ''}
+          </>
+        }
+        options={field.ui.options.map((option) => ({
+          value: String(option.value),
+          label: option.label,
+        }))}
+        selectedKey={String(value ?? '')}
+        onChange={onChange}
+      />
     )
   }
 
   if (control === 'radio' && field.ui?.options?.length) {
     return (
-      <fieldset className="settings-fieldset">
-        <legend>
+      <FormFieldset
+        legend={
+          <>
           {label}
           {field.required ? ' *' : ''}
-        </legend>
+          </>
+        }
+      >
         <RadioGroup
           className="option-swatch-list"
           name={`tool-${field.key}`}
@@ -440,15 +442,21 @@ function ToolInputField({ field, onChange, value }: ToolInputFieldProps) {
             </Radio>
           ))}
         </RadioGroup>
-      </fieldset>
+      </FormFieldset>
     )
   }
 
   if (control === 'color') {
     return (
-      <label>
-        {label}
-        {field.required ? ' *' : ''}
+      <TextField
+        aria-label={label}
+        value={String(value ?? '')}
+        onChange={onChange}
+      >
+        <Label>
+          {label}
+          {field.required ? ' *' : ''}
+        </Label>
         <span className="color-input-row">
           <Input
             className="color-input"
@@ -461,7 +469,7 @@ function ToolInputField({ field, onChange, value }: ToolInputFieldProps) {
             onChange={(event) => onChange(event.target.value)}
           />
         </span>
-      </label>
+      </TextField>
     )
   }
 
@@ -478,39 +486,41 @@ function ToolInputField({ field, onChange, value }: ToolInputFieldProps) {
     field.ui?.rows
   ) {
     return (
-      <label>
-        {label}
-        {field.required ? ' *' : ''}
-        <TextArea
-          placeholder={field.ui?.placeholder}
-          rows={field.ui?.rows}
-          value={String(value ?? '')}
-          onChange={(event) => onChange(event.target.value)}
-        />
-        {field.ui?.helpText ? (
-          <small className="field-help">{field.ui.helpText}</small>
-        ) : null}
-      </label>
+      <TextAreaField
+        description={field.ui?.helpText}
+        label={
+          <>
+            {label}
+            {field.required ? ' *' : ''}
+          </>
+        }
+        name={field.key}
+        placeholder={field.ui?.placeholder}
+        rows={field.ui?.rows}
+        value={String(value ?? '')}
+        onChange={onChange}
+      />
     )
   }
 
   return (
-    <label>
-      {label}
-      {field.required ? ' *' : ''}
-      <Input
-        max={field.ui?.max}
-        min={field.ui?.min}
-        placeholder={field.ui?.placeholder}
-        step={field.ui?.step}
-        type={field.type === 'number' || control === 'number' ? 'number' : 'text'}
-        value={String(value ?? '')}
-        onChange={(event) => onChange(event.target.value)}
-      />
-      {field.ui?.helpText ? (
-        <small className="field-help">{field.ui.helpText}</small>
-      ) : null}
-    </label>
+    <TextInputField
+      description={field.ui?.helpText}
+      label={
+        <>
+          {label}
+          {field.required ? ' *' : ''}
+        </>
+      }
+      max={field.ui?.max}
+      min={field.ui?.min}
+      name={field.key}
+      placeholder={field.ui?.placeholder}
+      step={field.ui?.step}
+      type={field.type === 'number' || control === 'number' ? 'number' : 'text'}
+      value={String(value ?? '')}
+      onChange={onChange}
+    />
   )
 }
 
@@ -526,11 +536,14 @@ function ToolListInputField({ field, onChange, value }: ToolInputFieldProps) {
   }
 
   return (
-    <fieldset className="settings-fieldset">
-      <legend>
+    <FormFieldset
+      legend={
+        <>
         {label}
         {field.required ? ' *' : ''}
-      </legend>
+        </>
+      }
+    >
       <div className="tool-list-editor">
         {values.length === 0 ? (
           <p className="empty-state">항목이 없습니다.</p>
@@ -572,7 +585,7 @@ function ToolListInputField({ field, onChange, value }: ToolInputFieldProps) {
       >
         항목 추가
       </Button>
-    </fieldset>
+    </FormFieldset>
   )
 }
 

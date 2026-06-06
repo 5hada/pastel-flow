@@ -1,4 +1,13 @@
-import { Button, Card, Input, Label, ListBox, Select, Switch } from '@heroui/react'
+import {
+  Button,
+  Card,
+  Input,
+  Label,
+  ListBox,
+  Select,
+  Switch,
+  TextField,
+} from '@heroui/react'
 import { ArrowLeftToLine, ArrowRightToLine, XmarkShape } from '@gravity-ui/icons';
 import { useEffect, useState } from 'react'
 import {
@@ -380,34 +389,30 @@ function ActionRetryPolicyEditor({
 
   return (
     <div className="action-input-mapping-editor">
-      <label>
-        <span>Retry count</span>
-        <input
-          disabled={isLocked}
-          max={5}
-          min={0}
-          type="number"
-          value={retryCount}
-          onChange={(event) =>
-            updateRetryPolicy({ retryCount: Number(event.target.value) })
-          }
-        />
-      </label>
-      <label>
-        <span>Retry delay seconds</span>
-        <input
-          disabled={isLocked}
-          max={300}
-          min={0}
-          type="number"
-          value={retryDelaySeconds}
-          onChange={(event) =>
-            updateRetryPolicy({
-              retryDelaySeconds: Number(event.target.value),
-            })
-          }
-        />
-      </label>
+      <TextField
+        isDisabled={isLocked}
+        name={`${actionRef.id}-retry-count`}
+        type="number"
+        value={String(retryCount)}
+        onChange={(value) => updateRetryPolicy({ retryCount: Number(value) })}
+      >
+        <Label>Retry count</Label>
+        <Input max={5} min={0} />
+      </TextField>
+      <TextField
+        isDisabled={isLocked}
+        name={`${actionRef.id}-retry-delay-seconds`}
+        type="number"
+        value={String(retryDelaySeconds)}
+        onChange={(value) =>
+          updateRetryPolicy({
+            retryDelaySeconds: Number(value),
+          })
+        }
+      >
+        <Label>Retry delay seconds</Label>
+        <Input max={300} min={0} />
+      </TextField>
     </div>
   )
 }
@@ -443,44 +448,56 @@ function TransformActionConfigEditor({
 
   return (
     <div className="transform-config-editor">
-      <label>
-        <span>Mode</span>
-        <select
-          disabled={isLocked}
-          value={config.mode}
-          onChange={(event) =>
-            updateConfig({
-              mode: event.target.value as TransformActionConfig['mode'],
-            })
-          }
-        >
-          {transformOptions.map((option) => (
-            <option key={option.mode} value={option.mode}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <Select
+        isDisabled={isLocked}
+        selectedKey={config.mode}
+        onSelectionChange={(key) =>
+          updateConfig({
+            mode: String(key) as TransformActionConfig['mode'],
+          })
+        }
+      >
+        <Label>Mode</Label>
+        <Select.Trigger>
+          <Select.Value />
+          <Select.Indicator />
+        </Select.Trigger>
+        <Select.Popover>
+          <ListBox>
+            {transformOptions.map((option) => (
+              <ListBox.Item
+                id={option.mode}
+                key={option.mode}
+                textValue={option.label}
+              >
+                {option.label}
+                <ListBox.ItemIndicator />
+              </ListBox.Item>
+            ))}
+          </ListBox>
+        </Select.Popover>
+      </Select>
       {config.mode === 'pick_field' ? (
-        <label>
-          <span>Dot path</span>
-          <input
-            disabled={isLocked}
-            placeholder="items.0.title"
-            value={config.path ?? ''}
-            onChange={(event) => updateConfig({ path: event.target.value })}
-          />
-        </label>
+        <TextField
+          isDisabled={isLocked}
+          name={`${action.id}-transform-path`}
+          value={config.path ?? ''}
+          onChange={(value) => updateConfig({ path: value })}
+        >
+          <Label>Dot path</Label>
+          <Input placeholder="items.0.title" />
+        </TextField>
       ) : null}
       {config.mode === 'join' || config.mode === 'split' ? (
-        <label>
-          <span>Separator</span>
-          <input
-            disabled={isLocked}
-            value={config.separator ?? '\n'}
-            onChange={(event) => updateConfig({ separator: event.target.value })}
-          />
-        </label>
+        <TextField
+          isDisabled={isLocked}
+          name={`${action.id}-transform-separator`}
+          value={config.separator ?? '\n'}
+          onChange={(value) => updateConfig({ separator: value })}
+        >
+          <Label>Separator</Label>
+          <Input />
+        </TextField>
       ) : null}
     </div>
   )
@@ -588,40 +605,52 @@ function ActionInputMappingEditor({
         const canUsePath = selectedOption?.outputField.type === 'json'
 
         return (
-          <label key={inputField.id}>
-            <span>
-              {inputField.name}
-              {inputField.required ? ' *' : ''} · {inputField.type}
-            </span>
-            <select
-              disabled={isLocked}
-              value={formatMappingSelectValue(currentSource)}
-              onChange={(event) =>
-                updateMapping(inputField.id, event.target.value)
-              }
+          <div key={inputField.id}>
+            <Select
+              isDisabled={isLocked}
+              selectedKey={formatMappingSelectValue(currentSource)}
+              onSelectionChange={(key) => updateMapping(inputField.id, String(key))}
             >
-              <option value="">연결 없음</option>
-              {outputOptions.map((option) => (
-                <option
-                  disabled={!canMapActionField(option.outputField, inputField)}
-                  key={`${inputField.id}-${option.value}`}
-                  value={option.value}
-                >
-                  {option.actionName}.{option.outputField.id} · {option.outputField.type}
-                </option>
-              ))}
-            </select>
+              <Label>
+                {inputField.name}
+                {inputField.required ? ' *' : ''} · {inputField.type}
+              </Label>
+              <Select.Trigger>
+                <Select.Value />
+                <Select.Indicator />
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox>
+                  <ListBox.Item id="" textValue="연결 없음">
+                    연결 없음
+                    <ListBox.ItemIndicator />
+                  </ListBox.Item>
+                  {outputOptions.map((option) => (
+                    <ListBox.Item
+                      id={option.value}
+                      isDisabled={!canMapActionField(option.outputField, inputField)}
+                      key={`${inputField.id}-${option.value}`}
+                      textValue={`${option.actionName}.${option.outputField.id}`}
+                    >
+                      {option.actionName}.{option.outputField.id} · {option.outputField.type}
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>
+                  ))}
+                </ListBox>
+              </Select.Popover>
+            </Select>
             {canUsePath ? (
-              <input
-                disabled={isLocked}
-                placeholder="Dot path, e.g. items.0.title"
+              <TextField
+                isDisabled={isLocked}
+                name={`${actionRef.id}-${inputField.id}-mapping-path`}
                 value={currentSource?.path ?? ''}
-                onChange={(event) =>
-                  updateMappingPath(inputField.id, event.target.value)
-                }
-              />
+                onChange={(value) => updateMappingPath(inputField.id, value)}
+              >
+                <Label>Dot path</Label>
+                <Input placeholder="Dot path, e.g. items.0.title" />
+              </TextField>
             ) : null}
-          </label>
+          </div>
         )
       })}
     </div>

@@ -5,12 +5,15 @@ import type {
   CustomThemeColors,
   DeveloperVisibilitySettings,
   ShortcutSettings,
-  ThemeColorKey,
   ThemeMode,
   WorkflowListDisplayMode,
   WorkspaceFolder,
   WorkspaceFolderScope,
 } from './types'
+import {
+  createDefaultCustomThemeColors,
+  themeColorDefinitions,
+} from './themeTokens'
 import type {
   BrowserKind,
   BrowserProfileSource,
@@ -127,43 +130,13 @@ export function normalizeAppSettings(
   }
 }
 
-function createDefaultCustomThemeColors(): CustomThemeColors {
-  return {
-    appBg: '#edf2f6',
-    surface: '#ffffff',
-    surfaceMuted: '#f6f8fb',
-    surfaceRaised: '#ffffff',
-    surfaceSelected: '#e9f6f3',
-    border: '#d8e1ea',
-    borderStrong: '#6f9f99',
-    text: '#17212e',
-    textMuted: '#677486',
-    accent: '#226f68',
-    accentHover: '#1a5d58',
-    accentSoft: '#d9f0eb',
-    accentContrast: '#ffffff',
-    danger: '#b94a48',
-    dangerHover: '#9f2f2b',
-    dangerSoft: '#fff1f0',
-    info: '#2e5f95',
-    infoSoft: '#e6f0fb',
-    warning: '#fff0c2',
-    warningText: '#6b4b0e',
-    success: '#287a54',
-    successSoft: '#e4f5eb',
-    controlBg: '#f8fafc',
-    readonlyBg: '#eef3f8',
-    railBg: '#e7edf3',
-  }
-}
-
 function normalizeCustomThemeColors(value: unknown): CustomThemeColors {
   const defaults = createDefaultCustomThemeColors()
   if (!value || typeof value !== 'object') {
     return defaults
   }
 
-  return (Object.keys(defaults) as ThemeColorKey[]).reduce<CustomThemeColors>(
+  return themeColorDefinitions.map((definition) => definition.key).reduce<CustomThemeColors>(
     (colors, key) => ({
       ...colors,
       [key]: normalizeColor((value as Partial<CustomThemeColors>)[key]) ?? defaults[key],

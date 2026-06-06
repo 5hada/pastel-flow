@@ -1,4 +1,11 @@
-import { Checkbox, Input, Label, ListBox, Select, TextArea } from '@heroui/react'
+import {
+  CheckboxField,
+  FieldGrid,
+  FormFieldset,
+  SelectField,
+  TextAreaField,
+  TextInputField,
+} from '../components/HeroForm'
 import {
   browserKindOptions,
   browserRunModeOptions,
@@ -53,167 +60,99 @@ function BrowserConfigFields({
 
   return (
     <>
-      <div className="form-grid">
-        <Select isDisabled={isDisabled} selectedKey={form.browserKind} onSelectionChange={(key) => onChange({ ...form, browserKind: String(key) as typeof form.browserKind })}>
-          <Label>브라우저</Label>
-          <Select.Trigger>
-            <Select.Value />
-            <Select.Indicator />
-          </Select.Trigger>
-          <Select.Popover>
-            <ListBox>
-              {browserKindOptions.map((option) => (
-                <ListBox.Item id={option.value} key={option.value} textValue={option.label}>
-                  {option.label}
-                  <ListBox.ItemIndicator />
-                </ListBox.Item>
-              ))}
-            </ListBox>
-          </Select.Popover>
-        </Select>
-        <Select isDisabled={isDisabled} selectedKey={form.runMode} onSelectionChange={(key) => onChange({ ...form, runMode: String(key) as typeof form.runMode })}>
-          <Label>실행 방식</Label>
-          <Select.Trigger>
-            <Select.Value />
-            <Select.Indicator />
-          </Select.Trigger>
-          <Select.Popover>
-            <ListBox>
-              {browserRunModeOptions.map((option) => (
-                <ListBox.Item id={option.value} key={option.value} textValue={option.label}>
-                  {option.label}
-                  <ListBox.ItemIndicator />
-                </ListBox.Item>
-              ))}
-            </ListBox>
-          </Select.Popover>
-        </Select>
+      <FieldGrid>
+        <SelectField
+          isDisabled={isDisabled}
+          label="브라우저"
+          options={browserKindOptions}
+          selectedKey={form.browserKind}
+          onChange={(browserKind) => onChange({ ...form, browserKind })}
+        />
+        <SelectField
+          isDisabled={isDisabled}
+          label="실행 방식"
+          options={browserRunModeOptions}
+          selectedKey={form.runMode}
+          onChange={(runMode) => onChange({ ...form, runMode })}
+        />
         {form.runMode === 'extension_controlled' ? (
-          <Select isDisabled={isDisabled} selectedKey={form.profileSource} onSelectionChange={(key) => onChange({ ...form, profileSource: String(key) as typeof form.profileSource })}>
-            <Label>프로필 소스</Label>
-            <Select.Trigger>
-              <Select.Value />
-              <Select.Indicator />
-            </Select.Trigger>
-            <Select.Popover>
-              <ListBox>
-                {profileSourceOptions.map((option) => (
-                  <ListBox.Item id={option.value} key={option.value} textValue={option.label}>
-                    {option.label}
-                    <ListBox.ItemIndicator />
-                  </ListBox.Item>
-                ))}
-              </ListBox>
-            </Select.Popover>
-          </Select>
+          <SelectField
+            isDisabled={isDisabled}
+            label="프로필 소스"
+            options={profileSourceOptions}
+            selectedKey={form.profileSource}
+            onChange={(profileSource) => onChange({ ...form, profileSource })}
+          />
         ) : null}
-      </div>
+      </FieldGrid>
       {form.runMode === 'extension_controlled' &&
       form.profileSource === 'existing_profile' ? (
         profilePresets.length > 0 ? (
-          <Select isDisabled={isDisabled} selectedKey={selectedProfilePresetId} onSelectionChange={(key) => {
-            const profilePresetId = String(key)
-            const preset = profilePresets.find(
-              (currentPreset) => currentPreset.id === profilePresetId,
-            )
-            onChange({
-              ...form,
-              profilePresetId,
-              browserKind: preset?.browserKind ?? form.browserKind,
-              existingProfilePath: preset?.profilePath ?? '',
-            })
-          }}>
-            <Label>사용자 지정 프로필</Label>
-            <Select.Trigger>
-              <Select.Value />
-              <Select.Indicator />
-            </Select.Trigger>
-            <Select.Popover>
-              <ListBox>
-                <ListBox.Item id="" textValue="프로필 선택">
-                  프로필 선택
-                  <ListBox.ItemIndicator />
-                </ListBox.Item>
-                {profilePresets.map((preset) => (
-                  <ListBox.Item id={preset.id} key={preset.id} textValue={preset.name}>
-                    {preset.name}
-                    <ListBox.ItemIndicator />
-                  </ListBox.Item>
-                ))}
-              </ListBox>
-            </Select.Popover>
-          </Select>
+          <SelectField
+            isDisabled={isDisabled}
+            label="사용자 지정 프로필"
+            options={[
+              { value: '', label: '프로필 선택' },
+              ...profilePresets.map((preset) => ({
+                value: preset.id,
+                label: preset.name,
+              })),
+            ]}
+            selectedKey={selectedProfilePresetId}
+            onChange={(profilePresetId) => {
+              const preset = profilePresets.find(
+                (currentPreset) => currentPreset.id === profilePresetId,
+              )
+              onChange({
+                ...form,
+                profilePresetId,
+                browserKind: preset?.browserKind ?? form.browserKind,
+                existingProfilePath: preset?.profilePath ?? '',
+              })
+            }}
+          />
         ) : (
-          <label>
-            기존 프로필 경로
-            <Input
-              disabled={isDisabled}
-              value={form.existingProfilePath}
-              onChange={(event) =>
-                onChange({ ...form, existingProfilePath: event.target.value })
-              }
-            />
-          </label>
+          <TextInputField
+            isDisabled={isDisabled}
+            label="기존 프로필 경로"
+            name="existing-profile-path"
+            value={form.existingProfilePath}
+            onChange={(existingProfilePath) =>
+              onChange({ ...form, existingProfilePath })
+            }
+          />
         )
       ) : null}
-      <label>
-        URL Group
-        <Select
-          isDisabled={isDisabled}
-          selectedKey={form.urlGroupId}
-          onSelectionChange={(key) =>
-            onChange({ ...form, urlGroupId: String(key) })
-          }
-        >
-          <Select.Trigger>
-            <Select.Value />
-            <Select.Indicator />
-          </Select.Trigger>
-          <Select.Popover>
-            <ListBox>
-              <ListBox.Item id="" textValue="직접 입력">
-                직접 입력
-                <ListBox.ItemIndicator />
-              </ListBox.Item>
-              {urlGroups.map((urlGroup) => (
-                <ListBox.Item
-                  id={urlGroup.id}
-                  key={urlGroup.id}
-                  textValue={urlGroup.name}
-                >
-                  {urlGroup.name}
-                  <ListBox.ItemIndicator />
-                </ListBox.Item>
-              ))}
-            </ListBox>
-          </Select.Popover>
-        </Select>
-      </label>
-      <label>
-        초기 URL
-        <TextArea
-          disabled={isDisabled || Boolean(form.urlGroupId)}
-          value={form.initialUrls}
-          onChange={(event) => onChange({ ...form, initialUrls: event.target.value })}
-          placeholder="한 줄에 하나씩 입력"
-          rows={5}
-        />
-      </label>
-      <Checkbox
-        className="inline-check"
+      <SelectField
+        isDisabled={isDisabled}
+        label="URL Group"
+        options={[
+          { value: '', label: '직접 입력' },
+          ...urlGroups.map((urlGroup) => ({
+            value: urlGroup.id,
+            label: urlGroup.name,
+          })),
+        ]}
+        selectedKey={form.urlGroupId}
+        onChange={(urlGroupId) => onChange({ ...form, urlGroupId })}
+      />
+      <TextAreaField
+        isDisabled={isDisabled || Boolean(form.urlGroupId)}
+        label="초기 URL"
+        name="initial-urls"
+        placeholder="한 줄에 하나씩 입력"
+        rows={5}
+        value={form.initialUrls}
+        onChange={(initialUrls) => onChange({ ...form, initialUrls })}
+      />
+      <CheckboxField
         isDisabled={isDisabled}
         isSelected={form.dynamicTemplateUpdates}
+        label="실행 후 열린 탭 URL을 템플릿에 반영"
         onChange={(dynamicTemplateUpdates) =>
           onChange({ ...form, dynamicTemplateUpdates })
         }
-      >
-        <Checkbox.Control>
-          <Checkbox.Indicator />
-        </Checkbox.Control>
-        <Checkbox.Content>
-          <Label>실행 후 열린 탭 URL을 템플릿에 반영</Label>
-        </Checkbox.Content>
-      </Checkbox>
+      />
     </>
   )
 }
@@ -221,157 +160,120 @@ function BrowserConfigFields({
 function CrawlerConfigFields({ form, isDisabled = false, onChange }: TaskFieldsProps) {
   return (
     <>
-      <label>
-        수집 URL
-        <TextArea
-          disabled={isDisabled}
-          value={form.crawlerUrls}
-          onChange={(event) => onChange({ ...form, crawlerUrls: event.target.value })}
-          placeholder="한 줄에 하나씩 입력"
-          rows={5}
-        />
-      </label>
-      <label>
-        URL당 최대 bytes
-        <Input
-          disabled={isDisabled}
-          max={500000}
-          min={1024}
-          type="number"
-          value={form.crawlerMaxBytes}
-          onChange={(event) =>
-            onChange({ ...form, crawlerMaxBytes: Number(event.target.value) })
-          }
-        />
-      </label>
+      <TextAreaField
+        isDisabled={isDisabled}
+        label="수집 URL"
+        name="crawler-urls"
+        placeholder="한 줄에 하나씩 입력"
+        rows={5}
+        value={form.crawlerUrls}
+        onChange={(crawlerUrls) => onChange({ ...form, crawlerUrls })}
+      />
+      <TextInputField
+        isDisabled={isDisabled}
+        label="URL당 최대 bytes"
+        max={500000}
+        min={1024}
+        name="crawler-max-bytes"
+        type="number"
+        value={String(form.crawlerMaxBytes)}
+        onChange={(crawlerMaxBytes) =>
+          onChange({ ...form, crawlerMaxBytes: Number(crawlerMaxBytes) })
+        }
+      />
     </>
   )
 }
 
 function DiscordBotConfigFields({ form, isDisabled = false, onChange }: TaskFieldsProps) {
   return (
-    <label>
-      명령 prefix
-      <Input
-        disabled={isDisabled}
-        value={form.discordCommandPrefix}
-        onChange={(event) =>
-          onChange({ ...form, discordCommandPrefix: event.target.value })
-        }
-      />
-    </label>
+    <TextInputField
+      isDisabled={isDisabled}
+      label="명령 prefix"
+      name="discord-command-prefix"
+      value={form.discordCommandPrefix}
+      onChange={(discordCommandPrefix) =>
+        onChange({ ...form, discordCommandPrefix })
+      }
+    />
   )
 }
 
 function NotionSyncConfigFields({ form, isDisabled = false, onChange }: TaskFieldsProps) {
   return (
-    <label>
-      Database ID
-      <Input
-        disabled={isDisabled}
-        value={form.notionDatabaseId}
-        onChange={(event) =>
-          onChange({ ...form, notionDatabaseId: event.target.value })
-        }
-      />
-    </label>
+    <TextInputField
+      isDisabled={isDisabled}
+      label="Database ID"
+      name="notion-database-id"
+      value={form.notionDatabaseId}
+      onChange={(notionDatabaseId) => onChange({ ...form, notionDatabaseId })}
+    />
   )
 }
 
 function TradingBotConfigFields({ form, isDisabled = false, onChange }: TaskFieldsProps) {
   return (
-    <fieldset className="settings-fieldset">
-      <legend>자동매매 skeleton</legend>
+    <FormFieldset legend="자동매매 skeleton">
       <p className="muted-text">실제 주문 실행 없이 dry-run 뼈대만 저장합니다.</p>
-      <div className="form-grid">
-        <label>
-          Exchange
-          <Input
-            disabled={isDisabled}
-            value={form.tradingExchange}
-            onChange={(event) =>
-              onChange({ ...form, tradingExchange: event.target.value })
-            }
-          />
-        </label>
-        <label>
-          Symbol
-          <Input
-            disabled={isDisabled}
-            value={form.tradingSymbol}
-            onChange={(event) =>
-              onChange({ ...form, tradingSymbol: event.target.value })
-            }
-          />
-        </label>
-      </div>
-    </fieldset>
+      <FieldGrid>
+        <TextInputField
+          isDisabled={isDisabled}
+          label="Exchange"
+          name="trading-exchange"
+          value={form.tradingExchange}
+          onChange={(tradingExchange) => onChange({ ...form, tradingExchange })}
+        />
+        <TextInputField
+          isDisabled={isDisabled}
+          label="Symbol"
+          name="trading-symbol"
+          value={form.tradingSymbol}
+          onChange={(tradingSymbol) => onChange({ ...form, tradingSymbol })}
+        />
+      </FieldGrid>
+    </FormFieldset>
   )
 }
 
 function TransformConfigFields({ form, isDisabled = false, onChange }: TaskFieldsProps) {
   return (
-    <fieldset className="settings-fieldset">
-      <legend>Transform</legend>
-      <div className="form-grid">
-        <Select
+    <FormFieldset legend="Transform">
+      <FieldGrid>
+        <SelectField
           isDisabled={isDisabled}
+          label="변환 모드"
+          options={[
+            { value: 'json_to_string', label: 'JSON to string' },
+            { value: 'string_to_json', label: 'String to JSON' },
+            { value: 'pick_field', label: 'Pick field' },
+            { value: 'join', label: 'Join' },
+            { value: 'split', label: 'Split' },
+          ]}
           selectedKey={form.transformMode}
-          onSelectionChange={(key) =>
-            onChange({
-              ...form,
-              transformMode: String(key) as typeof form.transformMode,
-            })
-          }
-        >
-          <Label>변환 모드</Label>
-          <Select.Trigger>
-            <Select.Value />
-            <Select.Indicator />
-          </Select.Trigger>
-          <Select.Popover>
-            <ListBox>
-              {[
-                ['json_to_string', 'JSON to string'],
-                ['string_to_json', 'String to JSON'],
-                ['pick_field', 'Pick field'],
-                ['join', 'Join'],
-                ['split', 'Split'],
-              ].map(([value, label]) => (
-                <ListBox.Item id={value} key={value} textValue={label}>
-                  {label}
-                  <ListBox.ItemIndicator />
-                </ListBox.Item>
-              ))}
-            </ListBox>
-          </Select.Popover>
-        </Select>
+          onChange={(transformMode) => onChange({ ...form, transformMode })}
+        />
         {form.transformMode === 'pick_field' ? (
-          <label>
-            Dot path
-            <Input
-              disabled={isDisabled}
-              placeholder="items.0.title"
-              value={form.transformPath}
-              onChange={(event) =>
-                onChange({ ...form, transformPath: event.target.value })
-              }
-            />
-          </label>
+          <TextInputField
+            isDisabled={isDisabled}
+            label="Dot path"
+            name="transform-path"
+            placeholder="items.0.title"
+            value={form.transformPath}
+            onChange={(transformPath) => onChange({ ...form, transformPath })}
+          />
         ) : null}
         {form.transformMode === 'join' || form.transformMode === 'split' ? (
-          <label>
-            Separator
-            <Input
-              disabled={isDisabled}
-              value={form.transformSeparator}
-              onChange={(event) =>
-                onChange({ ...form, transformSeparator: event.target.value })
-              }
-            />
-          </label>
+          <TextInputField
+            isDisabled={isDisabled}
+            label="Separator"
+            name="transform-separator"
+            value={form.transformSeparator}
+            onChange={(transformSeparator) =>
+              onChange({ ...form, transformSeparator })
+            }
+          />
         ) : null}
-      </div>
-    </fieldset>
+      </FieldGrid>
+    </FormFieldset>
   )
 }

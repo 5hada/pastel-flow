@@ -1,7 +1,18 @@
 import type { DateValue } from '@internationalized/date'
 
 import { parseDate } from '@internationalized/date'
-import { Button, Calendar, Card, DateField, DatePicker, Label } from '@heroui/react'
+import {
+  Button,
+  Calendar,
+  Card,
+  Checkbox,
+  DateField,
+  DatePicker,
+  Input,
+  Label,
+  TextArea,
+  TextField,
+} from '@heroui/react'
 import { useEffect, useState, type FormEvent } from 'react'
 import type { TodoItem } from '../../../shared/todos'
 import { CollectionListPanel } from '../../shared/components/CollectionListPanel'
@@ -126,22 +137,23 @@ export function TodosWorkspace({
       </div>
 
       <form className="task-form" onSubmit={handleSubmit}>
-        <label>
-          Title
-          <input
-            value={draft.title}
-            onChange={(event) =>
-              setDraft((currentDraft) => ({
-                ...currentDraft,
-                title: event.target.value,
-              }))
-            }
-          />
-        </label>
+        <TextField
+          name="todo-title"
+          value={draft.title}
+          onChange={(value) =>
+            setDraft((currentDraft) => ({
+              ...currentDraft,
+              title: value,
+            }))
+          }
+        >
+          <Label>Title</Label>
+          <Input />
+        </TextField>
         <div className="form-grid">
           <div>
             <DatePicker
-            className='w-60'
+              className="w-60"
               value={selectedDate}
               onChange={(date) => {
                 setSelectedDate(date)
@@ -186,45 +198,50 @@ export function TodosWorkspace({
               </DatePicker.Popover>
             </DatePicker>
           </div>
-          <label>
-            Category
-            <input
-              value={draft.category}
-              onChange={(event) =>
-                setDraft((currentDraft) => ({
-                  ...currentDraft,
-                  category: event.target.value,
-                }))
-              }
-            />
-          </label>
+          <TextField
+            name="todo-category"
+            value={draft.category}
+            onChange={(value) =>
+              setDraft((currentDraft) => ({
+                ...currentDraft,
+                category: value,
+              }))
+            }
+          >
+            <Label>Category</Label>
+            <Input />
+          </TextField>
         </div>
-        <label>
-          Details
-          <textarea
-            rows={5}
-            value={draft.details}
-            onChange={(event) =>
-              setDraft((currentDraft) => ({
-                ...currentDraft,
-                details: event.target.value,
-              }))
-            }
-          />
-        </label>
-        <label className="inline-check">
-          <input
-            checked={draft.completed}
-            type="checkbox"
-            onChange={(event) =>
-              setDraft((currentDraft) => ({
-                ...currentDraft,
-                completed: event.target.checked,
-              }))
-            }
-          />
-          Completed
-        </label>
+        <TextField
+          name="todo-details"
+          value={draft.details}
+          onChange={(value) =>
+            setDraft((currentDraft) => ({
+              ...currentDraft,
+              details: value,
+            }))
+          }
+        >
+          <Label>Details</Label>
+          <TextArea rows={5} />
+        </TextField>
+        <Checkbox
+          className="inline-check"
+          isSelected={draft.completed}
+          onChange={(isSelected) =>
+            setDraft((currentDraft) => ({
+              ...currentDraft,
+              completed: isSelected,
+            }))
+          }
+        >
+          <Checkbox.Control>
+            <Checkbox.Indicator />
+          </Checkbox.Control>
+          <Checkbox.Content>
+            <Label>Completed</Label>
+          </Checkbox.Content>
+        </Checkbox>
         <div className="form-actions">
           <Button variant="primary" type="submit" isDisabled={!draft.title.trim()}>
             저장
@@ -255,14 +272,18 @@ export function TodosWorkspace({
         </dl>
       ) : null}
 
-      <label className="inline-check">
-        <input
-          checked={includeCompletedTodos}
-          type="checkbox"
-          onChange={(event) => onIncludeCompletedChange(event.target.checked)}
-        />
-        Show completed
-      </label>
+      <Checkbox
+        className="inline-check"
+        isSelected={includeCompletedTodos}
+        onChange={onIncludeCompletedChange}
+      >
+        <Checkbox.Control>
+          <Checkbox.Indicator />
+        </Checkbox.Control>
+        <Checkbox.Content>
+          <Label>Show completed</Label>
+        </Checkbox.Content>
+      </Checkbox>
     </Card>
   )
 }

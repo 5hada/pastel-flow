@@ -1,8 +1,12 @@
-import { Button, Card, Input, ListBox, Select } from '@heroui/react'
+import { Button } from '@heroui/react'
 import {
   getDeviceAccessLevelLabel,
   type LinkedDevice,
 } from '../../../../shared/devices'
+import {
+  SelectField,
+  TextInputField,
+} from '../../../shared/components/HeroForm'
 
 export type LinkedDeviceEditorProps = {
   device: LinkedDevice
@@ -16,64 +20,45 @@ export function LinkedDeviceEditor({
   onRemove,
 }: LinkedDeviceEditorProps) {
   return (
-    <Card className="linked-device-row">
-      <label>
-        기기 이름
-        <Input
-          value={device.name}
-          onChange={(event) =>
+    <div className="linked-device-row">
+      <TextInputField
+        label="기기 이름"
+        name={`linked-device-${device.id}-name`}
+        value={device.name}
+        onChange={(value) =>
             onChange({
               ...device,
-              name: event.target.value,
+              name: value,
             })
-          }
-        />
-      </label>
-      <label>
-        기기 ID
-        <Input
-          value={device.id}
-          onChange={(event) =>
+        }
+      />
+      <TextInputField
+        label="기기 ID"
+        name={`linked-device-${device.id}-id`}
+        value={device.id}
+        onChange={(value) =>
             onChange({
               ...device,
-              id: event.target.value,
+              id: value,
             })
-          }
-        />
-      </label>
-      <label>
-        허용 수준
-        <Select
-          selectedKey={device.accessLevel}
-          onSelectionChange={(key) =>
+        }
+      />
+      <SelectField
+        label="허용 수준"
+        selectedKey={device.accessLevel}
+        options={(['blocked', 'visible', 'executable', 'trusted'] as const).map(
+          (accessLevel) => ({
+            value: accessLevel,
+            label: getDeviceAccessLevelLabel(accessLevel),
+          }),
+        )}
+        onChange={(accessLevel) =>
             onChange({
               ...device,
-              accessLevel: String(key) as typeof device.accessLevel,
+              accessLevel,
             })
-          }
-        >
-          <Select.Trigger>
-            <Select.Value />
-            <Select.Indicator />
-          </Select.Trigger>
-          <Select.Popover>
-            <ListBox>
-              {(['blocked', 'visible', 'executable', 'trusted'] as const).map(
-                (accessLevel) => (
-                  <ListBox.Item
-                    id={accessLevel}
-                    key={accessLevel}
-                    textValue={getDeviceAccessLevelLabel(accessLevel)}
-                  >
-                    {getDeviceAccessLevelLabel(accessLevel)}
-                    <ListBox.ItemIndicator />
-                  </ListBox.Item>
-                ),
-              )}
-            </ListBox>
-          </Select.Popover>
-        </Select>
-      </label>
+        }
+      />
       <Button
         className="danger-button"
         variant="danger"
@@ -82,6 +67,6 @@ export function LinkedDeviceEditor({
       >
         제거
       </Button>
-    </Card>
+    </div>
   )
 }

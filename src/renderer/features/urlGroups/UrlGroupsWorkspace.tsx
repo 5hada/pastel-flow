@@ -1,4 +1,4 @@
-import { Button, Card } from '@heroui/react'
+import { Button, Card, Input, Label, TextArea, TextField } from '@heroui/react'
 import { useEffect, useState, type FormEvent } from 'react'
 import type { UrlGroup, UrlGroupItem } from '../../../shared/urlGroups'
 import { normalizeUrlGroupItems } from '../../../shared/urlGroups'
@@ -122,58 +122,59 @@ export function UrlGroupsWorkspace({
 
       <form className="task-form" onSubmit={handleSubmit}>
         <div className="form-grid">
-          <label>
-            이름
-            <input
-              value={draft.name}
-              onChange={(event) =>
-                setDraft((currentDraft) => ({
-                  ...currentDraft,
-                  name: event.target.value,
-                }))
-              }
-            />
-          </label>
-          <label>
-            Tags
-            <input
-              placeholder="쉼표로 구분"
-              value={draft.tags}
-              onChange={(event) =>
-                setDraft((currentDraft) => ({
-                  ...currentDraft,
-                  tags: event.target.value,
-                }))
-              }
-            />
-          </label>
+          <TextField
+            name="url-group-name"
+            value={draft.name}
+            onChange={(value) =>
+              setDraft((currentDraft) => ({
+                ...currentDraft,
+                name: value,
+              }))
+            }
+          >
+            <Label>이름</Label>
+            <Input />
+          </TextField>
+          <TextField
+            name="url-group-tags"
+            value={draft.tags}
+            onChange={(value) =>
+              setDraft((currentDraft) => ({
+                ...currentDraft,
+                tags: value,
+              }))
+            }
+          >
+            <Label>Tags</Label>
+            <Input placeholder="쉼표로 구분" />
+          </TextField>
         </div>
-        <label>
-          설명
-          <input
-            value={draft.description}
-            onChange={(event) =>
-              setDraft((currentDraft) => ({
-                ...currentDraft,
-                description: event.target.value,
-              }))
-            }
-          />
-        </label>
-        <label>
-          URLs
-          <textarea
-            placeholder="한 줄에 하나씩 URL 입력"
-            rows={8}
-            value={draft.urls}
-            onChange={(event) =>
-              setDraft((currentDraft) => ({
-                ...currentDraft,
-                urls: event.target.value,
-              }))
-            }
-          />
-        </label>
+        <TextField
+          name="url-group-description"
+          value={draft.description}
+          onChange={(value) =>
+            setDraft((currentDraft) => ({
+              ...currentDraft,
+              description: value,
+            }))
+          }
+        >
+          <Label>설명</Label>
+          <Input />
+        </TextField>
+        <TextField
+          name="url-group-urls"
+          value={draft.urls}
+          onChange={(value) =>
+            setDraft((currentDraft) => ({
+              ...currentDraft,
+              urls: value,
+            }))
+          }
+        >
+          <Label>URLs</Label>
+          <TextArea placeholder="한 줄에 하나씩 URL 입력" rows={8} />
+        </TextField>
         <div className="form-actions">
           <Button variant="primary" type="submit" isDisabled={!draft.name.trim()}>
             저장

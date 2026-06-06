@@ -1,4 +1,4 @@
-import { Button } from '@heroui/react'
+import { Button, Input } from '@heroui/react'
 import { useState, type ReactNode } from 'react'
 import type { ActionDefinition } from '../../../shared/actions'
 import { isRestrictedDevicePolicy } from '../../../shared/devices'
@@ -308,7 +308,8 @@ function EditableFolderRow({
 
   return (
     <div className="sidebar-folder-editor">
-      <input
+      <Input
+        aria-label="폴더 이름"
         value={name}
         onBlur={() => void onRenameFolder(folder.id, name)}
         onChange={(event) => setName(event.target.value)}

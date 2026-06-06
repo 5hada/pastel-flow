@@ -18,11 +18,13 @@ export function configureAppEnvironment(importMetaUrl: string): AppEnvironment {
   const mainDist = path.join(appRoot, 'dist-electron')
   const rendererDist = path.join(appRoot, 'dist')
   const publicPath = viteDevServerUrl ? path.join(appRoot, 'public') : rendererDist
+  const userDataPath = path.join(app.getPath('appData'), 'pastel-flow')
 
   process.env.APP_ROOT = appRoot
   process.env.VITE_PUBLIC = publicPath
 
-  app.setPath('userData', path.join(app.getPath('appData'), 'pastel-flow'))
+  app.setPath('userData', userDataPath)
+  app.setPath('sessionData', path.join(userDataPath, 'chromium-session'))
   app.setName('Pastel Flow')
   app.setAppUserModelId('com.pastelflow.app')
 

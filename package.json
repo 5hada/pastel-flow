@@ -1,14 +1,14 @@
 {
   "name": "pastel-flow",
   "private": true,
-  "version": "0.9.3",
+  "version": "0.9.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "typecheck": "tsc --noEmit",
     "postinstall": "electron-builder install-app-deps",
     "build": "vite build && electron-builder",
     "release": "vite build && electron-builder --publish always",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "check": "npm run lint && npm run typecheck",
     "preview": "vite preview",

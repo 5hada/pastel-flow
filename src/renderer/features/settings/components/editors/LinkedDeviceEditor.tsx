@@ -2,11 +2,11 @@ import { Button } from '@heroui/react'
 import {
   getDeviceAccessLevelLabel,
   type LinkedDevice,
-} from '../../../../shared/devices'
+} from '../../../../../shared/devices'
 import {
   SelectField,
   TextInputField,
-} from '../../../shared/components/HeroForm'
+} from '../../../../shared/components/HeroForm'
 
 export type LinkedDeviceEditorProps = {
   device: LinkedDevice

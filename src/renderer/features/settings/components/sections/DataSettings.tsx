@@ -1,8 +1,8 @@
 import {
   FormSection,
   TextInputField,
-} from '../../../shared/components/HeroForm'
-import { SettingsDetailItem } from './SettingsDetailItem'
+} from '../../../../shared/components/HeroForm'
+import { SettingsDetailItem } from '../core/SettingsDetailItem'
 
 export type DataSettingsProps = {
   userDataPath: string

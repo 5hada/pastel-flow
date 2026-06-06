@@ -28,6 +28,7 @@ release/
 .cache/
 .vite/
 coverage/
+temp/
 
 # Editor directories and files
 .vscode/*

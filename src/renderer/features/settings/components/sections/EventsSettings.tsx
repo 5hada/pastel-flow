@@ -1,9 +1,9 @@
 import { Button } from '@heroui/react'
-import type { AppSettings } from '../../../../shared/settings'
+import type { AppSettings } from '../../../../../shared/settings'
 import {
   FormSection,
   TextInputField,
-} from '../../../shared/components/HeroForm'
+} from '../../../../shared/components/HeroForm'
 
 export type EventsSettingsProps = {
   form: AppSettings

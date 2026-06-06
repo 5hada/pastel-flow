@@ -1,15 +1,15 @@
 import type {
   AppSettings,
   BrowserExecutablePaths,
-} from '../../../../shared/settings'
-import { getBrowserProfileSourceLabel } from '../../../shared/utils/viewLabels'
+} from '../../../../../shared/settings'
+import { getBrowserProfileSourceLabel } from '../../../../shared/utils/viewLabels'
 import {
   FieldGrid,
   FormSection,
   SelectField,
   TextInputField,
-} from '../../../shared/components/HeroForm'
-import { ProfilePresetEditor } from './ProfilePresetEditor'
+} from '../../../../shared/components/HeroForm'
+import { ProfilePresetEditor } from '../editors/ProfilePresetEditor'
 
 export type BrowserSettingsProps = {
   form: AppSettings

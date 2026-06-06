@@ -12,7 +12,7 @@ import type {
   SettingsCategory,
   SettingsSaveState,
 } from '../../shared/state/taskFormState'
-import { SettingsCategoryContent } from './components/SettingsCategoryContent'
+import { SettingsCategoryContent } from './components/core/SettingsCategoryContent'
 
 export type AppSettingsPanelProps = {
   currentDevice: CurrentDevice

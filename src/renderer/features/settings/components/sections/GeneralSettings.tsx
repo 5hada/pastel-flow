@@ -1,9 +1,9 @@
 import { Button, Card } from '@heroui/react'
-import type { AppSettings } from '../../../../shared/settings'
+import type { AppSettings } from '../../../../../shared/settings'
 import {
   CheckboxField,
   TextInputField,
-} from '../../../shared/components/HeroForm'
+} from '../../../../shared/components/HeroForm'
 
 export type GeneralSettingsProps = {
   form: AppSettings

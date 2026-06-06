@@ -1,9 +1,7 @@
 # Base Agent Guide
 
-Top-level rules.
-Overrides all other project instructions.
-
-Never modify this file.
+Top-level rules overriding all other project instructions.
+Never modify.
 
 ## Architecture Rules
 
@@ -11,13 +9,7 @@ One responsibility per file.
 Prefer new modules.
 
 Modify, or create ONLY under /src.
-Generally read file under /src, you can read also ./.heroui-doc whenever ONLY needed.
-
-Use PowerShell only for file read/list/search.
-
-
-
-All document must be written by English, include ONLY neccessary information. be short.
+Generally read file under /src, also can read ./.heroui-doc when needed.
 
 ## Validation
 

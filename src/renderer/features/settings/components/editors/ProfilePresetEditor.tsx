@@ -2,11 +2,11 @@ import { Button } from '@heroui/react'
 import type {
   AppSettings,
   BrowserProfilePreset,
-} from '../../../../shared/settings'
+} from '../../../../../shared/settings'
 import {
   SelectField,
   TextInputField,
-} from '../../../shared/components/HeroForm'
+} from '../../../../shared/components/HeroForm'
 
 export type ProfilePresetEditorProps = {
   form: AppSettings

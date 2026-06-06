@@ -1,6 +1,6 @@
 # Pastel Tool Module Specification v1.1
 
-사용자 전용 규격서
+상세 규격서
 
 ## 개요
 
@@ -59,7 +59,7 @@ my-tool/
 
 # manifest.json
 
-manifest.json은 도구의 메타데이터를 정의한다.
+도구의 메타데이터를 정의한다.
 
 예시:
 
@@ -640,7 +640,7 @@ export async function run(input, context) {
 
 권한은 manifest.json에 명시해야 한다.
 
-예시:
+form:
 
 ```json
 "permissions": [
@@ -716,21 +716,19 @@ context.dataSources.query("customersDb", { limit: 10 })
 
 # 사용자 정의 UI
 
-기본적으로 Pastel Flow는 입력 정의를 기반으로 자동 UI를 생성한다.
+입력 정의를 기반으로 Pastel Flow가 자동 UI를 생성한다.
 
 ---
 
 ## view.html
 
-복잡한 인터페이스가 필요한 경우 사용할 수 있다.
+복잡한 인터페이스가 필요한 경우 사용 가능
 
 ---
 
 # 자동화
 
-모든 도구는 자동화 환경에서도 동작해야 한다.
-
-따라서 다음 규칙을 준수해야 한다.
+모든 도구는 자동화 환경에서도 동작해야 하므로 다음 규칙을 준수해야 한다.
 
 권장:
 
@@ -748,8 +746,6 @@ export async function run(input) {
 alert("완료");
 document.querySelector(...);
 ```
-
-실행 결과가 UI에 의존하면 자동화에서 사용할 수 없다.
 
 ---
 
@@ -770,11 +766,9 @@ Pastel Flow는 해당 오류를 사용자에게 표시한다.
 
 # 설계 철학
 
-Pastel Tool Module은 "페이지"가 아니라 "함수"이다.
+Pastel Tool Module은 함수로 정의되어야 함.
 
-사용자 인터페이스는 선택 사항이며,
-
-도구의 핵심은 다음 구조를 따른다.
+다음 구조를 따른다.
 
 ```txt
 Input

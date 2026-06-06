@@ -1,5 +1,5 @@
-import type { AppSettings } from '../../../../shared/settings'
-import { FormSection, TextInputField } from '../../../shared/components/HeroForm'
+import type { AppSettings } from '../../../../../shared/settings'
+import { FormSection, TextInputField } from '../../../../shared/components/HeroForm'
 
 export type ShortcutsSettingsProps = {
   form: AppSettings

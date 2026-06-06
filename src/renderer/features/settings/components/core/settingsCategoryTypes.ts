@@ -1,4 +1,4 @@
-import type { AppSettingsPanelProps } from '../AppSettingsPanel'
+import type { AppSettingsPanelProps } from '../../AppSettingsPanel'
 
 export type SettingsCategoryContentProps = Omit<
   AppSettingsPanelProps,

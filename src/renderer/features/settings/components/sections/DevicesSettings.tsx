@@ -1,9 +1,9 @@
 import { Button } from '@heroui/react'
-import type { CurrentDevice } from '../../../../shared/devices'
-import type { AppSettings } from '../../../../shared/settings'
-import { FormSection } from '../../../shared/components/HeroForm'
-import { createEmptyLinkedDevice } from '../../../shared/utils/taskFormTransforms'
-import { LinkedDeviceEditor } from './LinkedDeviceEditor'
+import type { CurrentDevice } from '../../../../../shared/devices'
+import type { AppSettings } from '../../../../../shared/settings'
+import { FormSection } from '../../../../shared/components/HeroForm'
+import { createEmptyLinkedDevice } from '../../../../shared/utils/taskFormTransforms'
+import { LinkedDeviceEditor } from '../editors/LinkedDeviceEditor'
 
 export type DevicesSettingsProps = {
   currentDevice: CurrentDevice

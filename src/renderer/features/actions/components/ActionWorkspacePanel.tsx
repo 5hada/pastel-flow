@@ -43,6 +43,7 @@ import {
   SelectField,
 } from '../../../shared/components/HeroForm'
 import { getWorkspaceFolderPathLabel } from '../../../shared/utils/workspaceFolderLabels'
+import { filterByFolder } from '../../../shared/utils/collectionFilters'
 
 export type ActionWorkspacePanelProps = {
   actions: ActionDefinition[]
@@ -462,22 +463,6 @@ function ActionSchemaList({
       )}
     </div>
   )
-}
-
-function filterByFolder<TItem extends { id: string }>(
-  items: TItem[],
-  folderId: string,
-  assignments: Record<string, string>,
-): TItem[] {
-  if (folderId === 'all') {
-    return items
-  }
-
-  if (folderId === 'favorites') {
-    return []
-  }
-
-  return items.filter((item) => assignments[item.id] === folderId)
 }
 
 function DetailItem({ label, value }: { label: string; value: string }) {

@@ -1,10 +1,10 @@
 import { Button } from '@heroui/react'
-import type { SyncImportResult, SyncStatus } from '../../../../shared/sync'
+import type { SyncImportResult, SyncStatus } from '../../../../../shared/sync'
 import {
   formatDate,
   getSyncModeLabel,
-} from '../../../shared/utils/viewLabels'
-import { SettingsDetailItem } from './SettingsDetailItem'
+} from '../../../../shared/utils/viewLabels'
+import { SettingsDetailItem } from '../core/SettingsDetailItem'
 
 export type SyncSettingsProps = {
   syncMessage: string | null

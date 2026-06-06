@@ -1,8 +1,8 @@
-import type { AppSettings } from '../../../../shared/settings'
+import type { AppSettings } from '../../../../../shared/settings'
 import {
   CheckboxField,
   FormSection,
-} from '../../../shared/components/HeroForm'
+} from '../../../../shared/components/HeroForm'
 
 export type DeveloperSettingsProps = {
   form: AppSettings

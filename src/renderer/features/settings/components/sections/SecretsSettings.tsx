@@ -2,12 +2,12 @@ import { Button } from '@heroui/react'
 import type {
   LocalSecretMetadata,
   SecretStorageStatus,
-} from '../../../../shared/secrets'
-import type { SecretFormState } from '../../../shared/state/taskFormState'
+} from '../../../../../shared/secrets'
+import type { SecretFormState } from '../../../../shared/state/taskFormState'
 import {
   FormSection,
   TextInputField,
-} from '../../../shared/components/HeroForm'
+} from '../../../../shared/components/HeroForm'
 
 export type SecretsSettingsProps = {
   secretForm: SecretFormState

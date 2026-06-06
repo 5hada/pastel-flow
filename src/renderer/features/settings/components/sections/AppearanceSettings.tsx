@@ -13,20 +13,20 @@ import {
 } from '@heroui/react'
 import type { Color } from '@heroui/react'
 import type { CSSProperties } from 'react'
-import type { AppSettings, ThemeMode } from '../../../../shared/settings'
+import type { AppSettings, ThemeMode } from '../../../../../shared/settings'
 import {
   themeColorDefinitions,
   themeColorGroups,
   themePreviewColorSets,
   type ThemeColorDefinition,
-} from '../../../../shared/settings/themeTokens'
+} from '../../../../../shared/settings/themeTokens'
 import {
   FormFieldset,
   SelectField,
   TextAreaField,
   TextInputField,
-} from '../../../shared/components/HeroForm'
-import { getThemeModeLabel } from '../../../shared/utils/viewLabels'
+} from '../../../../shared/components/HeroForm'
+import { getThemeModeLabel } from '../../../../shared/utils/viewLabels'
 
 export type AppearanceSettingsProps = {
   form: AppSettings

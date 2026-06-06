@@ -1,8 +1,19 @@
-import { app, autoUpdater } from 'electron'
+import { app } from 'electron'
 
-const updateFeedUrlEnvName = 'PASTEL_FLOW_UPDATE_FEED_URL'
 const initialUpdateCheckDelayMs = 30_000
 const updateCheckIntervalMs = 4 * 60 * 60 * 1000
+
+type AutoUpdater = {
+  autoDownload: boolean
+  autoInstallOnAppQuit: boolean
+  checkForUpdatesAndNotify(): Promise<unknown>
+  off(eventName: 'error', listener: (error: Error) => void): void
+  on(eventName: 'error', listener: (error: Error) => void): void
+}
+
+type ElectronUpdaterModule = {
+  autoUpdater: AutoUpdater
+}
 
 type AutoUpdateService = {
   checkNow(): void
@@ -10,25 +21,47 @@ type AutoUpdateService = {
 }
 
 export function createAutoUpdateService(): AutoUpdateService {
-  const feedUrl = process.env[updateFeedUrlEnvName]?.trim()
+  let disposed = false
   let initialCheckTimer: ReturnType<typeof setTimeout> | undefined
   let updateCheckTimer: ReturnType<typeof setInterval> | undefined
+  let updater: AutoUpdater | undefined
 
   function handleUpdateError() {
     return undefined
   }
 
+  async function loadUpdater(): Promise<AutoUpdater | undefined> {
+    if (updater) {
+      return updater
+    }
+
+    if (!app.isPackaged) {
+      return undefined
+    }
+
+    try {
+      const module = await import('electron-updater') as ElectronUpdaterModule
+      updater = module.autoUpdater
+      updater.autoDownload = true
+      updater.autoInstallOnAppQuit = true
+      updater.on('error', handleUpdateError)
+      return updater
+    } catch {
+      return undefined
+    }
+  }
+
   function checkNow() {
-    if (!app.isPackaged || !feedUrl) {
+    if (disposed || !app.isPackaged) {
       return
     }
 
-    autoUpdater.checkForUpdates()
+    void loadUpdater().then((loadedUpdater) =>
+      loadedUpdater?.checkForUpdatesAndNotify(),
+    )
   }
 
-  if (app.isPackaged && feedUrl) {
-    autoUpdater.on('error', handleUpdateError)
-    autoUpdater.setFeedURL({ url: feedUrl })
+  if (app.isPackaged) {
     initialCheckTimer = setTimeout(checkNow, initialUpdateCheckDelayMs)
     initialCheckTimer.unref?.()
 
@@ -39,7 +72,8 @@ export function createAutoUpdateService(): AutoUpdateService {
   return {
     checkNow,
     dispose() {
-      autoUpdater.off('error', handleUpdateError)
+      disposed = true
+      updater?.off('error', handleUpdateError)
       if (initialCheckTimer) {
         clearTimeout(initialCheckTimer)
         initialCheckTimer = undefined

@@ -2,12 +2,16 @@ import { app, BrowserWindow, Menu } from 'electron'
 import { createAutoUpdateService } from './app/autoUpdate'
 import { configureAppEnvironment } from './app/appEnvironment'
 import { createAppWindow } from './app/appWindow'
-import { initializeMainProcessServices } from './app/mainProcessServices'
+import {
+  initializeMainProcessServices,
+  type MainProcessServices,
+} from './app/mainProcessServices'
 import { registerSingleInstanceGuard } from './app/singleInstance'
 // import { installExtension, REDUX_DEVTOOLS } from 'electron-devtools-installer';
 
 let win: BrowserWindow | null = null
 let disposeAutoUpdateService: (() => void) | undefined
+let mainProcessServices: MainProcessServices | undefined
 const appEnvironment = configureAppEnvironment(import.meta.url)
 
 function createWindow() {
@@ -41,12 +45,14 @@ if (registerSingleInstanceGuard({
   app.on('before-quit', () => {
     disposeAutoUpdateService?.()
     disposeAutoUpdateService = undefined
+    mainProcessServices?.dispose()
+    mainProcessServices = undefined
   })
 
   app.whenReady().then(async () => {
     Menu.setApplicationMenu(null)
 
-    await initializeMainProcessServices(app.getPath('userData'))
+    mainProcessServices = await initializeMainProcessServices(app.getPath('userData'))
     disposeAutoUpdateService = createAutoUpdateService().dispose
     createWindow()
   })

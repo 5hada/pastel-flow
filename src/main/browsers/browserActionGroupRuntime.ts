@@ -111,6 +111,18 @@ export async function initializeBrowserActionGroupRuntime(
   await getInstalledBrowserBridge(dataDir)
 }
 
+export function disposeBrowserActionGroupRuntime(): void {
+  actionGroupsByActionId.clear()
+  installedBridgesByDataDir.forEach((bridgePromise) => {
+    void bridgePromise
+      .then((installedBridge) => {
+        installedBridge.dispose()
+      })
+      .catch(() => undefined)
+  })
+  installedBridgesByDataDir.clear()
+}
+
 async function getInstalledBrowserBridge(
   dataDir: string,
 ): Promise<InstalledBrowserBridge> {

@@ -28,6 +28,7 @@ export function createAppSettingsStore({
   const settingsFilePath = path.join(dataDir, 'appSettings.json')
   const settingsFile = createAtomicJsonFile<AppSettingsFile>({
     filePath: settingsFilePath,
+    createMissingFile: true,
     defaultValue: () => ({ settings: defaultAppSettings }),
     normalize(value) {
       const candidate = value as Partial<AppSettingsFile>

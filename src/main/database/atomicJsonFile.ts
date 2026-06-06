@@ -20,6 +20,7 @@ export type AtomicJsonFileOptions<TValue> = {
   filePath: string
   defaultValue(): TValue
   normalize(value: unknown): TValue
+  createMissingFile?: boolean
   resetEmptyFile?: boolean
   resetInvalidJson?: boolean
 }
@@ -28,6 +29,7 @@ export function createAtomicJsonFile<TValue>({
   defaultValue,
   filePath,
   normalize,
+  createMissingFile = false,
   resetEmptyFile = false,
   resetInvalidJson = false,
 }: AtomicJsonFileOptions<TValue>): AtomicJsonFile<TValue> {
@@ -45,7 +47,11 @@ export function createAtomicJsonFile<TValue>({
       return normalize(JSON.parse(raw))
     } catch (error) {
       if (isNodeError(error) && error.code === 'ENOENT') {
-        return defaultValue()
+        const value = defaultValue()
+        if (createMissingFile) {
+          await write(value)
+        }
+        return value
       }
 
       if (error instanceof SyntaxError && resetInvalidJson) {

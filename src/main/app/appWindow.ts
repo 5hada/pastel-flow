@@ -10,7 +10,8 @@ export function createAppWindow(environment: AppEnvironment): BrowserWindow {
     webPreferences: {
       preload: environment.preloadPath,
       contextIsolation: true,
-      // nodeIntegration: false,
+      nodeIntegration: false,
+      sandbox: false,
       // devTools: true,
     },
   })
@@ -23,7 +24,11 @@ export function createAppWindow(environment: AppEnvironment): BrowserWindow {
   } else {
     browserWindow.loadFile(path.join(environment.rendererDist, 'index.html'))
   }
-    browserWindow.webContents.on('did-finish-load', () => {
+  browserWindow.webContents.on('preload-error', (_event, preloadPath, error) => {
+    console.error(`Pastel Flow preload failed: ${preloadPath}`, error)
+  })
+
+  browserWindow.webContents.on('did-finish-load', () => {
     // browserWindow.webContents.openDevTools({
     //   mode: 'detach',
     // })

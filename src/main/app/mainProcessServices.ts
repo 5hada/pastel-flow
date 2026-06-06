@@ -1,7 +1,10 @@
 import { ipcMain, safeStorage } from 'electron'
 import { createActionAdapterRegistry } from '../actions/adapters/actionAdapterRegistry'
 import { browserAdapter } from '../actions/adapters/browserAdapter'
-import { initializeBrowserActionGroupRuntime } from '../browsers/browserActionGroupRuntime'
+import {
+  disposeBrowserActionGroupRuntime,
+  initializeBrowserActionGroupRuntime,
+} from '../browsers/browserActionGroupRuntime'
 import { crawlerAdapter } from '../actions/adapters/crawlerAdapter'
 import { transformAdapter } from '../actions/adapters/transformAdapter'
 import {
@@ -37,7 +40,13 @@ import { applyLoginItemSettings } from './loginItems'
 import { createObservedWorkflowStore } from './workflowStoreEvents'
 import { resetStaleRunningWorkflows } from './workflowStartup'
 
-export async function initializeMainProcessServices(dataDir: string): Promise<void> {
+export type MainProcessServices = {
+  dispose(): void
+}
+
+export async function initializeMainProcessServices(
+  dataDir: string,
+): Promise<MainProcessServices> {
   const database = createSqliteDatabase({ dataDir })
   const appSettingsStore = createAppSettingsStore({
     dataDir,
@@ -155,10 +164,19 @@ export async function initializeMainProcessServices(dataDir: string): Promise<vo
     appSettingsStore,
     deviceStore,
   )
-  createWorkflowScheduler({
+  const workflowScheduler = createWorkflowScheduler({
     appSettingsStore,
     deviceStore,
     workflowStore,
     workflowRunner,
-  }).start()
+  })
+  workflowScheduler.start()
+
+  return {
+    dispose() {
+      workflowScheduler.stop()
+      disposeBrowserActionGroupRuntime()
+      database.close()
+    },
+  }
 }

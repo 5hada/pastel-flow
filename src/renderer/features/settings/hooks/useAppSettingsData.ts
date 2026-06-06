@@ -66,14 +66,15 @@ export function useAppSettingsData(
   }
 
   async function loadAppSettings() {
-    if (!window.pastelFlow) {
+    const pastelFlowApi = await waitForPastelFlowApi()
+    if (!pastelFlowApi) {
       setErrorMessage('Pastel Flow API를 불러오지 못했습니다.')
       return
     }
 
     try {
       setSettingsErrorMessage(null)
-      applySnapshot(await window.pastelFlow.settings.get())
+      applySnapshot(await pastelFlowApi.settings.get())
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     }
@@ -178,4 +179,18 @@ export function useAppSettingsData(
     setSettingsSaveState,
     updateSettings,
   }
+}
+
+async function waitForPastelFlowApi() {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    if (window.pastelFlow) {
+      return window.pastelFlow
+    }
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 50)
+    })
+  }
+
+  return undefined
 }

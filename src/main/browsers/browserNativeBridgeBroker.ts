@@ -26,6 +26,11 @@ type PendingRequest = {
   timeoutId: ReturnType<typeof setTimeout>
 }
 
+type ClientWaiter = {
+  notify(): void
+  reject(error: Error): void
+}
+
 const maxBrokerLineBytes = 1024 * 1024
 const bridgeConnectionTimeoutMs = 15000
 const bridgeResponseTimeoutMs = 15000
@@ -34,7 +39,7 @@ export async function createBrowserNativeBridgeBroker(): Promise<BrowserNativeBr
   const token = randomUUID()
   const server = createServer()
   const pendingRequests = new Map<string, PendingRequest>()
-  const waiters = new Set<() => void>()
+  const waiters = new Set<ClientWaiter>()
   const disconnectListeners = new Set<() => void>()
   const eventListeners = new Set<(event: BrowserBridgeEvent) => void>()
   let client: Socket | null = null
@@ -172,7 +177,10 @@ export async function createBrowserNativeBridgeBroker(): Promise<BrowserNativeBr
       disposed = true
       client?.destroy()
       server.close()
-      waiters.clear()
+      rejectClientWaiters(
+        waiters,
+        '브라우저 확장 제어 broker가 종료되었습니다.',
+      )
       disconnectListeners.clear()
       eventListeners.clear()
       rejectPendingRequests(
@@ -275,7 +283,7 @@ async function waitForClient({
 }: {
   getClient(): Socket | null
   timeoutMs: number
-  waiters: Set<() => void>
+  waiters: Set<ClientWaiter>
 }): Promise<Socket> {
   const existingClient = getWritableClient(getClient())
   if (existingClient) {
@@ -283,8 +291,16 @@ async function waitForClient({
   }
 
   return new Promise((resolve, reject) => {
+    const waiter: ClientWaiter = {
+      notify: () => onClient(),
+      reject(error) {
+        clearTimeout(timeoutId)
+        waiters.delete(waiter)
+        reject(error)
+      },
+    }
     const timeoutId = setTimeout(() => {
-      waiters.delete(onClient)
+      waiters.delete(waiter)
       reject(
         new Error(
           [
@@ -302,11 +318,11 @@ async function waitForClient({
       }
 
       clearTimeout(timeoutId)
-      waiters.delete(onClient)
+      waiters.delete(waiter)
       resolve(client)
     }
 
-    waiters.add(onClient)
+    waiters.add(waiter)
   })
 }
 
@@ -332,12 +348,19 @@ function timingSafeStringEqual(left: string, right: string): boolean {
   )
 }
 
-function notifyWaiters(waiters: Set<() => void>): void {
-  waiters.forEach((waiter) => waiter())
+function notifyWaiters(waiters: Set<ClientWaiter>): void {
+  waiters.forEach((waiter) => waiter.notify())
 }
 
 function notifyDisconnectListeners(listeners: Set<() => void>): void {
   listeners.forEach((listener) => listener())
+}
+
+function rejectClientWaiters(waiters: Set<ClientWaiter>, message: string): void {
+  waiters.forEach((waiter) => {
+    waiter.reject(new Error(message))
+  })
+  waiters.clear()
 }
 
 function listen(server: Server): Promise<number> {

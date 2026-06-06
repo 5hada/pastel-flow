@@ -6,6 +6,9 @@ import type { CrawlerConfig } from '../../../shared/actions'
 import type { WorkflowState } from '../../../shared/workflows'
 import type { ActionAdapter } from './actionAdapter'
 
+const maxCrawlerUrlCount = 25
+const maxConcurrentCrawlerFetches = 4
+
 export const crawlerAdapter: ActionAdapter<CrawlerConfig, WorkflowState> = {
   type: 'crawler_action',
   validateConfig(config) {
@@ -17,15 +20,16 @@ export const crawlerAdapter: ActionAdapter<CrawlerConfig, WorkflowState> = {
   },
   async run({ dataDir, action }) {
     const config = normalizeCrawlerConfig(action.config)
-    await Promise.all(config.urls.map(assertCrawlableUrl))
 
     const outputDirectory = path.join(dataDir, 'crawler-results')
     const outputPath = path.join(
       outputDirectory,
       `${action.id}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`,
     )
-    const results = await Promise.all(
-      config.urls.map((url) => fetchCrawlerUrl(url, config.maxBytes)),
+    const results = await mapWithConcurrency(
+      config.urls,
+      maxConcurrentCrawlerFetches,
+      (url) => fetchCrawlerUrl(url, config.maxBytes),
     )
     const capturedCount = results.filter(
       (result) => result.status === 'captured',
@@ -82,6 +86,7 @@ function normalizeCrawlerConfig(config: Partial<CrawlerConfig>): CrawlerConfig {
       ? config.urls
           .map((url) => (typeof url === 'string' ? url.trim() : ''))
           .filter(Boolean)
+          .slice(0, maxCrawlerUrlCount)
       : [],
     maxBytes:
       typeof config.maxBytes === 'number' && Number.isFinite(config.maxBytes)
@@ -162,6 +167,30 @@ async function readResponsePreview(
   }
 
   return new TextDecoder().decode(bytes)
+}
+
+async function mapWithConcurrency<TInput, TOutput>(
+  values: TInput[],
+  concurrency: number,
+  mapper: (value: TInput) => Promise<TOutput>,
+): Promise<TOutput[]> {
+  const results: TOutput[] = []
+  let nextIndex = 0
+
+  async function worker() {
+    while (nextIndex < values.length) {
+      const currentIndex = nextIndex
+      nextIndex += 1
+      results[currentIndex] = await mapper(values[currentIndex])
+    }
+  }
+
+  const workerCount = Math.min(concurrency, values.length)
+  await Promise.all(
+    Array.from({ length: workerCount }, () => worker()),
+  )
+
+  return results
 }
 
 function getTitle(html: string): string | undefined {

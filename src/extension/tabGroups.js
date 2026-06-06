@@ -4,6 +4,7 @@ import {
 } from './constants.js'
 
 const groupReconciliationDelays = [250, 1200]
+const maxManagedGroupUrls = 25
 const pendingReconciliationTimers = new Map()
 let managedGroupTrackingStarted = false
 let postManagedGroupEvent = () => undefined
@@ -364,6 +365,7 @@ function normalizeUrls(urls) {
     ? urls
         .map(normalizeNavigationUrl)
         .filter((url) => url !== null)
+        .slice(0, maxManagedGroupUrls)
     : []
 }
 

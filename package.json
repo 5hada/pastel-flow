@@ -8,10 +8,28 @@
     "typecheck": "tsc --noEmit",
     "postinstall": "electron-builder install-app-deps",
     "build": "vite build && electron-builder",
+    "release": "vite build && electron-builder --publish always",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "check": "npm run lint && npm run typecheck",
     "preview": "vite preview",
     "test": "vitest"
+  },
+  "build": {
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "5hada",
+        "repo": "pastel-flow"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    }
   },
   "dependencies": {
     "@heroui/react": "^3.1.0",

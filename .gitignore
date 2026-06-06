@@ -38,8 +38,9 @@ coverage/
 *.njsproj
 *.sln
 *.sw?
-# heroui-agents-md
+
+# heroui
 .heroui-docs/
-dist-electron/main.js
-dist-electron/preload.mjs
-/dist-electron
+
+# etc
+RUNTIMEAUDIT.md

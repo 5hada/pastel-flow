@@ -17,6 +17,7 @@ export type CollectionListPanelProps = {
   headerAction?: ReactNode
   isFramed?: boolean
   items: CollectionListItem[]
+  itemActionLabel?: string
   title: string
   onEdit(id: string): void
 }
@@ -29,6 +30,7 @@ export function CollectionListPanel({
   eyebrow,
   isFramed = true,
   items,
+  itemActionLabel = '수정',
   onEdit,
   title,
 }: CollectionListPanelProps) {
@@ -73,7 +75,7 @@ export function CollectionListPanel({
                 variant="secondary"
                 onClick={() => onEdit(item.id)}
               >
-                수정
+                {itemActionLabel}
               </Button>
             </article>
           ))}

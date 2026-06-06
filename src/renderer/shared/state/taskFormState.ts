@@ -63,6 +63,7 @@ export type WorkspaceMode =
 export type NavigationCategory =
   | 'all'
   | 'favorites'
+  | 'due_soon'
   | 'running'
   | 'scheduled'
   | 'failed'

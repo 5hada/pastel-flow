@@ -11,6 +11,7 @@ import type { WorkspaceContext, WorkspaceTemplate } from './types'
 import type { WorkflowDefinition } from '../../../../shared/workflows'
 import type { RegisteredToolModule } from '../../../../shared/tools'
 import { createToolInputDefaults } from '../../utils/viewLabels'
+import { filterTodosByCategory } from '../../utils/todoFilters'
 
 export const workspaceTemplates: WorkspaceTemplate[] = [
   {
@@ -116,8 +117,14 @@ export const workspaceTemplates: WorkspaceTemplate[] = [
     render(context: WorkspaceContext) {
       const props = {
         isLoading: context.isLoading,
+        selectedCollectionFolderId: context.selectedCollectionFolderId,
         selectedUrlGroupId: context.selectedUrlGroupId,
-        urlGroups: context.urlGroups,
+        urlGroups: filterByFolder(
+          context.urlGroups,
+          context.selectedCollectionFolderId,
+          context.appSettings.workspaceFolderAssignments,
+        ),
+        workspaceFolders: context.appSettings.workspaceFolders,
         onCreateUrlGroup: context.handleCreateUrlGroup,
         onDeleteUrlGroup: context.handleDeleteUrlGroup,
         onSelectUrlGroup: context.setSelectedUrlGroupId,
@@ -133,8 +140,17 @@ export const workspaceTemplates: WorkspaceTemplate[] = [
       const props = {
         includeCompletedTodos: context.includeCompletedTodos,
         isLoading: context.isLoading,
+        selectedCollectionFolderId: context.selectedCollectionFolderId,
         selectedTodoId: context.selectedTodoId,
-        todos: context.todos,
+        todos: filterTodosByCategory(
+          filterByFolder(
+            context.todos,
+            context.selectedCollectionFolderId,
+            context.appSettings.workspaceFolderAssignments,
+          ),
+          context.selectedCategory,
+        ),
+        workspaceFolders: context.appSettings.workspaceFolders,
         onCreateTodo: context.handleCreateTodo,
         onDeleteTodo: context.handleDeleteTodo,
         onIncludeCompletedChange: context.handleIncludeCompletedTodosChange,

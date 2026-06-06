@@ -1,4 +1,12 @@
-import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
+import {
+  copyFile,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises'
 import path from 'node:path'
 import {
   type ToolModuleAsset,
@@ -18,6 +26,7 @@ import {
 export type ToolModuleStore = {
   listTools(): Promise<RegisteredToolModule[]>
   getTool(id: string): Promise<RegisteredToolModule>
+  importToolFromPath(sourcePath: string): Promise<RegisteredToolModule>
   registerToolFromPath(sourcePath: string): Promise<RegisteredToolModule>
   registerToolRootFromPath(rootPath: string): Promise<RegisteredToolModule[]>
   validateToolPath(sourcePath: string): Promise<ToolModuleValidationResult>
@@ -73,6 +82,7 @@ export function createToolModuleStore({
   dataDir,
 }: ToolModuleStoreOptions): ToolModuleStore {
   const toolsFilePath = path.join(dataDir, 'toolModules.json')
+  const importedToolsDir = path.join(dataDir, 'tool-modules')
 
   async function readToolModulesFile(): Promise<ToolModulesFile> {
     try {
@@ -204,6 +214,25 @@ export function createToolModuleStore({
       return registeredTool
     },
 
+    async importToolFromPath(sourcePath) {
+      const resolvedSourcePath = path.resolve(sourcePath)
+      const validation = await validateToolPath(resolvedSourcePath)
+
+      if (!validation.ok || !validation.manifest) {
+        throw new Error(validation.errors.join('\n'))
+      }
+
+      const targetPath = path.join(importedToolsDir, validation.manifest.id)
+      if (isSamePath(resolvedSourcePath, targetPath)) {
+        return this.registerToolFromPath(resolvedSourcePath)
+      }
+
+      await rm(targetPath, { force: true, recursive: true })
+      await copyToolDirectory(resolvedSourcePath, targetPath)
+
+      return this.registerToolFromPath(targetPath)
+    },
+
     async registerToolRootFromPath(rootPath) {
       const watchedRootPath = path.resolve(rootPath)
       const modulePaths = await findToolModulePaths(watchedRootPath)
@@ -323,6 +352,10 @@ function normalizeRegisteredTool(tool: RegisteredToolModule): RegisteredToolModu
   }
 }
 
+function isSamePath(leftPath: string, rightPath: string): boolean {
+  return path.resolve(leftPath) === path.resolve(rightPath)
+}
+
 function normalizeStoredManifest(
   manifest: ToolModuleManifest,
 ): ToolModuleManifest {
@@ -343,6 +376,29 @@ function normalizeStoredManifest(
       ? manifest.permissions
       : [],
     networkAllowlist: normalizeStringList(manifest.networkAllowlist),
+  }
+}
+
+async function copyToolDirectory(sourcePath: string, targetPath: string): Promise<void> {
+  await mkdir(targetPath, { recursive: true })
+  const entries = await readdir(sourcePath, { withFileTypes: true })
+
+  for (const entry of entries) {
+    if (ignoredDirectoryNames.has(entry.name)) {
+      continue
+    }
+
+    const sourceEntryPath = path.join(sourcePath, entry.name)
+    const targetEntryPath = path.join(targetPath, entry.name)
+    if (entry.isDirectory()) {
+      await copyToolDirectory(sourceEntryPath, targetEntryPath)
+      continue
+    }
+
+    if (entry.isFile()) {
+      await mkdir(path.dirname(targetEntryPath), { recursive: true })
+      await copyFile(sourceEntryPath, targetEntryPath)
+    }
   }
 }
 

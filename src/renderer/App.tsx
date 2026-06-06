@@ -57,6 +57,8 @@ export default function App() {
             selectedToolId={app.selectedToolId}
             selectedWorkflowId={app.selectedWorkflowId}
             toolModules={app.toolModules}
+            todos={app.todos}
+            urlGroups={app.urlGroups}
             workflows={app.workflows}
             workspaceFolders={app.appSettings.workspaceFolders}
             onCategorySelect={app.openCategory}
@@ -70,6 +72,12 @@ export default function App() {
               }
               if (app.workspaceMode === 'tools') {
                 app.setSelectedToolId(null)
+              }
+              if (app.workspaceMode === 'todos') {
+                app.setSelectedTodoId(null)
+              }
+              if (app.workspaceMode === 'urlGroups') {
+                app.setSelectedUrlGroupId(null)
               }
             }}
             onCreateFolder={app.createWorkspaceFolder}

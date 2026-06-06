@@ -6,7 +6,9 @@ import type {
   WorkspaceFolder,
   WorkspaceFolderScope,
 } from '../../../shared/settings'
+import type { TodoItem } from '../../../shared/todos'
 import type { RegisteredToolModule } from '../../../shared/tools'
+import type { UrlGroup } from '../../../shared/urlGroups'
 import type { WorkflowDefinition } from '../../../shared/workflows'
 import { getCommonIcon, getSettingsIcon } from '../assets/icon'
 import type {
@@ -14,6 +16,7 @@ import type {
   SettingsCategory,
   WorkspaceMode,
 } from '../state/taskFormState'
+import { isTodoDueSoon } from '../utils/todoFilters'
 
 export type WorkspaceSidebarProps = {
   actions: ActionDefinition[]
@@ -25,6 +28,8 @@ export type WorkspaceSidebarProps = {
   selectedWorkflowId: string | null
   selectedActionId: string | null
   toolModules: RegisteredToolModule[]
+  todos: TodoItem[]
+  urlGroups: UrlGroup[]
   workflows: WorkflowDefinition[]
   workspaceFolders: WorkspaceFolder[]
   onCategorySelect(category: NavigationCategory): void
@@ -45,7 +50,9 @@ export function WorkspaceSidebar({
   selectedCategory,
   selectedCollectionFolderId,
   selectedSettingsCategory,
+  todos,
   toolModules,
+  urlGroups,
   workflows,
   workspaceFolders,
   onCategorySelect,
@@ -149,6 +156,64 @@ export function WorkspaceSidebar({
             scope="tools"
             selectedFolderId={selectedCollectionFolderId}
             title="Tool 폴더"
+            onCreateFolder={onCreateFolder}
+            onDeleteFolder={onDeleteFolder}
+            onEditModeChange={setIsFolderEditMode}
+            onMoveFolder={onMoveFolder}
+            onRenameFolder={onRenameFolder}
+            onSelectFolder={onCollectionFolderSelect}
+          />
+        ) : null}
+
+        {currentMode === 'todos' ? (
+          <>
+            <div className="sidebar-heading compact-sidebar-heading align-center">
+              <p className="sidebar-label pt-2 px-3">Todo 그룹</p>
+            </div>
+            <FolderButton
+              count={todos.filter(isTodoDueSoon).length}
+              icon={getCommonIcon('scheduled')}
+              id="due_soon"
+              isSelected={
+                selectedCategory === 'due_soon' &&
+                selectedCollectionFolderId === 'all'
+              }
+              label="임박"
+              onSelect={(categoryId) => {
+                onCollectionFolderSelect('all')
+                onCategorySelect(categoryId as NavigationCategory)
+              }}
+            />
+            <FolderSidebarSection
+              count={todos.length}
+              editMode={isFolderEditMode}
+              folders={workspaceFolders}
+              scope="todos"
+              selectedFolderId={
+                selectedCategory === 'due_soon' ? '' : selectedCollectionFolderId
+              }
+              title="Todo 폴더"
+              onCreateFolder={onCreateFolder}
+              onDeleteFolder={onDeleteFolder}
+              onEditModeChange={setIsFolderEditMode}
+              onMoveFolder={onMoveFolder}
+              onRenameFolder={onRenameFolder}
+              onSelectFolder={(folderId) => {
+                onCategorySelect('all')
+                onCollectionFolderSelect(folderId)
+              }}
+            />
+          </>
+        ) : null}
+
+        {currentMode === 'urlGroups' ? (
+          <FolderSidebarSection
+            count={urlGroups.length}
+            editMode={isFolderEditMode}
+            folders={workspaceFolders}
+            scope="urlGroups"
+            selectedFolderId={selectedCollectionFolderId}
+            title="URL Group 폴더"
             onCreateFolder={onCreateFolder}
             onDeleteFolder={onDeleteFolder}
             onEditModeChange={setIsFolderEditMode}

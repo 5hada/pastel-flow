@@ -14,7 +14,12 @@ export type ThemeMode = 'system' | 'light' | 'dark' | 'custom'
 export type InitialUrlInputMode = 'line'
 export type WorkflowListDisplayMode = 'grid' | 'list'
 
-export type WorkspaceFolderScope = 'actions' | 'tools' | 'workflows'
+export type WorkspaceFolderScope =
+  | 'actions'
+  | 'todos'
+  | 'tools'
+  | 'urlGroups'
+  | 'workflows'
 
 export type WorkspaceFolder = {
   id: string

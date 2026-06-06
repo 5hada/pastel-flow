@@ -5,26 +5,31 @@ import {
   Button,
   Calendar,
   Card,
-  Checkbox,
   DateField,
   DatePicker,
-  Input,
   Label,
-  TextArea,
-  TextField,
 } from '@heroui/react'
 import { useEffect, useState, type FormEvent } from 'react'
+import type { WorkspaceFolder } from '../../../shared/settings'
 import type { TodoItem } from '../../../shared/todos'
 import { CollectionListPanel } from '../../shared/components/CollectionListPanel'
-import { DetailItem } from '../../shared/components/DetailItem'
+import {
+  CheckboxField,
+  FieldGrid,
+  TextAreaField,
+  TextInputField,
+} from '../../shared/components/HeroForm'
 import { getCommonIcon } from '../../shared/assets/icon'
 import { formatDate } from '../../shared/utils/viewLabels'
+import { getWorkspaceFolderPathLabel } from '../../shared/utils/workspaceFolderLabels'
 
 export type TodosWorkspaceProps = {
   includeCompletedTodos: boolean
   isLoading: boolean
+  selectedCollectionFolderId: string
   selectedTodoId: string | null
   todos: TodoItem[]
+  workspaceFolders: WorkspaceFolder[]
   onCreateTodo(input: {
     title: string
     dueAt?: string
@@ -49,7 +54,9 @@ export function TodosWorkspace({
   onSelectTodo,
   onUpdateTodo,
   selectedTodoId,
+  selectedCollectionFolderId,
   todos,
+  workspaceFolders,
 }: TodosWorkspaceProps) {
   const selectedTodo = todos.find((todo) => todo.id === selectedTodoId) ?? null
   const [isCreating, setIsCreating] = useState(false)
@@ -62,7 +69,9 @@ export function TodosWorkspace({
     const nextDraft = createDraft(selectedTodo)
     setDraft(nextDraft)
     setSelectedDate(parseDueDateValue(nextDraft.dueAt))
-    setIsCreating(false)
+    if (selectedTodo) {
+      setIsCreating(false)
+    }
   }, [selectedTodo])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -92,13 +101,22 @@ export function TodosWorkspace({
       <CollectionListPanel
         emptyText="표시할 Todo가 없습니다."
         eyebrow="TODOS"
+        folderLabel={getWorkspaceFolderPathLabel(
+          selectedCollectionFolderId,
+          workspaceFolders,
+        )}
         headerAction={
           <Button
             aria-label="Todo 추가"
             isIconOnly
             variant="ghost"
             type="button"
-            onClick={() => setIsCreating(true)}
+            onClick={() => {
+              onSelectTodo(null)
+              setDraft(createDraft(null))
+              setSelectedDate(null)
+              setIsCreating(true)
+            }}
           >
             {getCommonIcon('add')}
           </Button>
@@ -110,13 +128,66 @@ export function TodosWorkspace({
           message: todo.details ?? todo.category ?? '',
         }))}
         title="Todo 목록"
-        onEdit={onSelectTodo}
+        onEdit={(todoId) => {
+          setIsCreating(false)
+          onSelectTodo(todoId)
+        }}
       />
     )
   }
 
   return (
     <Card className="mode-panel" aria-label="Todo 편집">
+      <TodoSidePanel
+        draft={draft}
+        includeCompletedTodos={includeCompletedTodos}
+        selectedDate={selectedDate}
+        selectedTodo={selectedTodo}
+        onClose={() => {
+          setIsCreating(false)
+          onSelectTodo(null)
+        }}
+        onDateChange={(date) => {
+          setSelectedDate(date)
+          setDraft((currentDraft) => ({
+            ...currentDraft,
+            dueAt: formatDueDateValue(date),
+          }))
+        }}
+        onDeleteTodo={onDeleteTodo}
+        onDraftChange={setDraft}
+        onIncludeCompletedChange={onIncludeCompletedChange}
+        onSubmit={handleSubmit}
+      />
+    </Card>
+  )
+}
+
+function TodoSidePanel({
+  draft,
+  includeCompletedTodos,
+  onClose,
+  onDateChange,
+  onDeleteTodo,
+  onDraftChange,
+  onIncludeCompletedChange,
+  onSubmit,
+  selectedDate,
+  selectedTodo,
+}: {
+  draft: TodoDraft
+  includeCompletedTodos: boolean
+  selectedDate: DateValue | null
+  selectedTodo: TodoItem | null
+  onClose(): void
+  onDateChange(date: DateValue | null): void
+  onDeleteTodo(id: string): Promise<void>
+  onDraftChange(value: TodoDraft | ((currentDraft: TodoDraft) => TodoDraft)): void
+  onIncludeCompletedChange(value: boolean): void
+  onSubmit(event: FormEvent<HTMLFormElement>): void
+}) {
+  return (
+    <div className="editor-detail" aria-label="Todo 편집">
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Todos</p>
@@ -127,121 +198,60 @@ export function TodosWorkspace({
           isIconOnly
           variant="ghost"
           type="button"
-          onClick={() => {
-            setIsCreating(false)
-            onSelectTodo(null)
-          }}
+          onClick={onClose}
         >
           {getCommonIcon('close')}
         </Button>
       </div>
 
-      <form className="task-form" onSubmit={handleSubmit}>
-        <TextField
+      <form className="task-form" onSubmit={onSubmit}>
+        <TextInputField
+          label="Title"
           name="todo-title"
           value={draft.title}
           onChange={(value) =>
-            setDraft((currentDraft) => ({
+            onDraftChange((currentDraft) => ({
               ...currentDraft,
               title: value,
             }))
           }
-        >
-          <Label>Title</Label>
-          <Input />
-        </TextField>
-        <div className="form-grid">
-          <div>
-            <DatePicker
-              className="w-60"
-              value={selectedDate}
-              onChange={(date) => {
-                setSelectedDate(date)
-
-                setDraft((currentDraft) => ({
-                  ...currentDraft,
-                  dueAt: formatDueDateValue(date),
-                }))
-              }}
-            >
-              <Label>Due</Label>
-              <DateField.Group fullWidth>
-                <DateField.Input>{(segment) => <DateField.Segment segment={segment} />}</DateField.Input>
-                <DateField.Suffix>
-                  <DatePicker.Trigger>
-                    <DatePicker.TriggerIndicator />
-                  </DatePicker.Trigger>
-                </DateField.Suffix>
-              </DateField.Group>
-              <DatePicker.Popover className="flex">
-                <Calendar aria-label="Event date">
-                  <Calendar.Header>
-                    <Calendar.YearPickerTrigger>
-                      <Calendar.YearPickerTriggerHeading />
-                      <Calendar.YearPickerTriggerIndicator />
-                    </Calendar.YearPickerTrigger>
-                    <Calendar.NavButton slot="previous" />
-                    <Calendar.NavButton slot="next" />
-                  </Calendar.Header>
-                  <Calendar.Grid>
-                    <Calendar.GridHeader>
-                      {(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}
-                    </Calendar.GridHeader>
-                    <Calendar.GridBody>{(date) => <Calendar.Cell date={date} />}</Calendar.GridBody>
-                  </Calendar.Grid>
-                  <Calendar.YearPickerGrid>
-                    <Calendar.YearPickerGridBody>
-                      {({year}) => <Calendar.YearPickerCell year={year} />}
-                    </Calendar.YearPickerGridBody>
-                  </Calendar.YearPickerGrid>
-                </Calendar>
-              </DatePicker.Popover>
-            </DatePicker>
-          </div>
-          <TextField
+        />
+        <FieldGrid>
+          <TodoDateField value={selectedDate} onChange={onDateChange} />
+          <TextInputField
+            label="Category"
             name="todo-category"
             value={draft.category}
             onChange={(value) =>
-              setDraft((currentDraft) => ({
+              onDraftChange((currentDraft) => ({
                 ...currentDraft,
                 category: value,
               }))
             }
-          >
-            <Label>Category</Label>
-            <Input />
-          </TextField>
-        </div>
-        <TextField
+          />
+        </FieldGrid>
+        <TextAreaField
+          label="Details"
           name="todo-details"
+          rows={5}
           value={draft.details}
           onChange={(value) =>
-            setDraft((currentDraft) => ({
+            onDraftChange((currentDraft) => ({
               ...currentDraft,
               details: value,
             }))
           }
-        >
-          <Label>Details</Label>
-          <TextArea rows={5} />
-        </TextField>
-        <Checkbox
-          className="inline-check"
+        />
+        <CheckboxField
           isSelected={draft.completed}
+          label="Completed"
           onChange={(isSelected) =>
-            setDraft((currentDraft) => ({
+            onDraftChange((currentDraft) => ({
               ...currentDraft,
               completed: isSelected,
             }))
           }
-        >
-          <Checkbox.Control>
-            <Checkbox.Indicator />
-          </Checkbox.Control>
-          <Checkbox.Content>
-            <Label>Completed</Label>
-          </Checkbox.Content>
-        </Checkbox>
+        />
         <div className="form-actions">
           <Button variant="primary" type="submit" isDisabled={!draft.title.trim()}>
             저장
@@ -261,30 +271,81 @@ export function TodosWorkspace({
 
       {selectedTodo ? (
         <dl className="detail-list">
-          <DetailItem label="Todo ID" value={selectedTodo.id} />
-          <DetailItem label="Due" value={formatDate(selectedTodo.dueAt)} />
-          <DetailItem
+          <DetailCell label="Todo ID" value={selectedTodo.id} />
+          <DetailCell label="Due" value={formatDate(selectedTodo.dueAt)} />
+          <DetailCell
             label="Completed"
             value={selectedTodo.completed ? 'Yes' : 'No'}
           />
-          <DetailItem label="Created" value={formatDate(selectedTodo.createdAt)} />
-          <DetailItem label="Updated" value={formatDate(selectedTodo.updatedAt)} />
+          <DetailCell label="Created" value={formatDate(selectedTodo.createdAt)} />
+          <DetailCell label="Updated" value={formatDate(selectedTodo.updatedAt)} />
         </dl>
       ) : null}
 
-      <Checkbox
-        className="inline-check"
+      <CheckboxField
         isSelected={includeCompletedTodos}
+        label="Show completed"
         onChange={onIncludeCompletedChange}
-      >
-        <Checkbox.Control>
-          <Checkbox.Indicator />
-        </Checkbox.Control>
-        <Checkbox.Content>
-          <Label>Show completed</Label>
-        </Checkbox.Content>
-      </Checkbox>
-    </Card>
+      />
+    </div>
+  )
+}
+
+function TodoDateField({
+  value,
+  onChange,
+}: {
+  value: DateValue | null
+  onChange(date: DateValue | null): void
+}) {
+  return (
+    <DatePicker className="w-60" value={value} onChange={onChange}>
+      <Label>Due</Label>
+      <DateField.Group fullWidth>
+        <DateField.Input>
+          {(segment) => <DateField.Segment segment={segment} />}
+        </DateField.Input>
+        <DateField.Suffix>
+          <DatePicker.Trigger>
+            <DatePicker.TriggerIndicator />
+          </DatePicker.Trigger>
+        </DateField.Suffix>
+      </DateField.Group>
+      <DatePicker.Popover className="flex">
+        <Calendar aria-label="Event date">
+          <Calendar.Header>
+            <Calendar.YearPickerTrigger>
+              <Calendar.YearPickerTriggerHeading />
+              <Calendar.YearPickerTriggerIndicator />
+            </Calendar.YearPickerTrigger>
+            <Calendar.NavButton slot="previous" />
+            <Calendar.NavButton slot="next" />
+          </Calendar.Header>
+          <Calendar.Grid>
+            <Calendar.GridHeader>
+              {(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}
+            </Calendar.GridHeader>
+            <Calendar.GridBody>
+              {(date) => <Calendar.Cell date={date} />}
+            </Calendar.GridBody>
+          </Calendar.Grid>
+          <Calendar.YearPickerGrid>
+            <Calendar.YearPickerGridBody>
+              {({ year }) => <Calendar.YearPickerCell year={year} />}
+            </Calendar.YearPickerGridBody>
+          </Calendar.YearPickerGrid>
+        </Calendar>
+      </DatePicker.Popover>
+    </DatePicker>
+  )
+}
+
+function DetailCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="detail-item">
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
   )
 }
 

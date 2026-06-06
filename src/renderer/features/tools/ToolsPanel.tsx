@@ -67,7 +67,7 @@ export function ToolsPanel({
             type="button"
             onClick={() => void onRegisterToolModule()}
           >
-            도구 폴더 선택
+            Tool Module 폴더 선택
           </Button>
         }
         emptyText="표시할 Tool Module이 없습니다."
@@ -78,7 +78,7 @@ export function ToolsPanel({
         )}
         headerAction={
           <Button
-            aria-label="Tool 폴더 등록"
+            aria-label="Tool Module 폴더 등록"
             isIconOnly
             variant="ghost"
             type="button"
@@ -93,6 +93,7 @@ export function ToolsPanel({
           meta: `v${tool.manifest.version}`,
           message: tool.manifest.description,
         }))}
+        itemActionLabel="사용"
         title="Tool Module 목록"
         onEdit={(toolId) => {
           const tool = toolModules.find((currentTool) => currentTool.id === toolId)

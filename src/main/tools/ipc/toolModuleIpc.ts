@@ -31,9 +31,10 @@ export function registerToolModuleIpc(
       return undefined
     }
 
-    const registeredTools = await toolModuleStore.registerToolRootFromPath(
+    const registeredTool = await toolModuleStore.importToolFromPath(
       result.filePaths[0],
     )
+    const registeredTools = [registeredTool]
     await syncToolActionsWithManifests(registeredTools, workflowStore)
 
     return registeredTools

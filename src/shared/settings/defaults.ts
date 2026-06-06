@@ -357,7 +357,13 @@ function isWorkflowListDisplayMode(
 }
 
 function isWorkspaceFolderScope(value: unknown): value is WorkspaceFolderScope {
-  return value === 'actions' || value === 'tools' || value === 'workflows'
+  return (
+    value === 'actions' ||
+    value === 'todos' ||
+    value === 'tools' ||
+    value === 'urlGroups' ||
+    value === 'workflows'
+  )
 }
 
 function isBrowserRunMode(value: unknown): value is BrowserRunMode {

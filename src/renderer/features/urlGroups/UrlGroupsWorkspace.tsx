@@ -1,16 +1,24 @@
-import { Button, Card, Input, Label, TextArea, TextField } from '@heroui/react'
+import { Button, Card } from '@heroui/react'
 import { useEffect, useState, type FormEvent } from 'react'
+import type { WorkspaceFolder } from '../../../shared/settings'
 import type { UrlGroup, UrlGroupItem } from '../../../shared/urlGroups'
 import { normalizeUrlGroupItems } from '../../../shared/urlGroups'
 import { CollectionListPanel } from '../../shared/components/CollectionListPanel'
-import { DetailItem } from '../../shared/components/DetailItem'
+import {
+  FieldGrid,
+  TextAreaField,
+  TextInputField,
+} from '../../shared/components/HeroForm'
 import { getCommonIcon } from '../../shared/assets/icon'
 import { formatDate } from '../../shared/utils/viewLabels'
+import { getWorkspaceFolderPathLabel } from '../../shared/utils/workspaceFolderLabels'
 
 export type UrlGroupsWorkspaceProps = {
   isLoading: boolean
+  selectedCollectionFolderId: string
   selectedUrlGroupId: string | null
   urlGroups: UrlGroup[]
+  workspaceFolders: WorkspaceFolder[]
   onCreateUrlGroup(input: {
     name: string
     description?: string
@@ -31,8 +39,10 @@ export function UrlGroupsWorkspace({
   onDeleteUrlGroup,
   onSelectUrlGroup,
   onUpdateUrlGroup,
+  selectedCollectionFolderId,
   selectedUrlGroupId,
   urlGroups,
+  workspaceFolders,
 }: UrlGroupsWorkspaceProps) {
   const selectedUrlGroup =
     urlGroups.find((urlGroup) => urlGroup.id === selectedUrlGroupId) ?? null
@@ -41,7 +51,9 @@ export function UrlGroupsWorkspace({
 
   useEffect(() => {
     setDraft(createDraft(selectedUrlGroup))
-    setIsCreating(false)
+    if (selectedUrlGroup) {
+      setIsCreating(false)
+    }
   }, [selectedUrlGroup])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -76,13 +88,21 @@ export function UrlGroupsWorkspace({
       <CollectionListPanel
         emptyText="표시할 URL Group이 없습니다."
         eyebrow="URL GROUPS"
+        folderLabel={getWorkspaceFolderPathLabel(
+          selectedCollectionFolderId,
+          workspaceFolders,
+        )}
         headerAction={
           <Button
             aria-label="URL Group 추가"
             isIconOnly
             variant="ghost"
             type="button"
-            onClick={() => setIsCreating(true)}
+            onClick={() => {
+              onSelectUrlGroup(null)
+              setDraft(createDraft(null))
+              setIsCreating(true)
+            }}
           >
             {getCommonIcon('add')}
           </Button>
@@ -94,13 +114,50 @@ export function UrlGroupsWorkspace({
           message: urlGroup.description ?? urlGroup.tags.join(', '),
         }))}
         title="URL Group 목록"
-        onEdit={onSelectUrlGroup}
+        onEdit={(urlGroupId) => {
+          setIsCreating(false)
+          onSelectUrlGroup(urlGroupId)
+        }}
       />
     )
   }
 
   return (
     <Card className="mode-panel url-group-panel" aria-label="URL Group 편집">
+      <UrlGroupSidePanel
+        draft={draft}
+        selectedUrlGroup={selectedUrlGroup}
+        onClose={() => {
+          setIsCreating(false)
+          onSelectUrlGroup(null)
+        }}
+        onDeleteUrlGroup={onDeleteUrlGroup}
+        onDraftChange={setDraft}
+        onSubmit={handleSubmit}
+      />
+    </Card>
+  )
+}
+
+function UrlGroupSidePanel({
+  draft,
+  onClose,
+  onDeleteUrlGroup,
+  onDraftChange,
+  onSubmit,
+  selectedUrlGroup,
+}: {
+  draft: UrlGroupDraft
+  selectedUrlGroup: UrlGroup | null
+  onClose(): void
+  onDeleteUrlGroup(id: string): Promise<void>
+  onDraftChange(
+    value: UrlGroupDraft | ((currentDraft: UrlGroupDraft) => UrlGroupDraft),
+  ): void
+  onSubmit(event: FormEvent<HTMLFormElement>): void
+}) {
+  return (
+    <div className="editor-detail" aria-label="URL Group 편집">
       <div className="panel-heading">
         <div>
           <p className="eyebrow">URL Groups</p>
@@ -111,70 +168,62 @@ export function UrlGroupsWorkspace({
           isIconOnly
           variant="ghost"
           type="button"
-          onClick={() => {
-            setIsCreating(false)
-            onSelectUrlGroup(null)
-          }}
+          onClick={onClose}
         >
           {getCommonIcon('close')}
         </Button>
       </div>
 
-      <form className="task-form" onSubmit={handleSubmit}>
-        <div className="form-grid">
-          <TextField
+      <form className="task-form" onSubmit={onSubmit}>
+        <FieldGrid>
+          <TextInputField
+            label="이름"
             name="url-group-name"
             value={draft.name}
             onChange={(value) =>
-              setDraft((currentDraft) => ({
+              onDraftChange((currentDraft) => ({
                 ...currentDraft,
                 name: value,
               }))
             }
-          >
-            <Label>이름</Label>
-            <Input />
-          </TextField>
-          <TextField
+          />
+          <TextInputField
+            label="Tags"
             name="url-group-tags"
+            placeholder="쉼표로 구분"
             value={draft.tags}
             onChange={(value) =>
-              setDraft((currentDraft) => ({
+              onDraftChange((currentDraft) => ({
                 ...currentDraft,
                 tags: value,
               }))
             }
-          >
-            <Label>Tags</Label>
-            <Input placeholder="쉼표로 구분" />
-          </TextField>
-        </div>
-        <TextField
+          />
+        </FieldGrid>
+        <TextInputField
+          label="설명"
           name="url-group-description"
           value={draft.description}
           onChange={(value) =>
-            setDraft((currentDraft) => ({
+            onDraftChange((currentDraft) => ({
               ...currentDraft,
               description: value,
             }))
           }
-        >
-          <Label>설명</Label>
-          <Input />
-        </TextField>
-        <TextField
+        />
+        <TextAreaField
+          label="URLs"
           name="url-group-urls"
+          placeholder="한 줄에 하나씩 URL 입력"
+          rows={8}
           value={draft.urls}
           onChange={(value) =>
-            setDraft((currentDraft) => ({
+            onDraftChange((currentDraft) => ({
               ...currentDraft,
               urls: value,
             }))
           }
-        >
-          <Label>URLs</Label>
-          <TextArea placeholder="한 줄에 하나씩 URL 입력" rows={8} />
-        </TextField>
+        />
         <div className="form-actions">
           <Button variant="primary" type="submit" isDisabled={!draft.name.trim()}>
             저장
@@ -194,22 +243,31 @@ export function UrlGroupsWorkspace({
 
       {selectedUrlGroup ? (
         <dl className="detail-list">
-          <DetailItem label="URL Group ID" value={selectedUrlGroup.id} />
-          <DetailItem
+          <DetailCell label="URL Group ID" value={selectedUrlGroup.id} />
+          <DetailCell
             label="URL"
             value={`${selectedUrlGroup.items.length}개`}
           />
-          <DetailItem
+          <DetailCell
             label="생성 시간"
             value={formatDate(selectedUrlGroup.createdAt)}
           />
-          <DetailItem
+          <DetailCell
             label="수정 시간"
             value={formatDate(selectedUrlGroup.updatedAt)}
           />
         </dl>
       ) : null}
-    </Card>
+    </div>
+  )
+}
+
+function DetailCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="detail-item">
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
   )
 }
 

@@ -6,11 +6,11 @@ import { normalizeUrlGroupItems } from '../../../shared/urlGroups'
 import { CollectionListPanel } from '../../shared/components/CollectionListPanel'
 import { FormPanel } from '../../shared/components/FormPanel'
 import {
-  AlertDialogButton,
   FieldGrid,
   TextAreaField,
   TextInputField,
 } from '../../shared/components/HeroForm'
+import { AlertDialogButton } from '../../shared/components/AlertDialogButton'
 import { getCommonIcon } from '../../shared/assets/icon'
 import { formatDate } from '../../shared/utils/viewLabels'
 import { getWorkspaceFolderPathLabel } from '../../shared/utils/workspaceFolderLabels'
@@ -75,6 +75,8 @@ export function UrlGroupsWorkspace({
         items: input.items ?? [],
       })
     }
+    setIsCreating(false)
+    onSelectUrlGroup(null)
   }
 
   if (isLoading) {
@@ -249,11 +251,11 @@ function UrlGroupSidePanel({
           />
           <DetailCell
             label="생성 시간"
-            value={formatDate(selectedUrlGroup.createdAt)}
+            value={formatDate(selectedUrlGroup.createdAt).value}
           />
           <DetailCell
             label="수정 시간"
-            value={formatDate(selectedUrlGroup.updatedAt)}
+            value={formatDate(selectedUrlGroup.updatedAt).value}
           />
         </dl>
       ) : null}

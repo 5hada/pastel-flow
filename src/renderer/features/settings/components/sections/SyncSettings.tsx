@@ -48,7 +48,7 @@ export function SyncSettings({
         />
         <SettingsDetailItem
           label="마지막 내보내기"
-          value={formatDate(syncStatus.lastExportedAt)}
+          value={formatDate(syncStatus.lastExportedAt).value}
         />
       </dl>
       {syncStatus.message ? (

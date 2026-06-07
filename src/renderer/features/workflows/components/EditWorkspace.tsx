@@ -50,69 +50,70 @@ import { DetailItem } from '../../../shared/components/DetailItem'
 import { getWorkspaceFolderPathLabel } from '../../../shared/utils/workspaceFolderLabels'
 import { filterByFolder } from '../../../shared/utils/collectionFilters'
 import { WorkflowRunPolicyEditor } from './WorkflowRunPolicyEditor'
-import { AlertDialogButton } from '../../../shared/components/HeroForm'
+import { AlertDialogButton } from '../../../shared/components/AlertDialogButton'
+import { FormPanel } from '../../../shared/components/FormPanel'
 
 export type EditWorkspaceProps = {
+  actionRuns: ActionRun[]
   actions: ActionDefinition[]
   defaultWorkflowName: string
   developerVisibility: DeveloperVisibilitySettings
   isLoading: boolean
   profilePresets: BrowserProfilePreset[]
+  runningWorkflowId: string | null
   selectedCollectionFolderId: string
   selectedWorkflowId: string | null
-  runningWorkflowId: string | null
-  actionRuns: ActionRun[]
   selectedWorkflowRunId: string | null
-  workflowArtifacts: WorkflowArtifact[]
   urlGroupItemRuns: UrlGroupItemRun[]
-  workflowRuns: WorkflowRun[]
+  workflowArtifacts: WorkflowArtifact[]
   workflowRunEvents: WorkflowRunEvent[]
+  workflowRuns: WorkflowRun[]
+  workflows: WorkflowDefinition[]
   workspaceFolderAssignments: Record<string, string>
   workspaceFolders: WorkspaceFolder[]
-  workflows: WorkflowDefinition[]
+  onConfirmDeleteWorkflow(workflowId: string): Promise<void>
   onCreateTransformAction(
     mode: TransformActionConfig['mode'],
   ): Promise<ActionDefinition | null>
   onCreateWorkflow(name?: string): Promise<void>
-  onConfirmDeleteWorkflow(workflowId: string): Promise<void>
-  onStartCreateWorkflow(): void
   onSelectWorkflow(workflowId: string): void
   onSelectWorkflowRun(runId: string): void
-  onUpdateWorkflow(
-    workflowId: string,
-    input: Partial<WorkflowDefinition>,
-  ): Promise<void>
+  onStartCreateWorkflow(): void
   onUpdateAction(
     actionId: string,
     input: Partial<ActionDefinition>,
   ): Promise<void>
+  onUpdateWorkflow(
+    workflowId: string,
+    input: Partial<WorkflowDefinition>,
+  ): Promise<void>
 }
 
 export function EditWorkspace({
+  actionRuns,
   actions,
   defaultWorkflowName,
   developerVisibility,
   isLoading,
+  runningWorkflowId,
+  selectedCollectionFolderId,
+  selectedWorkflowRunId,
+  selectedWorkflowId,
+  urlGroupItemRuns,
+  workflowArtifacts,
+  workflowRunEvents,
+  workflowRuns,
+  workflows,
+  workspaceFolderAssignments,
+  workspaceFolders,
   onConfirmDeleteWorkflow,
   onCreateTransformAction,
   onCreateWorkflow,
   onSelectWorkflow,
-  onStartCreateWorkflow,
-  onUpdateWorkflow,
-  onUpdateAction,
-  runningWorkflowId,
-  actionRuns,
-  selectedCollectionFolderId,
-  selectedWorkflowRunId,
-  selectedWorkflowId,
   onSelectWorkflowRun,
-  workflowArtifacts,
-  urlGroupItemRuns,
-  workflowRunEvents,
-  workflowRuns,
-  workspaceFolderAssignments,
-  workspaceFolders,
-  workflows,
+  onStartCreateWorkflow,
+  onUpdateAction,
+  onUpdateWorkflow,
 }: EditWorkspaceProps) {
   const selectedWorkflow =
     workflows.find((workflow) => workflow.id === selectedWorkflowId) ?? null
@@ -151,6 +152,8 @@ export function EditWorkspace({
     }
 
     await onCreateWorkflow(trimmedName)
+    setIsCreatingWorkflow(false)
+    onStartCreateWorkflow()
   }
 
   async function handleRenameWorkflow(event: FormEvent<HTMLFormElement>) {
@@ -171,6 +174,7 @@ export function EditWorkspace({
       name: trimmedName,
     })
     setEditingWorkflowId(null)
+    onStartCreateWorkflow()
   }
 
   if (isLoading) {
@@ -199,25 +203,27 @@ export function EditWorkspace({
             {getCommonIcon('close')}
           </Button>
         </div>
-        <div className="empty-state empty-state-action">
-          <form className="workflow-name-form" onSubmit={handleCreateWorkflow}>
-            <TextField
-              name="workflow-name"
-              value={createName}
-              onChange={setCreateName}
-            >
-              <Label>이름</Label>
-              <Input placeholder="Workflow 이름" />
-            </TextField>
-            <Button
-              variant="primary"
-              type="submit"
-              isDisabled={!createName.trim()}
-            >
-              생성
-            </Button>
-          </form>
-        </div>
+        <form onSubmit={handleCreateWorkflow}>
+          <FormPanel>
+            <div className="workflow-name-form">
+              <TextField
+                name="workflow-name"
+                value={createName}
+                onChange={setCreateName}
+              >
+                <Label>이름</Label>
+                <Input placeholder="Workflow 이름" />
+              </TextField>
+              <Button
+                variant="primary"
+                type="submit"
+                isDisabled={!createName.trim()}
+              >
+                생성
+              </Button>
+            </div>
+          </FormPanel>
+        </form>
       </Card>
     )
   }
@@ -331,6 +337,7 @@ export function EditWorkspace({
           </Button>
         </div>
         <div className="editor-detail">
+          <FormPanel>
             <WorkflowRunPolicyEditor
               isLocked={isSelectedWorkflowLocked}
               workflow={selectedWorkflow}
@@ -344,6 +351,8 @@ export function EditWorkspace({
                 })
               }}
             />
+          </FormPanel>
+          <FormPanel>
             <WorkflowActionList
               actions={actions}
               workflow={selectedWorkflow}
@@ -472,6 +481,7 @@ export function EditWorkspace({
                 })
               }}
             />
+          </FormPanel>
             <Card className="danger-zone" aria-label="Workflow 삭제">
               <AlertDialogButton
                 isDisabled={isSelectedWorkflowLocked}
@@ -494,13 +504,13 @@ export function EditWorkspace({
             value={getWorkflowRunPolicyLabel(selectedWorkflow.runPolicy)}
           />
           <DetailItem label="상태" value={getTaskStatusLabel(selectedWorkflow.state.status)} />
-          <DetailItem label="마지막 실행" value={formatDate(selectedWorkflow.state.endedAt)} />
+          <DetailItem label="마지막 실행" value={formatDate(selectedWorkflow.state.endedAt).value} />
           <DetailItem
             label="마지막 메시지"
             value={selectedWorkflow.state.lastMessage ?? '아직 없음'}
           />
-          <DetailItem label="생성 시간" value={formatDate(selectedWorkflow.createdAt)} />
-          <DetailItem label="수정 시간" value={formatDate(selectedWorkflow.updatedAt)} />
+          <DetailItem label="생성 시간" value={formatDate(selectedWorkflow.createdAt).value} />
+          <DetailItem label="수정 시간" value={formatDate(selectedWorkflow.updatedAt).value} />
           <DetailItem
             label="표시 정책"
             value={getDeviceVisibilityPolicyLabel(selectedWorkflow.permissions.visibility)}

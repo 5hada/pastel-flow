@@ -53,7 +53,7 @@ export function WorkflowRunsPanel({
                 <span>
                   <strong>{run.summary ?? getWorkflowRunStatusLabel(run.status)}</strong>
                   <small>
-                    {formatDate(run.startedAt ?? run.createdAt)}
+                    {formatDate(run.startedAt ?? run.createdAt).value}
                     {run.endedAt ? ` - ${formatDate(run.endedAt)}` : ''}
                   </small>
                 </span>
@@ -64,7 +64,7 @@ export function WorkflowRunsPanel({
           <div className="action-run-list" aria-label="Action 실행 이력">
             {selectedRun ? (
               <div className="action-run-heading">
-                <strong>{formatDate(selectedRun.startedAt ?? selectedRun.createdAt)}</strong>
+                <strong>{formatDate(selectedRun.startedAt ?? selectedRun.createdAt).value}</strong>
                 <small>{selectedRun.id}</small>
               </div>
             ) : null}
@@ -80,7 +80,7 @@ export function WorkflowRunsPanel({
                   <div>
                     <strong>#{actionRun.order + 1} Action</strong>
                     <small>
-                      {formatDate(actionRun.startedAt ?? actionRun.createdAt)}
+                      {formatDate(actionRun.startedAt ?? actionRun.createdAt).value}
                       {actionRun.endedAt ? ` - ${formatDate(actionRun.endedAt)}` : ''}
                     </small>
                     {actionRun.error ? <small>{actionRun.error}</small> : null}
@@ -98,7 +98,7 @@ export function WorkflowRunsPanel({
                     <div>
                       <strong>{artifact.summary ?? artifact.path}</strong>
                       <small>
-                        {formatArtifactSize(artifact.size)} · {formatDate(artifact.createdAt)}
+                        {formatArtifactSize(artifact.size)} · {formatDate(artifact.createdAt).value}
                       </small>
                     </div>
                   </div>
@@ -117,7 +117,7 @@ export function WorkflowRunsPanel({
                     <div>
                       <strong>{itemRun.url}</strong>
                       <small>
-                        {formatDate(itemRun.startedAt ?? itemRun.createdAt)}
+                        {formatDate(itemRun.startedAt ?? itemRun.createdAt).value}
                         {itemRun.endedAt ? ` - ${formatDate(itemRun.endedAt)}` : ''}
                       </small>
                       {itemRun.error ? <small>{itemRun.error}</small> : null}

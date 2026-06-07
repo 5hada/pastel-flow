@@ -334,20 +334,44 @@ export function formatDaysOfWeek(daysOfWeek: TaskSchedule['daysOfWeek']): string
   return daysOfWeek?.map((day) => labels[day]).join(', ') || '요일 미지정'
 }
 
-export function formatDate(value?: string): string {
+
+const dateTimeFormatter = new Intl.DateTimeFormat('ko-KR', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+})
+
+const dateFormatter = new Intl.DateTimeFormat('ko-KR', {
+  dateStyle: 'medium',
+})
+
+const timeFormatter = new Intl.DateTimeFormat('ko-KR', {
+  timeStyle: 'short',
+})
+
+export function formatDate(value?: string) {
   if (!value) {
-    return '아직 없음'
+    return {
+      value: '아직 없음',
+      date: '',
+      time: '',
+    }
   }
 
   const date = new Date(value)
+
   if (Number.isNaN(date.getTime())) {
-    return value
+    return {
+      value: value,
+      date: '',
+      time: '',
+    }
   }
 
-  return new Intl.DateTimeFormat('ko-KR', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date)
+  return {
+    value: dateTimeFormatter.format(date),
+    date: dateFormatter.format(date),
+    time: timeFormatter.format(date),
+  }
 }
 
 export function getErrorMessage(error: unknown): string {

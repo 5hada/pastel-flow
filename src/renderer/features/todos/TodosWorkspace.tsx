@@ -4,35 +4,26 @@ import {
 } from '@internationalized/date'
 import {
   Button,
-  Calendar,
   Card,
   Chip,
-  DateField,
-  DatePicker,
-  Label,
 } from '@heroui/react'
 import { useEffect, useState, type FormEvent } from 'react'
 import type { WorkspaceFolder } from '../../../shared/settings'
 import type { TodoItem } from '../../../shared/todos'
 import { CollectionListPanel } from '../../shared/components/CollectionListPanel'
-import { FormPanel } from '../../shared/components/FormPanel'
-import {
-  AlertDialogButton,
-  CheckboxField,
-  FieldGrid,
-  TextAreaField,
-  TextInputField,
-  XButton,
-} from '../../shared/components/HeroForm'
+import { SelectField } from '../../shared/components/HeroForm'
 import { getCommonIcon } from '../../shared/assets/icon'
 import { formatDate } from '../../shared/utils/viewLabels'
 import { getWorkspaceFolderPathLabel } from '../../shared/utils/workspaceFolderLabels'
+import { TodoEditingPanel } from './components'
+import { TodoDraft, TodoSortMode } from './type'
 
 export type TodosWorkspaceProps = {
   includeCompletedTodos: boolean
   isLoading: boolean
   selectedCollectionFolderId: string
   selectedTodoId: string | null
+  sortMode: TodoSortMode
   todos: TodoItem[]
   workspaceFolders: WorkspaceFolder[]
   onCreateTodo(input: {
@@ -44,9 +35,12 @@ export type TodosWorkspaceProps = {
   onDeleteTodo(id: string): Promise<void>
   onIncludeCompletedChange(value: boolean): void
   onSelectTodo(id: string | null): void
+  onSortModeChange(value: TodoSortMode): void
   onUpdateTodo(
     id: string,
-    input: Partial<Pick<TodoItem, 'title' | 'dueAt' | 'category' | 'details' | 'completed'>>,
+    input: Partial<
+      Pick<TodoItem, 'title' | 'dueAt' | 'category' | 'details' | 'completed'>
+    >,
   ): Promise<void>
 }
 
@@ -57,13 +51,16 @@ export function TodosWorkspace({
   onDeleteTodo,
   onIncludeCompletedChange,
   onSelectTodo,
+  onSortModeChange,
   onUpdateTodo,
   selectedTodoId,
+  sortMode,
   selectedCollectionFolderId,
   todos,
   workspaceFolders,
 }: TodosWorkspaceProps) {
   const selectedTodo = todos.find((todo) => todo.id === selectedTodoId) ?? null
+  const sortedTodos = sortTodos(todos, sortMode)
   const [isCreating, setIsCreating] = useState(false)
   const [draft, setDraft] = useState(createDraft(selectedTodo))
   const [selectedDate, setSelectedDate] = useState<DateValue | null>(
@@ -91,6 +88,8 @@ export function TodosWorkspace({
     } else {
       await onCreateTodo(input)
     }
+    setIsCreating(false)
+    onSelectTodo(null)
   }
 
   if (isLoading) {
@@ -111,29 +110,38 @@ export function TodosWorkspace({
           workspaceFolders,
         )}
         headerAction={
-          <Button
-            aria-label="Todo 추가"
-            isIconOnly
-            variant="ghost"
-            type="button"
-            onClick={() => {
-              onSelectTodo(null)
-              setDraft(createDraft(null))
-              setSelectedDate(null)
-              setIsCreating(true)
-            }}
-          >
-            {getCommonIcon('add')}
-          </Button>
+          <div className="section-actions justify-center">
+            <SelectField
+              label=''
+              options={todoSortOptions}
+              selectedKey={sortMode}
+              onChange={onSortModeChange}
+            />
+            <Button
+              aria-label="Todo 추가"
+              isIconOnly
+              variant="ghost"
+              type="button"
+              onClick={() => {
+                onSelectTodo(null)
+                setDraft(createDraft(null))
+                setSelectedDate(null)
+                setIsCreating(true)
+              }}
+            >
+              {getCommonIcon('add')}
+            </Button>
+          </div>
         }
-        items={todos.map((todo) => ({
+        items={sortedTodos.map((todo) => ({
           id: todo.id,
           title: todo.title,
           meta: <TodoStatusChip todo={todo} />,
           status: todo.dueAt ? (
-            <Chip size="sm" variant="secondary">
-              <Chip.Label>{formatDate(todo.dueAt)}</Chip.Label>
-            </Chip>
+            <div className="grid w-fit grid-cols-2 gap-x-2">
+              <span className="min-w-18 text-sm">{formatDate(todo.dueAt).date}</span>
+              <span className="min-w-12 text-sm">{formatDate(todo.dueAt).time}</span>
+            </div>
           ) : null,
           message: todo.details ?? todo.category ?? '',
         }))}
@@ -148,7 +156,7 @@ export function TodosWorkspace({
 
   return (
     <Card className="mode-panel" aria-label="Todo 편집">
-      <TodoSidePanel
+      <TodoEditingPanel
         draft={draft}
         includeCompletedTodos={includeCompletedTodos}
         selectedDate={selectedDate}
@@ -173,191 +181,26 @@ export function TodosWorkspace({
   )
 }
 
-function TodoSidePanel({
-  draft,
-  includeCompletedTodos,
-  onClose,
-  onDateChange,
-  onDeleteTodo,
-  onDraftChange,
-  onIncludeCompletedChange,
-  onSubmit,
-  selectedDate,
-  selectedTodo,
-}: {
-  draft: TodoDraft
-  includeCompletedTodos: boolean
-  selectedDate: DateValue | null
-  selectedTodo: TodoItem | null
-  onClose(): void
-  onDateChange(date: DateValue | null): void
-  onDeleteTodo(id: string): Promise<void>
-  onDraftChange(value: TodoDraft | ((currentDraft: TodoDraft) => TodoDraft)): void
-  onIncludeCompletedChange(value: boolean): void
-  onSubmit(event: FormEvent<HTMLFormElement>): void
-}) {
-  return (
-    <div className="editor-detail" aria-label="Todo 편집">
-      <div className="panel-heading">
-        <div>
-          <p className="eyebrow">Todos</p>
-          <h2>{selectedTodo?.title ?? '새 Todo'}</h2>
-        </div>
-        <XButton onPress={onClose}/>
-      </div>
 
-      <form onSubmit={onSubmit}>
-        <FormPanel>
-          <TextInputField
-            label="Title"
-            name="todo-title"
-            value={draft.title}
-            onChange={(value) =>
-              onDraftChange((currentDraft) => ({
-                ...currentDraft,
-                title: value,
-              }))
-            }
-          />
-          <FieldGrid>
-            <TodoDateField value={selectedDate} onChange={onDateChange} />
-            <TextInputField
-              label="Category"
-              name="todo-category"
-              value={draft.category}
-              onChange={(value) =>
-                onDraftChange((currentDraft) => ({
-                  ...currentDraft,
-                  category: value,
-                }))
-              }
-            />
-          </FieldGrid>
-          <TextAreaField
-            label="Details"
-            name="todo-details"
-            rows={5}
-            value={draft.details}
-            onChange={(value) =>
-              onDraftChange((currentDraft) => ({
-                ...currentDraft,
-                details: value,
-              }))
-            }
-          />
-          <CheckboxField
-            isSelected={draft.completed}
-            label="Completed"
-            onChange={(isSelected) =>
-              onDraftChange((currentDraft) => ({
-                ...currentDraft,
-                completed: isSelected,
-              }))
-            }
-          />
-          <div className="form-actions">
-            <Button variant="primary" type="submit" isDisabled={!draft.title.trim()}>
-              저장
-            </Button>
-            {selectedTodo ? (
-              <AlertDialogButton onPress={() => void onDeleteTodo(selectedTodo.id)}/>
-            ) : null}
-          </div>
-        </FormPanel>
-      </form>
 
-      {selectedTodo ? (
-        <dl className="detail-list">
-          <DetailCell label="Todo ID" value={selectedTodo.id} />
-          <DetailCell label="Due" value={formatDate(selectedTodo.dueAt)} />
-          <DetailCell
-            label="Completed"
-            value={selectedTodo.completed ? 'Yes' : 'No'}
-          />
-          <DetailCell label="Created" value={formatDate(selectedTodo.createdAt)} />
-          <DetailCell label="Updated" value={formatDate(selectedTodo.updatedAt)} />
-        </dl>
-      ) : null}
 
-      <CheckboxField
-        isSelected={includeCompletedTodos}
-        label="Show completed"
-        onChange={onIncludeCompletedChange}
-      />
-    </div>
-  )
-}
 
-function TodoDateField({
-  value,
-  onChange,
-}: {
-  value: DateValue | null
-  onChange(date: DateValue | null): void
-}) {
-  return (
-    <DatePicker className="w-60" value={value} onChange={onChange}>
-      <Label>Due</Label>
-      <DateField.Group fullWidth>
-        <DateField.Input>
-          {(segment) => <DateField.Segment segment={segment} />}
-        </DateField.Input>
-        <DateField.Suffix>
-          <DatePicker.Trigger>
-            <DatePicker.TriggerIndicator />
-          </DatePicker.Trigger>
-        </DateField.Suffix>
-      </DateField.Group>
-      <DatePicker.Popover className="flex">
-        <Calendar aria-label="Event date">
-          <Calendar.Header>
-            <Calendar.YearPickerTrigger>
-              <Calendar.YearPickerTriggerHeading />
-              <Calendar.YearPickerTriggerIndicator />
-            </Calendar.YearPickerTrigger>
-            <Calendar.NavButton slot="previous" />
-            <Calendar.NavButton slot="next" />
-          </Calendar.Header>
-          <Calendar.Grid>
-            <Calendar.GridHeader>
-              {(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}
-            </Calendar.GridHeader>
-            <Calendar.GridBody>
-              {(date) => <Calendar.Cell date={date} />}
-            </Calendar.GridBody>
-          </Calendar.Grid>
-          <Calendar.YearPickerGrid>
-            <Calendar.YearPickerGridBody>
-              {({ year }) => <Calendar.YearPickerCell year={year} />}
-            </Calendar.YearPickerGridBody>
-          </Calendar.YearPickerGrid>
-        </Calendar>
-      </DatePicker.Popover>
-    </DatePicker>
-  )
-}
-
-function DetailCell({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="detail-item">
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </div>
-  )
-}
-
-type TodoDraft = {
-  title: string
-  dueAt: string
-  category: string
-  details: string
-  completed: boolean
-}
+const todoSortOptions: Array<{
+  value: TodoSortMode
+  label: string
+}> = [
+  { value: 'created', label: '추가순' },
+  { value: 'dueSoon', label: '임박순' },
+  { value: 'reverse', label: '과거순' },
+]
 
 function createDraft(todo: TodoItem | null): TodoDraft {
+  const dueAt = todo?.dueAt ?? getTodayDateString()
+
   return {
     title: todo?.title ?? '',
-    dueAt: todo?.dueAt ?? '',
+    dueAt,
+    dueTime: parseDueTimeValue(todo?.dueAt),
     category: todo?.category ?? '',
     details: todo?.details ?? '',
     completed: todo?.completed ?? false,
@@ -367,11 +210,50 @@ function createDraft(todo: TodoItem | null): TodoDraft {
 function parseDraft(draft: TodoDraft) {
   return {
     title: draft.title.trim(),
-    dueAt: draft.dueAt ? draft.dueAt : undefined,
+    dueAt: formatTodoDueAt(draft.dueAt, draft.dueTime),
     category: draft.category.trim() || undefined,
     details: draft.details.trim() || undefined,
     completed: draft.completed,
   }
+}
+
+function sortTodos(todos: TodoItem[], sortMode: TodoSortMode): TodoItem[] {
+  const sortedTodos = [...todos]
+
+  if (sortMode === 'dueSoon') {
+    return sortedTodos.sort((left, right) => {
+      const leftDueTime = getTodoDateTime(left.dueAt)
+      const rightDueTime = getTodoDateTime(right.dueAt)
+
+      if (leftDueTime !== rightDueTime) {
+        return leftDueTime - rightDueTime
+      }
+
+      return getTodoDateTime(left.createdAt) - getTodoDateTime(right.createdAt)
+    })
+  }
+
+  sortedTodos.sort(
+    (left, right) =>
+      getTodoDateTime(left.createdAt) - getTodoDateTime(right.createdAt),
+  )
+
+  return sortMode === 'reverse' ? sortedTodos.reverse() : sortedTodos
+}
+
+function getTodoDateTime(value?: string): number {
+  if (!value) {
+    return Number.POSITIVE_INFINITY
+  }
+
+  const date = value.trim().slice(0, 10)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    const [year, month, day] = date.split('-').map(Number)
+    return new Date(year, month - 1, day).getTime()
+  }
+
+  const time = Date.parse(value)
+  return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time
 }
 
 function parseDueDateValue(dueAt: string): DateValue | null {
@@ -388,15 +270,37 @@ function parseDueDateValue(dueAt: string): DateValue | null {
 }
 
 function formatDueDateValue(date: DateValue | null): string {
-  return date?.toString() ?? ''
+  return date?.toString() ?? getTodayDateString()
+}
+
+function parseDueTimeValue(dueAt?: string): string {
+  const time = dueAt?.match(/T(\d{2}:\d{2})/)?.[1]
+  return time ?? ''
+}
+
+function formatTodoDueAt(dueAt: string, dueTime: string): string {
+  const date = dueAt.trim().slice(0, 10) || getTodayDateString()
+  const time = dueTime.trim()
+
+  return time ? `${date}T${time}:00` : date
+}
+
+function getTodayDateString(): string {
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
 }
 
 function TodoStatusChip({ todo }: { todo: TodoItem }) {
   return (
     <Chip
-      color={todo.completed ? 'success' : 'warning'}
+      color={todo.completed ? 'accent' : 'warning'}
       size="sm"
-      variant="secondary"
+      variant="soft"
+      className=''
     >
       <Chip.Label>{todo.completed ? 'Done' : 'Open'}</Chip.Label>
     </Chip>

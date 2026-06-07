@@ -42,9 +42,10 @@ import {
   SelectField,
   XButton,
 } from '../../../shared/components/HeroForm'
+import { FormPanel } from '../../../shared/components/FormPanel'
 import { filterByFolder } from '../../../shared/utils/collectionFilters'
 import { EmptyActionPanel } from './EmptyActionPanel'
-import { AlertDialogButton } from '../../../shared/components/HeroForm'
+import { AlertDialogButton } from '../../../shared/components/AlertDialogButton'
 
 export type ActionWorkspacePanelProps = {
   actions: ActionDefinition[]
@@ -52,10 +53,10 @@ export type ActionWorkspacePanelProps = {
   currentDevice: CurrentDevice
   developerVisibility: DeveloperVisibilitySettings
   profilePresets: BrowserProfilePreset[]
-  urlGroups: UrlGroup[]
-  selectedCollectionFolderId: string
-  selectedActionId: string | null
   secrets: LocalSecretMetadata[]
+  urlGroups: UrlGroup[]
+  selectedActionId: string | null
+  selectedCollectionFolderId: string
   workspaceFolderAssignments: Record<string, string>
   workspaceFolders: WorkspaceFolder[]
   workflows: WorkflowDefinition[]
@@ -74,19 +75,19 @@ export function ActionWorkspacePanel({
   createForm,
   currentDevice,
   developerVisibility,
+  profilePresets,
+  secrets,
+  urlGroups,
+  selectedActionId,
+  selectedCollectionFolderId,
+  workspaceFolderAssignments,
+  workspaceFolders,
+  workflows,
   onChange,
   onDeleteAction,
   onSelectAction,
   onSubmit,
   onUpdateAction,
-  secrets,
-  profilePresets,
-  urlGroups,
-  selectedCollectionFolderId,
-  selectedActionId,
-  workspaceFolderAssignments,
-  workspaceFolders,
-  workflows,
 }: ActionWorkspacePanelProps) {
   const selectedAction =
     actions.find((action) => action.id === selectedActionId) ?? null
@@ -188,7 +189,6 @@ export function ActionWorkspacePanel({
             <div>
               {editForm ? (
                 <form
-                  className="task-form"
                   onSubmit={(event) => {
                     event.preventDefault()
                     if (isSelectedActionLocked) {
@@ -197,100 +197,105 @@ export function ActionWorkspacePanel({
                     if (!editForm.name.trim()) {
                       return
                     }
-                    void onUpdateAction(
-                      selectedAction.id,
-                      selectedAction.type === 'tool_action'
-                        ? {
-                            name: editForm.name.trim(),
-                            secretRefs: parseLines(editForm.secretRefIds).map(
-                              (secretId) => ({
-                                id: secretId,
-                                scope: 'local_device',
-                              }),
-                            ),
-                          }
-                        : createActionUpdateInputFromForm(editForm, selectedAction),
-                    )
+                    void (async () => {
+                      await onUpdateAction(
+                        selectedAction.id,
+                        selectedAction.type === 'tool_action'
+                          ? {
+                              name: editForm.name.trim(),
+                              secretRefs: parseLines(editForm.secretRefIds).map(
+                                (secretId) => ({
+                                  id: secretId,
+                                  scope: 'local_device',
+                                }),
+                              ),
+                            }
+                          : createActionUpdateInputFromForm(editForm, selectedAction),
+                      )
+                      onSelectAction(null)
+                    })()
                   }}
                 >
-                  <FieldGrid>
+                  <FormPanel>
+                    <FieldGrid>
+                      {editableTaskType ? (
+                        <SelectField
+                          isDisabled={isSelectedActionLocked}
+                          label="Action 타입"
+                          options={taskTypeOptions.map((taskType) => ({
+                            value: taskType,
+                            label: getActionTypeLabel(
+                              createActionUpdateInputFromForm(
+                                { ...editForm, taskType },
+                                selectedAction,
+                              ).type ?? selectedAction.type,
+                            ),
+                          }))}
+                          selectedKey={editForm.taskType}
+                          onChange={(taskType) =>
+                            setEditForm({
+                              ...editForm,
+                              taskType,
+                            })
+                          }
+                        />
+                      ) : null}
+                    </FieldGrid>
                     {editableTaskType ? (
-                      <SelectField
+                      <TaskTypeConfigFields
+                        form={editForm}
                         isDisabled={isSelectedActionLocked}
-                        label="Action 타입"
-                        options={taskTypeOptions.map((taskType) => ({
-                          value: taskType,
-                          label: getActionTypeLabel(
-                            createActionUpdateInputFromForm(
-                              { ...editForm, taskType },
-                              selectedAction,
-                            ).type ?? selectedAction.type,
-                          ),
-                        }))}
-                        selectedKey={editForm.taskType}
-                        onChange={(taskType) =>
-                          setEditForm({
-                            ...editForm,
-                            taskType,
-                          })
-                        }
+                        profilePresets={profilePresets}
+                        urlGroups={urlGroups}
+                        onChange={setEditForm}
                       />
-                    ) : null}
-                  </FieldGrid>
-                  {editableTaskType ? (
-                    <TaskTypeConfigFields
-                      form={editForm}
+                    ) : (
+                      <p className="muted-text">
+                        Tool Action 설정은 도구 모듈 정의를 기준으로 관리됩니다.
+                      </p>
+                    )}
+                    <Select
                       isDisabled={isSelectedActionLocked}
-                      profilePresets={profilePresets}
-                      urlGroups={urlGroups}
-                      onChange={setEditForm}
-                    />
-                  ) : (
-                    <p className="muted-text">
-                      Tool Action 설정은 도구 모듈 정의를 기준으로 관리됩니다.
-                    </p>
-                  )}
-                  <Select
-                    isDisabled={isSelectedActionLocked}
-                    selectionMode="multiple"
-                    value={parseLines(editForm.secretRefIds)}
-                    onChange={(keys) =>
-                      setEditForm({
-                        ...editForm,
-                        secretRefIds: Array.from(keys).map(String).join('\n'),
-                      })
-                    }
-                  >
-                    <Label>Secret 참조</Label>
-                    <Select.Trigger>
-                      <Select.Value />
-                      <Select.Indicator />
-                    </Select.Trigger>
-                    <Select.Popover>
-                      <ListBox selectionMode="multiple">
-                        {secrets.map((secret) => (
-                          <ListBox.Item
-                            id={secret.id}
-                            key={secret.id}
-                            textValue={secret.name}
-                          >
-                            {secret.name}
-                            <ListBox.ItemIndicator />
-                          </ListBox.Item>
-                        ))}
-                      </ListBox>
-                    </Select.Popover>
-                  </Select>
-                  <div className="form-actions">
-                    <Button
-                      isDisabled={isSelectedActionLocked}
-                      variant="primary"
-                      type="submit"
+                      selectionMode="multiple"
+                      value={parseLines(editForm.secretRefIds)}
+                      onChange={(keys) =>
+                        setEditForm({
+                          ...editForm,
+                          secretRefIds: Array.from(keys).map(String).join('\n'),
+                        })
+                      }
                     >
-                      저장
-                    </Button>
-                    <AlertDialogButton onPress={() => void onDeleteAction(selectedAction.id)}/>
-                  </div>
+                      <Label>Secret 참조</Label>
+                      <Select.Trigger>
+                        <Select.Value />
+                        <Select.Indicator />
+                      </Select.Trigger>
+                      <Select.Popover>
+                        <ListBox selectionMode="multiple">
+                          {secrets.map((secret) => (
+                            <ListBox.Item
+                              id={secret.id}
+                              key={secret.id}
+                              textValue={secret.name}
+                            >
+                              {secret.name}
+                              <ListBox.ItemIndicator />
+                            </ListBox.Item>
+                          ))}
+                        </ListBox>
+                      </Select.Popover>
+                    </Select>
+                    <div className="form-actions">
+                      <Button
+                        isDisabled={isSelectedActionLocked}
+                        variant="primary"
+                        type="submit"
+                      >
+                        저장
+                      </Button>
+                      <AlertDialogButton onPress={() => void onDeleteAction(selectedAction.id)}/>
+                    </div>
+                  </FormPanel>
                 </form>
               ) : null}
               <dl className="detail-list">
@@ -303,7 +308,7 @@ export function ActionWorkspacePanel({
                 />
                 <DetailItem
                   label="수정 시간"
-                  value={formatDate(selectedAction.updatedAt)}
+                  value={formatDate(selectedAction.updatedAt).value}
                 />
                 <DetailItem
                   label="Secret"
@@ -333,7 +338,13 @@ export function ActionWorkspacePanel({
               secrets={secrets}
               onCancel={() => setIsCreatingAction(false)}
               onChange={onChange}
-              onSubmit={onSubmit}
+              onSubmit={(event) => {
+                void (async () => {
+                  await onSubmit(event)
+                  setIsCreatingAction(false)
+                  onSelectAction(null)
+                })()
+              }}
             />
           ) : null}
       </div>

@@ -26,25 +26,27 @@ export const workspaceTemplates: WorkspaceTemplate[] = [
         (folder) => folder.id === context.selectedCollectionFolderId,
       )
       const props = {
-        workflows: visibleWorkflows,
         categoryLabel:
           selectedFolder?.name ?? getNavigationCategoryLabel(context.selectedCategory),
-        displayMode: context.appSettings.workflowListDisplayMode,
-        isLoading: context.isLoading,
-        runningWorkflowId: context.runningWorkflowId,
-        selectedWorkflowId: context.selectedWorkflowId,
-        stoppingWorkflowId: context.stoppingWorkflowId,
         gridColumnCount: context.appSettings.workflowGridColumnCount,
-        workflowHierarchy: context.appSettings.workflowHierarchy,
+        isLoading: context.isLoading,
+        launchPanelProps: {
+          displayMode: context.appSettings.workflowListDisplayMode,
+          runningWorkflowId: context.runningWorkflowId,
+          selectedWorkflowId: context.selectedWorkflowId,
+          stoppingWorkflowId: context.stoppingWorkflowId,
+          workflows: visibleWorkflows,
+          workflowHierarchy: context.appSettings.workflowHierarchy,
+          onRun: context.handleRunWorkflow,
+          onSelect(workflow: WorkflowDefinition) {
+            context.openWorkflowMode()
+            context.selectWorkflow(workflow)
+          },
+          onStop: context.handleStopWorkflow,
+        },
         onCreate: context.openWorkflowMode,
         onDisplayModeChange: context.handleTaskListDisplayModeChange,
         onGridColumnCountChange: context.handleWorkflowGridColumnCountChange,
-        onRun: context.handleRunWorkflow,
-        onStop: context.handleStopWorkflow,
-        onSelect(workflow: WorkflowDefinition) {
-          context.openWorkflowMode()
-          context.selectWorkflow(workflow)
-        },
       }
 
       return <RunWorkspace {...props} />
@@ -142,6 +144,7 @@ export const workspaceTemplates: WorkspaceTemplate[] = [
         isLoading: context.isLoading,
         selectedCollectionFolderId: context.selectedCollectionFolderId,
         selectedTodoId: context.selectedTodoId,
+        sortMode: context.todoSortMode,
         todos: filterTodosByCategory(
           filterByFolder(
             context.todos,
@@ -155,6 +158,7 @@ export const workspaceTemplates: WorkspaceTemplate[] = [
         onDeleteTodo: context.handleDeleteTodo,
         onIncludeCompletedChange: context.handleIncludeCompletedTodosChange,
         onSelectTodo: context.setSelectedTodoId,
+        onSortModeChange: context.setTodoSortMode,
         onUpdateTodo: context.handleUpdateTodo,
       }
 

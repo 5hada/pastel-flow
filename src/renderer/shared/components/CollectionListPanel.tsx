@@ -56,29 +56,42 @@ export function CollectionListPanel({
           {emptyAction}
         </div>
       ) : (
-        <div className="task-list">
+        <div className="grid gap-3">
           {items.map((item) => (
             <Card
-              className="task-row collection-list-row"
+              className="
+              grid
+              grid-cols-[minmax(0,1fr)_max-content_max-content]
+              md:grid-cols-[minmax(0,1fr)_max-content_max-content_max-content] items-center
+            "
               key={item.id}
               variant="secondary"
             >
-              <div className="task-row-summary">
-                <span className="task-row-title">{item.title}</span>
-                {item.meta ? renderListMeta(item.meta) : null}
-                {item.message ? (
-                  <span className="task-row-meta">{item.message}</span>
-                ) : null}
-              </div>
-              {item.status ? <div>{item.status}</div> : null}
-              <Button
-                className="px-6"
-                type="button"
-                variant="secondary"
-                onClick={() => onEdit(item.id)}
+              <div
+                className="
+                  grid min-w-0
+                  grid-cols-1
+                  md:contents
+                "
               >
-                {itemActionLabel}
-              </Button>
+                <div className="grid min-w-0 gap-1 md:order-1">
+                  <span className="truncate">{item.title}</span>
+                  {item.message ? (<span className="truncate">{item.message}</span>) : null}
+                </div>
+                <div className="md:order-3">{item.status ? item.status : null}</div>
+
+              </div>
+              <div className='md:pr-4 md:order-2'>{item.meta ? renderListMeta(item.meta) : null}</div>
+              <div className='justify-self-end md:order-4'>
+                <Button
+                  className=""
+                  type="button"
+                  variant="secondary"
+                  onClick={() => onEdit(item.id)}
+                >
+                  {itemActionLabel}
+                </Button>
+              </div>
             </Card>
           ))}
         </div>

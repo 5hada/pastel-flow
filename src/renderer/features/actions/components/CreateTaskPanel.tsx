@@ -13,6 +13,7 @@ import {
   SelectField,
   TextInputField,
 } from '../../../shared/components/HeroForm'
+import { FormPanel } from '../../../shared/components/FormPanel'
 
 export type CreateTaskPanelProps = {
   createForm: BrowserTaskFormState
@@ -58,65 +59,67 @@ export function CreateTaskPanel({
           </Button>
         </div>
       ) : null}
-      <form className="task-form" onSubmit={onSubmit}>
-        <FieldGrid>
-          <SelectField
-            label="작업 타입"
-            selectedKey={createForm.taskType}
-            options={taskTypeOptions.map((taskType) => ({
-              value: taskType,
-              label: getTaskTypeLabel(taskType),
-            }))}
-            onChange={(taskType) =>
-              onChange({
-                ...createForm,
-                taskType,
-              })
-            }
-          />
-          <TextInputField
-            label="이름"
-            name="action-name"
-            placeholder="예: 리서치 세션"
-            value={createForm.name}
-            onChange={(name) =>
-              onChange({
-                ...createForm,
-                name,
-              })
-            }
-          />
-        </FieldGrid>
-        <TaskTypeConfigFields
-          form={createForm}
-          profilePresets={profilePresets}
-          urlGroups={urlGroups}
-          onChange={onChange}
-        />
-        <CheckboxField
-          label="단일 Action Workflow로 함께 생성"
-          isSelected={createForm.createSingleActionWorkflow}
-          onChange={(createSingleActionWorkflow) =>
-            onChange({
-              ...createForm,
-              createSingleActionWorkflow,
-            })
-          }
-        />
-        {createForm.createSingleActionWorkflow ? (
-          <>
-            <ScheduleFields form={createForm} onChange={onChange} />
-            <PolicyFields
-              currentDevice={currentDevice}
-              form={createForm}
-              onChange={onChange}
-              secrets={secrets}
+      <form onSubmit={onSubmit}>
+        <FormPanel>
+          <FieldGrid>
+            <SelectField
+              label="작업 타입"
+              selectedKey={createForm.taskType}
+              options={taskTypeOptions.map((taskType) => ({
+                value: taskType,
+                label: getTaskTypeLabel(taskType),
+              }))}
+              onChange={(taskType) =>
+                onChange({
+                  ...createForm,
+                  taskType,
+                })
+              }
             />
-          </>
-        ) : null}
-        <div className="form-actions">
-          <Button variant="primary" type="submit">Action 생성</Button>
-        </div>
+            <TextInputField
+              label="이름"
+              name="action-name"
+              placeholder="예: 리서치 세션"
+              value={createForm.name}
+              onChange={(name) =>
+                onChange({
+                  ...createForm,
+                  name,
+                })
+              }
+            />
+          </FieldGrid>
+          <TaskTypeConfigFields
+            form={createForm}
+            profilePresets={profilePresets}
+            urlGroups={urlGroups}
+            onChange={onChange}
+          />
+          <CheckboxField
+            label="단일 Action Workflow로 함께 생성"
+            isSelected={createForm.createSingleActionWorkflow}
+            onChange={(createSingleActionWorkflow) =>
+              onChange({
+                ...createForm,
+                createSingleActionWorkflow,
+              })
+            }
+          />
+          {createForm.createSingleActionWorkflow ? (
+            <>
+              <ScheduleFields form={createForm} onChange={onChange} />
+              <PolicyFields
+                currentDevice={currentDevice}
+                form={createForm}
+                onChange={onChange}
+                secrets={secrets}
+              />
+            </>
+          ) : null}
+          <div className="form-actions">
+            <Button variant="primary" type="submit">Action 생성</Button>
+          </div>
+        </FormPanel>
       </form>
     </section>
   )

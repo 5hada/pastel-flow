@@ -48,6 +48,7 @@ export function usePastelFlowApp() {
     useState<string>('all')
   const [selectedSettingsCategory, setSelectedSettingsCategory] =
     useState<SettingsCategory>('general')
+  const [todoSortMode, setTodoSortMode] = useState<TodoSortMode>('created')
   const [isSidebarOpen, setIsSidebarOpen] = useState(
     () => !isCompactViewport(),
   )
@@ -325,7 +326,6 @@ export function usePastelFlowApp() {
 
   function openCategory(category: NavigationCategory) {
     setSelectedCategory(category)
-    openRunMode()
   }
 
   async function handleSaveSettings(event: FormEvent<HTMLFormElement>) {
@@ -531,6 +531,7 @@ export function usePastelFlowApp() {
     toolInputValues: tools.toolInputValues,
     todos: todos.todos,
     selectedTodoId: todos.selectedTodoId,
+    todoSortMode,
     includeCompletedTodos: todos.includeCompletedTodos,
     urlGroups: urlGroups.urlGroups,
     selectedUrlGroupId: urlGroups.selectedUrlGroupId,
@@ -595,6 +596,7 @@ export function usePastelFlowApp() {
     setSelectedSettingsCategory,
     setSelectedToolId: tools.setSelectedToolId,
     setSelectedTodoId: todos.setSelectedTodoId,
+    setTodoSortMode,
     setSelectedUrlGroupId: urlGroups.setSelectedUrlGroupId,
     setSelectedWorkflowId: actionWorkflow.setSelectedWorkflowId,
     setSettingsForm: settings.setSettingsForm,
@@ -617,6 +619,8 @@ export function usePastelFlowApp() {
     renameWorkspaceFolder,
   }
 }
+
+export type TodoSortMode = 'created' | 'dueSoon' | 'reverse'
 
 function createDefaultTransformConfig(
   mode: TransformActionConfig['mode'],

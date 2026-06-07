@@ -77,7 +77,7 @@ export function WorkflowRunEventsPanel({ events }: WorkflowRunEventsPanelProps) 
               </span>
               <div>
                 <strong>{event.message ?? '상태 변경'}</strong>
-                <small>{formatDate(event.createdAt)}</small>
+                <small>{formatDate(event.createdAt).value}</small>
               </div>
             </div>
           ))}

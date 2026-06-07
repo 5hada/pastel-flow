@@ -1,10 +1,12 @@
-import type { DateValue } from '@internationalized/date'
-
-import { parseDate } from '@internationalized/date'
+import {
+  parseDate,
+  type DateValue
+} from '@internationalized/date'
 import {
   Button,
   Calendar,
   Card,
+  Chip,
   DateField,
   DatePicker,
   Label,
@@ -13,11 +15,14 @@ import { useEffect, useState, type FormEvent } from 'react'
 import type { WorkspaceFolder } from '../../../shared/settings'
 import type { TodoItem } from '../../../shared/todos'
 import { CollectionListPanel } from '../../shared/components/CollectionListPanel'
+import { FormPanel } from '../../shared/components/FormPanel'
 import {
+  AlertDialogButton,
   CheckboxField,
   FieldGrid,
   TextAreaField,
   TextInputField,
+  XButton,
 } from '../../shared/components/HeroForm'
 import { getCommonIcon } from '../../shared/assets/icon'
 import { formatDate } from '../../shared/utils/viewLabels'
@@ -124,7 +129,12 @@ export function TodosWorkspace({
         items={todos.map((todo) => ({
           id: todo.id,
           title: todo.title,
-          meta: getTodoMeta(todo),
+          meta: <TodoStatusChip todo={todo} />,
+          status: todo.dueAt ? (
+            <Chip size="sm" variant="secondary">
+              <Chip.Label>{formatDate(todo.dueAt)}</Chip.Label>
+            </Chip>
+          ) : null,
           message: todo.details ?? todo.category ?? '',
         }))}
         title="Todo 목록"
@@ -193,80 +203,67 @@ function TodoSidePanel({
           <p className="eyebrow">Todos</p>
           <h2>{selectedTodo?.title ?? '새 Todo'}</h2>
         </div>
-        <Button
-          aria-label="목록으로 돌아가기"
-          isIconOnly
-          variant="ghost"
-          type="button"
-          onClick={onClose}
-        >
-          {getCommonIcon('close')}
-        </Button>
+        <XButton onPress={onClose}/>
       </div>
 
-      <form className="task-form" onSubmit={onSubmit}>
-        <TextInputField
-          label="Title"
-          name="todo-title"
-          value={draft.title}
-          onChange={(value) =>
-            onDraftChange((currentDraft) => ({
-              ...currentDraft,
-              title: value,
-            }))
-          }
-        />
-        <FieldGrid>
-          <TodoDateField value={selectedDate} onChange={onDateChange} />
+      <form onSubmit={onSubmit}>
+        <FormPanel>
           <TextInputField
-            label="Category"
-            name="todo-category"
-            value={draft.category}
+            label="Title"
+            name="todo-title"
+            value={draft.title}
             onChange={(value) =>
               onDraftChange((currentDraft) => ({
                 ...currentDraft,
-                category: value,
+                title: value,
               }))
             }
           />
-        </FieldGrid>
-        <TextAreaField
-          label="Details"
-          name="todo-details"
-          rows={5}
-          value={draft.details}
-          onChange={(value) =>
-            onDraftChange((currentDraft) => ({
-              ...currentDraft,
-              details: value,
-            }))
-          }
-        />
-        <CheckboxField
-          isSelected={draft.completed}
-          label="Completed"
-          onChange={(isSelected) =>
-            onDraftChange((currentDraft) => ({
-              ...currentDraft,
-              completed: isSelected,
-            }))
-          }
-        />
-        <div className="form-actions">
-          <Button variant="primary" type="submit" isDisabled={!draft.title.trim()}>
-            저장
-          </Button>
-          {selectedTodo ? (
-            <Button
-              className="danger-button"
-              variant="danger"
-              type="button"
-              onClick={() => void onDeleteTodo(selectedTodo.id)}
-            >
-              삭제
+          <FieldGrid>
+            <TodoDateField value={selectedDate} onChange={onDateChange} />
+            <TextInputField
+              label="Category"
+              name="todo-category"
+              value={draft.category}
+              onChange={(value) =>
+                onDraftChange((currentDraft) => ({
+                  ...currentDraft,
+                  category: value,
+                }))
+              }
+            />
+          </FieldGrid>
+          <TextAreaField
+            label="Details"
+            name="todo-details"
+            rows={5}
+            value={draft.details}
+            onChange={(value) =>
+              onDraftChange((currentDraft) => ({
+                ...currentDraft,
+                details: value,
+              }))
+            }
+          />
+          <CheckboxField
+            isSelected={draft.completed}
+            label="Completed"
+            onChange={(isSelected) =>
+              onDraftChange((currentDraft) => ({
+                ...currentDraft,
+                completed: isSelected,
+              }))
+            }
+          />
+          <div className="form-actions">
+            <Button variant="primary" type="submit" isDisabled={!draft.title.trim()}>
+              저장
             </Button>
-          ) : null}
-        </div>
+            {selectedTodo ? (
+              <AlertDialogButton onPress={() => void onDeleteTodo(selectedTodo.id)}/>
+            ) : null}
+          </div>
+        </FormPanel>
       </form>
 
       {selectedTodo ? (
@@ -394,8 +391,14 @@ function formatDueDateValue(date: DateValue | null): string {
   return date?.toString() ?? ''
 }
 
-function getTodoMeta(todo: TodoItem): string {
-  const status = todo.completed ? 'Done' : 'Open'
-  const due = todo.dueAt ? formatDate(todo.dueAt) : 'No due date'
-  return `${status} · ${due}`
+function TodoStatusChip({ todo }: { todo: TodoItem }) {
+  return (
+    <Chip
+      color={todo.completed ? 'success' : 'warning'}
+      size="sm"
+      variant="secondary"
+    >
+      <Chip.Label>{todo.completed ? 'Done' : 'Open'}</Chip.Label>
+    </Chip>
+  )
 }

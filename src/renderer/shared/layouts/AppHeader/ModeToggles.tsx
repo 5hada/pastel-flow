@@ -1,6 +1,6 @@
-import { Button, ButtonGroup } from '@heroui/react'
-import { getCommonIcon } from '../../assets/icon';
 import type { ReactNode } from 'react'
+import { Button, ButtonGroup } from '@heroui/react'
+import { getCommonIcon } from '../../assets/icon'
 import type { WorkspaceMode } from '../../state/taskFormState'
 
 export type ModeTogglesProps = {
@@ -47,14 +47,15 @@ export function ModeToggles({
       variant="ghost"
     >
       {modes.map((mode) => (
-        <Button fullWidth
+        <Button
           aria-label={mode.label}
-          className={currentMode === mode.id ? 'is-active px-2' : 'px-2'}
-          variant={currentMode === mode.id ? 'secondary' : 'ghost'}
+          className="px-2"
+          fullWidth
           key={mode.id}
+          size="sm"
           type="button"
-          onClick={mode.onClick}
-          size='sm'
+          variant={currentMode === mode.id ? 'secondary' : 'ghost'}
+          onPress={mode.onClick}
         >
           <span aria-hidden="true">{mode.icon}</span>
           <strong>{mode.label}</strong>

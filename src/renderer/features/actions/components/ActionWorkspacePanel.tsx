@@ -37,13 +37,14 @@ import { CreateTaskPanel } from './CreateTaskPanel'
 import { TaskTypeConfigFields } from '../../../shared/task-fields'
 import { getActionTypeLabel, formatDate } from '../../../shared/utils/viewLabels'
 import { getCommonIcon } from '../../../shared/assets/icon'
-import { CollectionListPanel } from '../../../shared/components/CollectionListPanel'
 import {
   FieldGrid,
   SelectField,
+  XButton,
 } from '../../../shared/components/HeroForm'
-import { getWorkspaceFolderPathLabel } from '../../../shared/utils/workspaceFolderLabels'
 import { filterByFolder } from '../../../shared/utils/collectionFilters'
+import { EmptyActionPanel } from './EmptyActionPanel'
+import { AlertDialogButton } from '../../../shared/components/HeroForm'
 
 export type ActionWorkspacePanelProps = {
   actions: ActionDefinition[]
@@ -152,32 +153,12 @@ export function ActionWorkspacePanel({
 
   if (!selectedAction && !isCreatingAction) {
     return (
-      <CollectionListPanel
-        emptyText="표시할 Action이 없습니다."
-        eyebrow="ACTIONS"
-        folderLabel={getWorkspaceFolderPathLabel(
-          selectedCollectionFolderId,
-          workspaceFolders,
-        )}
-        headerAction={
-          <Button
-            aria-label="Action 추가"
-            isIconOnly
-            variant="ghost"
-            type="button"
-            onClick={() => setIsCreatingAction(true)}
-          >
-            {getCommonIcon('add')}
-          </Button>
-        }
-        items={visibleActions.map((action) => ({
-          id: action.id,
-          title: action.name,
-          meta: getActionTypeLabel(action.type),
-          message: `${action.secretRefs?.length ?? 0}개 Secret`,
-        }))}
-        title="Action 목록"
-        onEdit={onSelectAction}
+      <EmptyActionPanel
+        selectedCollectionFolderId={selectedCollectionFolderId}
+        workspaceFolders={workspaceFolders}
+        visibleActions={visibleActions}
+        onClickAction={() => setIsCreatingAction(true)}
+        onSelectAction={onSelectAction}
       />
     )
   }
@@ -187,76 +168,21 @@ export function ActionWorkspacePanel({
       className={`mode-panel action-workspace${isSelectedActionLocked ? ' is-edit-locked' : ''}`}
       aria-label="Action 편집"
     >
-      <div className="panel-heading">
-        <div>
-          <p className="eyebrow">Actions</p>
-          {selectedAction && editingActionNameId === selectedAction.id ? (
-            <form className="workflow-title-form" onSubmit={handleRenameAction}>
-              <TextField
-                aria-label="Action 이름"
-                isDisabled={isSelectedActionLocked}
-                value={editName}
-                onChange={setEditName}
-              >
-                <Input />
-              </TextField>
-              <Button
-                isDisabled={isSelectedActionLocked || !editName.trim()}
-                variant="primary"
-                type="submit"
-              >
-                저장
-              </Button>
-              <Button
-                variant="ghost"
-                type="button"
-                onClick={() => {
-                  setEditingActionNameId(null)
-                  setEditName(selectedAction.name)
-                }}
-              >
-                취소
-              </Button>
-            </form>
-          ) : selectedAction ? (
-            <div className="workflow-title-row">
-              <h2>{selectedAction.name}</h2>
-              <Button
-                aria-label="Action 이름 변경"
-                isDisabled={isSelectedActionLocked}
-                isIconOnly
-                variant="ghost"
-                type="button"
-                onClick={() => {
-                  if (isSelectedActionLocked) {
-                    return
-                  }
-                  setEditingActionNameId(selectedAction.id)
-                  setEditName(selectedAction.name)
-                }}
-              >
-                {getCommonIcon('edit')}
-              </Button>
-            </div>
-          ) : (
-            <h2>새 Action</h2>
-          )}
-        </div>
-        {selectedAction || isCreatingAction ? (
-          <Button
-            aria-label="목록으로 돌아가기"
-            isIconOnly
-            variant="ghost"
-            type="button"
-            onClick={() => {
-              setIsCreatingAction(false)
-              onSelectAction(null)
-            }}
-          >
-            {getCommonIcon('close')}
-          </Button>
-        ) : null}
-      </div>
+      {selectedAction ? null : null}
+      <ActionEditingPanelHead
+        isEditingName={(selectedAction && editingActionNameId === selectedAction.id) ? true : false}
+        isNewAction={isCreatingAction}
+        isSelectedActionLocked={isSelectedActionLocked}
+        newName={editName}
+        prevName={selectedAction ? selectedAction.name : '새 Action'}
+        selectedActionId={selectedAction ? selectedAction.id : null}
+        onEditName={setEditName}
+        onSaveName={handleRenameAction}
+        onSelectAction={onSelectAction}
+        setEditingActionNameId={setEditingActionNameId}
+        setIsCreatingAction={setIsCreatingAction}
+      />
+      
       <div className="editor-detail">
           {selectedAction ? (
             <div>
@@ -363,15 +289,7 @@ export function ActionWorkspacePanel({
                     >
                       저장
                     </Button>
-                    <Button
-                      className="danger-button"
-                      isDisabled={isSelectedActionLocked}
-                      variant="danger"
-                      type="button"
-                      onClick={() => void onDeleteAction(selectedAction.id)}
-                    >
-                      삭제
-                    </Button>
+                    <AlertDialogButton onPress={() => void onDeleteAction(selectedAction.id)}/>
                   </div>
                 </form>
               ) : null}
@@ -471,5 +389,96 @@ function DetailItem({ label, value }: { label: string; value: string }) {
       <dt>{label}</dt>
       <dd>{value}</dd>
     </Card>
+  )
+}
+
+
+function ActionEditingPanelHead({
+  isEditingName,
+  isNewAction,
+  isSelectedActionLocked,
+  newName,
+  prevName,
+  selectedActionId,
+  onEditName,
+  onSaveName,
+  onSelectAction,
+  setEditingActionNameId,
+  setIsCreatingAction,
+}: {
+  isEditingName: boolean
+  isNewAction: boolean
+  isSelectedActionLocked: boolean
+  newName: string
+  prevName: string
+  selectedActionId: string | null
+  onEditName(value:string): void
+  onSaveName(event: FormEvent<HTMLFormElement>): void
+  onSelectAction(actionId: string | null): void
+  setEditingActionNameId(value: string | null): void
+  setIsCreatingAction(value: boolean): void
+}) {
+  return (
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">Actions</p>
+          {isEditingName ? (
+            <form className="workflow-title-form" onSubmit={onSaveName}>
+              <TextField
+                aria-label="Action 이름"
+                isDisabled={isSelectedActionLocked}
+                value={newName}
+                onChange={onEditName}
+              >
+                <Input />
+              </TextField>
+              <Button
+                isDisabled={isSelectedActionLocked || !newName.trim()}
+                type="submit"
+              >
+                저장
+              </Button>
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={() => {
+                  setEditingActionNameId(null)
+                  onEditName(prevName)
+                }}
+              >
+                취소
+              </Button>
+            </form>
+          ) : !isNewAction ? (
+            <div className="workflow-title-row">
+              <h2>{prevName}</h2>
+              <Button
+                aria-label="Action 이름 변경"
+                isDisabled={isSelectedActionLocked}
+                isIconOnly
+                variant="ghost"
+                type="button"
+                onClick={() => {
+                  if (isSelectedActionLocked) {
+                    return
+                  }
+                  setEditingActionNameId(selectedActionId)
+                  onEditName(prevName)
+                }}
+              >
+                {getCommonIcon('edit')}
+              </Button>
+            </div>
+          ) : (
+            <h2>새 Action</h2>
+          )}
+        </div>
+        <XButton
+          onPress={() => {
+            setIsCreatingAction(false)
+            onSelectAction(null)
+          }}
+        />
+      </div>
   )
 }

@@ -4,16 +4,6 @@
   min-width: 0;
 }
 
-.task-form label,
-.tool-field {
-  display: grid;
-  min-width: 0;
-  gap: 8px;
-  color: var(--text-muted);
-  font-size: 0.9rem;
-  font-weight: 750;
-}
-
 .task-form .inline-check,
 .inline-check,
 .tool-field.toggle-field {
@@ -31,58 +21,6 @@
   min-width: 0;
 }
 
-input,
-select,
-textarea {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  color: var(--foreground, var(--text));
-  background: var(--field-background, var(--control-bg));
-  font: inherit;
-  transition:
-    border-color 140ms ease,
-    box-shadow 140ms ease,
-    background-color 140ms ease;
-}
-
-input,
-select {
-  min-height: 42px;
-}
-
-input[type='checkbox'],
-input[type='radio'],
-.inline-check input {
-  width: auto;
-  min-height: auto;
-}
-
-textarea {
-  min-height: 96px;
-  resize: vertical;
-}
-
-input:hover,
-select:hover,
-textarea:hover {
-  border-color: var(--border-strong);
-}
-
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible,
-button:focus-visible,
-[role='button']:focus-visible {
-  outline: none;
-  border-color: var(--border-strong);
-  box-shadow: var(--focus-ring);
-}
-
 .form-actions,
 .detail-actions {
   display: flex;
@@ -91,44 +29,22 @@ button:focus-visible,
   gap: 8px;
 }
 
-.error-message,
-.panel-error,
-.panel-success {
-  margin: 0;
-  border-radius: 8px;
-  padding: 12px 14px;
-  font-weight: 700;
-}
-
 .error-message {
   position: fixed;
   top: 76px;
   left: 50%;
   z-index: 10;
   width: min(720px, calc(100vw - 32px));
-  border: 1px solid var(--danger);
-  color: var(--danger);
-  background: var(--danger-soft);
   transform: translateX(-50%);
 }
 
-.panel-error {
-  border: 1px solid var(--danger);
-  color: var(--danger);
-  background: var(--danger-soft);
-}
-
-.panel-success {
-  border: 1px solid var(--success);
-  color: var(--success);
-  background: var(--success-soft);
-}
-
+.error-message,
+.panel-error,
+.panel-success,
 .empty-state,
 .muted-text,
 .danger-zone p {
   margin: 0;
-  color: var(--muted, var(--text-muted));
 }
 
 .empty-state-action {

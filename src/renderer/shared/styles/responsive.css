@@ -74,7 +74,6 @@
     display: grid;
     width: min(82vw, 300px);
     max-width: calc(100vw - 24px);
-    box-shadow: 14px 0 32px rgb(0 0 0 / 18%);
   }
 
   .app-workspace.is-sidebar-collapsed .workspace-sidebar {

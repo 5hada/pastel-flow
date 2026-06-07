@@ -1,6 +1,7 @@
 import {
   Button,
   Card,
+  Chip,
 } from '@heroui/react'
 import type {
   RegisteredToolModule,
@@ -126,17 +127,19 @@ export function ToolsPanel({
       </div>
       <div className="tool-workspace-surface" aria-label="tool modules">
           <div className="tool-module-detail">
-            <div className="tool-summary-strip">
+            <Card className="tool-summary-strip" variant="secondary">
               <div>
                 <strong>{selectedTool.manifest.name}</strong>
                 {selectedTool.manifest.description ? (
                   <span>{selectedTool.manifest.description}</span>
                 ) : null}
               </div>
-              <em>v{selectedTool.manifest.version}</em>
-            </div>
+              <Chip size="sm" variant="secondary">
+                <Chip.Label>v{selectedTool.manifest.version}</Chip.Label>
+              </Chip>
+            </Card>
 
-            <Card className="tool-runner-card">
+            <Card className="tool-runner-card" variant="secondary">
               <div className="tool-input-grid">
                 {selectedTool.manifest.inputs.length > 0 ? (
                   selectedTool.manifest.inputs.map((field) => (

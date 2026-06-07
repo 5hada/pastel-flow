@@ -1,23 +1,27 @@
 import {
+  Button,
   ColorArea,
   ColorField,
   ColorPicker,
   ColorSlider,
   ColorSwatch,
-  ColorSwatchPicker,
-  Button,
   Label,
-  parseColor,
   Radio,
   RadioGroup,
+  parseColor,
 } from '@heroui/react'
 import type { Color } from '@heroui/react'
-import type { CSSProperties } from 'react'
-import type { AppSettings, ThemeMode } from '../../../../../shared/settings'
+import { useEffect, useState } from 'react'
+import type {
+  AppSettings,
+  CustomThemeColors,
+  ThemeColorKey,
+  ThemeMode,
+} from '../../../../../shared/settings'
 import {
+  createDefaultCustomThemeColors,
   themeColorDefinitions,
   themeColorGroups,
-  themePreviewColorSets,
   type ThemeColorDefinition,
 } from '../../../../../shared/settings/themeTokens'
 import {
@@ -27,11 +31,14 @@ import {
   TextInputField,
 } from '../../../../shared/components/HeroForm'
 import { getThemeModeLabel } from '../../../../shared/utils/viewLabels'
+import { ThemePreview } from './ThemePreview'
 
 export type AppearanceSettingsProps = {
   form: AppSettings
   onChange(value: AppSettings): void
 }
+
+const selectableThemeModes: ThemeMode[] = ['system', 'light', 'dark', 'custom']
 
 export function AppearanceSettings({ form, onChange }: AppearanceSettingsProps) {
   return (
@@ -41,6 +48,7 @@ export function AppearanceSettings({ form, onChange }: AppearanceSettingsProps) 
           <RadioGroup
             className="segmented-control"
             name="themeMode"
+            orientation="horizontal"
             value={form.themeMode}
             onChange={(themeMode) =>
               onChange({
@@ -49,18 +57,16 @@ export function AppearanceSettings({ form, onChange }: AppearanceSettingsProps) 
               })
             }
           >
-            {(['system', 'light', 'dark', 'custom'] as ThemeMode[]).map(
-              (themeMode) => (
-                <Radio key={themeMode} value={themeMode}>
-                  <Radio.Control>
-                    <Radio.Indicator />
-                  </Radio.Control>
-                  <Radio.Content>
-                    <Label>{getThemeModeLabel(themeMode)}</Label>
-                  </Radio.Content>
-                </Radio>
-              ),
-            )}
+            {selectableThemeModes.map((themeMode) => (
+              <Radio key={themeMode} value={themeMode}>
+                <Radio.Control>
+                  <Radio.Indicator />
+                </Radio.Control>
+                <Radio.Content>
+                  <Label>{getThemeModeLabel(themeMode)}</Label>
+                </Radio.Content>
+              </Radio>
+            ))}
           </RadioGroup>
         </FormFieldset>
 
@@ -123,65 +129,28 @@ export function AppearanceSettings({ form, onChange }: AppearanceSettingsProps) 
   )
 }
 
-function ThemePreview({ form }: { form: AppSettings }) {
+function ThemeTokenEditor({
+  form,
+  onChange,
+}: {
+  form: AppSettings
+  onChange(value: AppSettings): void
+}) {
   return (
-    <div
-      className="theme-preview"
-      data-preview-theme={form.themeMode}
-      style={getThemePreviewStyle(form)}
-    >
-      <div className="theme-preview-shell">
-        <aside className="theme-preview-rail">
-          <span />
-          <strong>PF</strong>
-          <i />
-        </aside>
-        <main className="theme-preview-main">
-          <div className="theme-preview-topbar">
-            <span>{getThemeModeLabel(form.themeMode)}</span>
-            <Button type="button">Primary</Button>
-          </div>
-          <section className="theme-preview-panel">
-            <div className="theme-preview-selected-row">
-              <strong>Selected workflow</strong>
-              <small>Muted metadata</small>
-            </div>
-            <div className="theme-preview-controls">
-              <span>Input value</span>
-              <em>Readonly</em>
-            </div>
-            <div className="theme-preview-statuses">
-              <span className="is-info">Info</span>
-              <span className="is-success">Success</span>
-              <span className="is-warning">Warning</span>
-              <span className="is-danger">Danger</span>
-            </div>
-          <div className="theme-preview-actions">
-              <Button type="button">Accent</Button>
-              <Button type="button">Danger</Button>
-          </div>
-          </section>
-        </main>
-      </div>
-    </div>
-  )
-}
+    <section className="theme-token-editor" aria-label="사용자 지정 테마">
+      {themeColorGroups.map((group) => {
+        const definitions = themeColorDefinitions.filter(
+          (definition) => definition.group === group.id,
+        )
 
-function ThemeTokenEditor({ form, onChange }: AppearanceSettingsProps) {
-  return (
-    <div className="theme-token-editor">
-      {themeColorGroups.map((group) => (
-        <section className="theme-token-group" key={group.id}>
-          <div className="section-heading compact-heading">
-            <div>
-              <p className="eyebrow">{group.label}</p>
-              <h3>{group.label} tokens</h3>
-            </div>
-          </div>
-          <div className="theme-color-grid">
-            {themeColorDefinitions
-              .filter((definition) => definition.group === group.id)
-              .map((definition) => (
+        return (
+          <FormFieldset
+            className="theme-token-group"
+            key={group.id}
+            legend={group.label}
+          >
+            <div className="theme-color-grid">
+              {definitions.map((definition) => (
                 <ThemeColorPicker
                   definition={definition}
                   key={definition.key}
@@ -189,18 +158,20 @@ function ThemeTokenEditor({ form, onChange }: AppearanceSettingsProps) {
                   onChange={(value) =>
                     onChange({
                       ...form,
-                      customThemeColors: {
-                        ...form.customThemeColors,
-                        [definition.key]: value,
-                      },
+                      customThemeColors: getNextCustomThemeColors(
+                        form.customThemeColors,
+                        definition.key,
+                        value,
+                      ),
                     })
                   }
                 />
               ))}
-          </div>
-        </section>
-      ))}
-    </div>
+            </div>
+          </FormFieldset>
+        )
+      })}
+    </section>
   )
 }
 
@@ -213,75 +184,86 @@ function ThemeColorPicker({
   value: string
   onChange(value: string): void
 }) {
-  const color = parseColor(value)
+  const safeValue = value ?? definition.defaultValue
+  const [draftColor, setDraftColor] = useState(() =>
+    getParsedColor(safeValue, definition.defaultValue),
+  )
 
-  function updateColor(nextColor: Color) {
-    onChange(nextColor.toString('hex'))
-  }
+  useEffect(() => {
+    setDraftColor(getParsedColor(safeValue, definition.defaultValue))
+  }, [definition.defaultValue, safeValue])
 
   return (
     <div className="theme-token-row">
-      <ColorPicker value={color} onChange={updateColor}>
+      <span>
+        <strong>{definition.label}</strong>
+        <small>{definition.cssVariable}</small>
+      </span>
+      <ColorPicker
+        aria-label={definition.label}
+        value={draftColor}
+        onChange={setDraftColor}
+      >
         <ColorPicker.Trigger>
-          <ColorSwatch color={color} size="lg" />
-          <span>
-            <strong>{definition.label}</strong>
-            <small>{definition.description}</small>
-          </span>
+          <Button type="button" variant="outline">
+            <ColorSwatch color={draftColor} />
+          </Button>
         </ColorPicker.Trigger>
         <ColorPicker.Popover className="theme-color-popover">
-          <ColorSwatchPicker className="theme-color-presets" size="xs">
-            {themeColorDefinitions.map((preset) => (
-              <ColorSwatchPicker.Item
-                color={preset.defaultValue}
-                key={preset.key}
-              >
-                <ColorSwatchPicker.Swatch />
-              </ColorSwatchPicker.Item>
-            ))}
-          </ColorSwatchPicker>
           <ColorArea
-            aria-label={`${definition.label} 색상 영역`}
             colorSpace="hsb"
             xChannel="saturation"
             yChannel="brightness"
           >
             <ColorArea.Thumb />
           </ColorArea>
-          <ColorSlider
-            aria-label={`${definition.label} hue`}
-            channel="hue"
-            colorSpace="hsb"
-          >
+          <ColorSlider channel="hue" colorSpace="hsb">
             <ColorSlider.Track>
               <ColorSlider.Thumb />
             </ColorSlider.Track>
           </ColorSlider>
-          <ColorField aria-label={`${definition.label} hex`}>
+          <ColorField
+            value={draftColor}
+            onChange={(nextColor) => {
+              if (nextColor) {
+                setDraftColor(nextColor)
+              }
+            }}
+          >
+            <Label>{definition.label}</Label>
             <ColorField.Group>
-              <ColorField.Prefix>
-                <ColorSwatch color={color} size="xs" />
-              </ColorField.Prefix>
               <ColorField.Input />
             </ColorField.Group>
           </ColorField>
+          <Button type="button" onPress={() => onChange(formatColor(draftColor))}>
+            적용
+          </Button>
         </ColorPicker.Popover>
       </ColorPicker>
-      <code>{definition.cssVariable}</code>
     </div>
   )
 }
 
-function getThemePreviewStyle(form: AppSettings): CSSProperties {
-  const colors =
-    form.themeMode === 'custom'
-      ? form.customThemeColors
-      : themePreviewColorSets[form.themeMode]
+function getParsedColor(value: string, fallbackValue: string): Color {
+  try {
+    return parseColor(value)
+  } catch {
+    return parseColor(fallbackValue)
+  }
+}
 
-  return Object.fromEntries(
-    themeColorDefinitions.map((definition) => [
-      definition.cssVariable,
-      colors[definition.key],
-    ]),
-  ) as CSSProperties
+function formatColor(color: Color): string {
+  return color.toString('hex')
+}
+
+function getNextCustomThemeColors(
+  currentColors: Partial<CustomThemeColors>,
+  key: ThemeColorKey,
+  value: string,
+): CustomThemeColors {
+  return {
+    ...createDefaultCustomThemeColors(),
+    ...currentColors,
+    [key]: value,
+  }
 }

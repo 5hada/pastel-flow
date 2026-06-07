@@ -48,7 +48,8 @@ export function useAppSettingsData(
       themeColorDefinitions.forEach((definition) =>
         root.style.setProperty(
           definition.cssVariable,
-          appSettings.customThemeColors[definition.key],
+          appSettings.customThemeColors[definition.key] ??
+            definition.defaultValue,
         ),
       )
     } else {

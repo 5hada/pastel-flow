@@ -185,7 +185,6 @@ export function usePastelFlowApp() {
 
   function openTodosMode() {
     setSelectedCollectionFolderId('all')
-    setSelectedCategory('all')
     todos.setSelectedTodoId(null)
     setWorkspaceMode('todos')
     void todos.loadTodos()
@@ -326,6 +325,7 @@ export function usePastelFlowApp() {
 
   function openCategory(category: NavigationCategory) {
     setSelectedCategory(category)
+    openRunMode()
   }
 
   async function handleSaveSettings(event: FormEvent<HTMLFormElement>) {

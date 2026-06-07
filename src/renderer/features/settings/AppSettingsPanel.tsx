@@ -12,7 +12,9 @@ import type {
   SettingsCategory,
   SettingsSaveState,
 } from '../../shared/state/taskFormState'
+import { FormPanel } from '../../shared/components/FormPanel'
 import { SettingsCategoryContent } from './components/core/SettingsCategoryContent'
+import { XButton } from '../../shared/components/HeroForm'
 
 export type AppSettingsPanelProps = {
   currentDevice: CurrentDevice
@@ -57,26 +59,26 @@ export function AppSettingsPanel(props: AppSettingsPanelProps) {
           <p className="eyebrow">App settings</p>
           <h2>앱 설정</h2>
         </div>
-        <Button variant="ghost" onPress={onClose}>
-          닫기
-        </Button>
+        <XButton onPress={onClose} />
       </div>
 
-      <form className="task-form" onSubmit={onSubmit}>
-        <SettingsCategoryContent {...props} />
+      <form onSubmit={onSubmit}>
+        <FormPanel>
+          <SettingsCategoryContent {...props} />
 
-        {settingsErrorMessage ? (
-          <p className="panel-error">{settingsErrorMessage}</p>
-        ) : null}
-        {saveState === 'saved' ? (
-          <p className="panel-success">설정을 저장했습니다.</p>
-        ) : null}
+          {settingsErrorMessage ? (
+            <p className="panel-error">{settingsErrorMessage}</p>
+          ) : null}
+          {saveState === 'saved' ? (
+            <p className="panel-success">설정을 저장했습니다.</p>
+          ) : null}
 
-        <div className="form-actions">
-          <Button variant="primary" type="submit">
-            저장
-          </Button>
-        </div>
+          <div className="form-actions">
+            <Button variant="primary" type="submit">
+              저장
+            </Button>
+          </div>
+        </FormPanel>
       </form>
     </>
   )

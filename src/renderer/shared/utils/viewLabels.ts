@@ -168,7 +168,7 @@ export function getToolFieldDefaultValue(field: ToolModuleField): unknown {
     case 'url[]':
       return ''
     case 'color':
-      return '#1f6f68'
+      return 'black'
     case 'file':
     case 'image':
     case 'url':

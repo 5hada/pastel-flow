@@ -4,7 +4,9 @@ import type { WorkspaceFolder } from '../../../shared/settings'
 import type { UrlGroup, UrlGroupItem } from '../../../shared/urlGroups'
 import { normalizeUrlGroupItems } from '../../../shared/urlGroups'
 import { CollectionListPanel } from '../../shared/components/CollectionListPanel'
+import { FormPanel } from '../../shared/components/FormPanel'
 import {
+  AlertDialogButton,
   FieldGrid,
   TextAreaField,
   TextInputField,
@@ -174,71 +176,68 @@ function UrlGroupSidePanel({
         </Button>
       </div>
 
-      <form className="task-form" onSubmit={onSubmit}>
-        <FieldGrid>
+      <form onSubmit={onSubmit}>
+        <FormPanel>
+          <FieldGrid>
+            <TextInputField
+              label="이름"
+              name="url-group-name"
+              value={draft.name}
+              onChange={(value) =>
+                onDraftChange((currentDraft) => ({
+                  ...currentDraft,
+                  name: value,
+                }))
+              }
+            />
+            <TextInputField
+              label="Tags"
+              name="url-group-tags"
+              placeholder="쉼표로 구분"
+              value={draft.tags}
+              onChange={(value) =>
+                onDraftChange((currentDraft) => ({
+                  ...currentDraft,
+                  tags: value,
+                }))
+              }
+            />
+          </FieldGrid>
           <TextInputField
-            label="이름"
-            name="url-group-name"
-            value={draft.name}
+            label="설명"
+            name="url-group-description"
+            value={draft.description}
             onChange={(value) =>
               onDraftChange((currentDraft) => ({
                 ...currentDraft,
-                name: value,
+                description: value,
               }))
             }
           />
-          <TextInputField
-            label="Tags"
-            name="url-group-tags"
-            placeholder="쉼표로 구분"
-            value={draft.tags}
+          <TextAreaField
+            label="URLs"
+            name="url-group-urls"
+            placeholder="한 줄에 하나씩 URL 입력"
+            rows={8}
+            value={draft.urls}
             onChange={(value) =>
               onDraftChange((currentDraft) => ({
                 ...currentDraft,
-                tags: value,
+                urls: value,
               }))
             }
           />
-        </FieldGrid>
-        <TextInputField
-          label="설명"
-          name="url-group-description"
-          value={draft.description}
-          onChange={(value) =>
-            onDraftChange((currentDraft) => ({
-              ...currentDraft,
-              description: value,
-            }))
-          }
-        />
-        <TextAreaField
-          label="URLs"
-          name="url-group-urls"
-          placeholder="한 줄에 하나씩 URL 입력"
-          rows={8}
-          value={draft.urls}
-          onChange={(value) =>
-            onDraftChange((currentDraft) => ({
-              ...currentDraft,
-              urls: value,
-            }))
-          }
-        />
-        <div className="form-actions">
-          <Button variant="primary" type="submit" isDisabled={!draft.name.trim()}>
-            저장
-          </Button>
-          {selectedUrlGroup ? (
-            <Button
-              className="danger-button"
-              variant="danger"
-              type="button"
-              onClick={() => void onDeleteUrlGroup(selectedUrlGroup.id)}
-            >
-              삭제
+          <div className="form-actions">
+            <Button variant="primary" type="submit" isDisabled={!draft.name.trim()}>
+              저장
             </Button>
-          ) : null}
-        </div>
+            {selectedUrlGroup ? (
+              <AlertDialogButton
+                onPress={() => void onDeleteUrlGroup(selectedUrlGroup.id)}
+              />
+            ) : null}
+          </div>
+        </FormPanel>
       </form>
 
       {selectedUrlGroup ? (

@@ -1,4 +1,4 @@
-import { Button, Card } from '@heroui/react'
+import { Button, Card, Chip } from '@heroui/react'
 import type { ReactNode } from 'react'
 
 export type CollectionListItem = {
@@ -58,12 +58,14 @@ export function CollectionListPanel({
       ) : (
         <div className="task-list">
           {items.map((item) => (
-            <article className="task-row collection-list-row" key={item.id}>
+            <Card
+              className="task-row collection-list-row"
+              key={item.id}
+              variant="secondary"
+            >
               <div className="task-row-summary">
                 <span className="task-row-title">{item.title}</span>
-                {item.meta ? (
-                  <span className="task-row-meta">{item.meta}</span>
-                ) : null}
+                {item.meta ? renderListMeta(item.meta) : null}
                 {item.message ? (
                   <span className="task-row-meta">{item.message}</span>
                 ) : null}
@@ -77,10 +79,20 @@ export function CollectionListPanel({
               >
                 {itemActionLabel}
               </Button>
-            </article>
+            </Card>
           ))}
         </div>
       )}
     </Wrapper>
+  )
+}
+
+function renderListMeta(meta: ReactNode) {
+  return typeof meta === 'string' || typeof meta === 'number' ? (
+    <Chip size="sm" variant="secondary">
+      <Chip.Label>{meta}</Chip.Label>
+    </Chip>
+  ) : (
+    meta
   )
 }

@@ -6,6 +6,7 @@ import {
   ListBox,
   Select,
   Switch,
+  Typography,
 } from '@heroui/react'
 import { ArrowLeftToLine, ArrowRightToLine, XmarkShape } from '@gravity-ui/icons';
 import { useEffect, useState } from 'react'
@@ -174,8 +175,17 @@ export function WorkflowActionList({
             >
               <span>{index + 1}</span>
               <div>
-                <strong>{action?.name ?? actionRef.actionId}</strong>
-                <small>{action ? getActionTypeLabel(action.type) : '연결 끊김'}</small>
+                <Typography type='h6'>
+                  {action?.name ?? actionRef.actionId}
+                  </Typography>
+                <Typography
+                  color='muted'
+                  type='body-xs'
+                  pt-0
+                >
+                  {action ? getActionTypeLabel(action.type) : '연결 끊김'}
+                </Typography>
+
                 {action ? (
                   <ActionSchemaSummary
                     inputSchema={inputSchema}

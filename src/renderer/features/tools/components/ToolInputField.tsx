@@ -114,7 +114,7 @@ export function ToolInputField({ field, onChange, value }: ToolInputFieldProps) 
           <Input
             className="color-input"
             type="color"
-            value={String(value || '#1f6f68')}
+            value={String(value || 'black')}
             onChange={(event) => onChange(event.target.value)}
           />
           <Input

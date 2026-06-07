@@ -12,6 +12,10 @@ export function getWorkspaceFolderPathLabel(
     return '즐겨찾기'
   }
 
+  if (folderId === 'imminent') {
+    return '임박'
+  }
+
   const folder = workspaceFolders.find(
     (workspaceFolder) => workspaceFolder.id === folderId,
   )

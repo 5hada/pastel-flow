@@ -1,4 +1,4 @@
-import { Button, Input } from '@heroui/react'
+import { Button, Chip, Input } from '@heroui/react'
 import { useState, type ReactNode } from 'react'
 import type { ActionDefinition } from '../../../shared/actions'
 import { isRestrictedDevicePolicy } from '../../../shared/devices'
@@ -16,7 +16,7 @@ import type {
   SettingsCategory,
   WorkspaceMode,
 } from '../state/taskFormState'
-import { isTodoDueSoon } from '../utils/todoFilters'
+// import { isTodoDueSoon } from '../utils/todoFilters'
 
 export type WorkspaceSidebarProps = {
   actions: ActionDefinition[]
@@ -70,11 +70,12 @@ export function WorkspaceSidebar({
   ).length
 
   return (
-    <aside className="workspace-sidebar" aria-label="보조 패널">
+    <aside className="pl-6" aria-label="보조 패널">
       <div className="sidebar-group">
         {currentMode === 'run'
           ? (
               <>
+                {<div className='pt-14'></div>}
                 {runCategories.map((category) => (
                   <FolderButton
                     count={category.count}
@@ -99,7 +100,7 @@ export function WorkspaceSidebar({
                     <FolderButton
                       count={0}
                       icon={getCommonIcon('folderOpen')}
-                      iconClosed={getCommonIcon('folderClose')}
+                      iconSelected={getCommonIcon('folderClose')}
                       id={folder.id}
                       isSelected={selectedCollectionFolderId === folder.id}
                       key={folder.id}
@@ -117,11 +118,11 @@ export function WorkspaceSidebar({
         {currentMode === 'actions' ? (
           <FolderSidebarSection
             count={visibleActionCount}
+            currentMode={currentMode}
             editMode={isFolderEditMode}
             folders={workspaceFolders}
             scope="actions"
             selectedFolderId={selectedCollectionFolderId}
-            title="Action 폴더"
             onCreateFolder={onCreateFolder}
             onDeleteFolder={onDeleteFolder}
             onEditModeChange={setIsFolderEditMode}
@@ -134,11 +135,11 @@ export function WorkspaceSidebar({
         {currentMode === 'workflows' ? (
           <FolderSidebarSection
             count={workflows.length}
+            currentMode={currentMode}
             editMode={isFolderEditMode}
             folders={workspaceFolders}
             scope="workflows"
             selectedFolderId={selectedCollectionFolderId}
-            title="Workflow 폴더"
             onCreateFolder={onCreateFolder}
             onDeleteFolder={onDeleteFolder}
             onEditModeChange={setIsFolderEditMode}
@@ -151,11 +152,11 @@ export function WorkspaceSidebar({
         {currentMode === 'tools' ? (
           <FolderSidebarSection
             count={toolModules.length}
+            currentMode={currentMode}
             editMode={isFolderEditMode}
             folders={workspaceFolders}
             scope="tools"
             selectedFolderId={selectedCollectionFolderId}
-            title="Tool 폴더"
             onCreateFolder={onCreateFolder}
             onDeleteFolder={onDeleteFolder}
             onEditModeChange={setIsFolderEditMode}
@@ -167,32 +168,15 @@ export function WorkspaceSidebar({
 
         {currentMode === 'todos' ? (
           <>
-            <div className="sidebar-heading compact-sidebar-heading align-center">
-              <p className="sidebar-label pt-2 px-3">Todo 그룹</p>
-            </div>
-            <FolderButton
-              count={todos.filter(isTodoDueSoon).length}
-              icon={getCommonIcon('scheduled')}
-              id="due_soon"
-              isSelected={
-                selectedCategory === 'due_soon' &&
-                selectedCollectionFolderId === 'all'
-              }
-              label="임박"
-              onSelect={(categoryId) => {
-                onCollectionFolderSelect('all')
-                onCategorySelect(categoryId as NavigationCategory)
-              }}
-            />
             <FolderSidebarSection
               count={todos.length}
+              currentMode={currentMode}
               editMode={isFolderEditMode}
               folders={workspaceFolders}
               scope="todos"
               selectedFolderId={
                 selectedCategory === 'due_soon' ? '' : selectedCollectionFolderId
               }
-              title="Todo 폴더"
               onCreateFolder={onCreateFolder}
               onDeleteFolder={onDeleteFolder}
               onEditModeChange={setIsFolderEditMode}
@@ -209,11 +193,11 @@ export function WorkspaceSidebar({
         {currentMode === 'urlGroups' ? (
           <FolderSidebarSection
             count={urlGroups.length}
+            currentMode={currentMode}
             editMode={isFolderEditMode}
             folders={workspaceFolders}
             scope="urlGroups"
             selectedFolderId={selectedCollectionFolderId}
-            title="URL Group 폴더"
             onCreateFolder={onCreateFolder}
             onDeleteFolder={onDeleteFolder}
             onEditModeChange={setIsFolderEditMode}
@@ -224,11 +208,13 @@ export function WorkspaceSidebar({
         ) : null}
 
         {currentMode === 'settings'
-          ? settingsCategories.map((category) => (
+          ? 
+          <>
+            {<div className='pt-14'></div>}
+            {settingsCategories.map((category) => (
               <Button
-                className={`sidebar-item${
-                  selectedSettingsCategory === category.id ? ' is-active' : ''
-                }`}
+              fullWidth
+                className="sidebar-row"
                 variant={
                   selectedSettingsCategory === category.id ? 'secondary' : 'ghost'
                 }
@@ -239,14 +225,15 @@ export function WorkspaceSidebar({
                 <span aria-hidden="true">{getSettingsIcon(category.id)}</span>
                 <strong>{category.label}</strong>
               </Button>
-            ))
+            ))}
+          </>
           : null}
       </div>
 
-      <div className="sidebar-note">
+      <div className="sidebar-note pl-4 pt-4">
         <span>Local first</span>
         <br/>
-        <strong>Extension controlled</strong>
+        <h6>Extension controlled</h6>
       </div>
     </aside>
   )
@@ -254,11 +241,11 @@ export function WorkspaceSidebar({
 
 function FolderSidebarSection({
   count,
+  currentMode,
   editMode,
   folders,
   scope,
   selectedFolderId,
-  title,
   onCreateFolder,
   onDeleteFolder,
   onEditModeChange,
@@ -267,11 +254,11 @@ function FolderSidebarSection({
   onSelectFolder,
 }: {
   count: number
+  currentMode: WorkspaceMode
   editMode: boolean
   folders: WorkspaceFolder[]
   scope: WorkspaceFolderScope
   selectedFolderId: string
-  title: string
   onCreateFolder(scope: WorkspaceFolderScope): Promise<void>
   onDeleteFolder(folderId: string): Promise<void>
   onEditModeChange(value: boolean): void
@@ -285,47 +272,61 @@ function FolderSidebarSection({
 
   return (
     <>
-      <div className="sidebar-heading compact-sidebar-heading align-center">
-        <p className="sidebar-label pt-2 px-3">{title}</p>
-        <div className="sidebar-heading-actions">
-          <Button
-            aria-label="폴더 추가"
-            className="sidebar-mini-button"
-            isIconOnly
-            variant="ghost"
-            type="button"
-            onClick={() => void onCreateFolder(scope)}
-          >
-            {getCommonIcon('add')}
-          </Button>
-          <Button
-            aria-label="폴더 편집"
-            className="sidebar-mini-button"
-            isIconOnly
-            variant={editMode ? 'secondary' : 'ghost'}
-            type="button"
-            onClick={() => onEditModeChange(!editMode)}
-          >
-            {getCommonIcon('edit')}
-          </Button>
+      {(currentMode != 'run' && currentMode != 'settings') ?
+        <div className="sidebar-row items-center pt-3 mb-2">
+          <span/>
+          <p className="">목록</p>
+          <div className="flex justify-end gap-1">
+            <Button
+              aria-label="폴더 추가"
+              className="flex-1"
+              isIconOnly
+              isDisabled={editMode ? false : true}
+              variant="ghost"
+              type="button"
+              onClick={() => void onCreateFolder(scope)}
+            > 
+              {editMode ? getCommonIcon('add') : null}
+            </Button>
+            <Button
+              aria-label="폴더 편집"
+              className="flex-1"
+              isIconOnly
+              variant={editMode ? 'secondary' : 'ghost'}
+              type="button"
+              onClick={() => onEditModeChange(!editMode)}
+            >
+              {getCommonIcon('edit')}
+            </Button>
+          </div>
         </div>
-      </div>
-      <FolderButton
-        count={count}
-        icon={getCommonIcon('list')}
-        id="all"
-        isSelected={selectedFolderId === 'all'}
-        label="전체"
-        onSelect={onSelectFolder}
-      />
-      <FolderButton
-        count={0}
-        icon={getCommonIcon('starred')}
-        id="favorites"
-        isSelected={selectedFolderId === 'favorites'}
-        label="즐겨찾기"
-        onSelect={onSelectFolder}
-      />
+      : null }
+      {currentMode === 'todos'    ?          
+        <FolderButton
+          count={0}
+          icon={getCommonIcon('scheduled')}
+          id="due_soon"
+          isSelected={selectedFolderId === 'due_soon'}
+          label="임박"
+          onSelect={onSelectFolder}
+        />
+      : null}
+          <FolderButton
+            count={count}
+            icon={getCommonIcon('list')}
+            id="all"
+            isSelected={selectedFolderId === 'all'}
+            label="전체"
+            onSelect={onSelectFolder}
+          />
+          <FolderButton
+            count={0}
+            icon={getCommonIcon('starred')}
+            id="favorites"
+            isSelected={selectedFolderId === 'favorites'}
+            label="즐겨찾기"
+            onSelect={onSelectFolder}
+          />
       {scopedFolders.map((folder, index) =>
         editMode ? (
           <EditableFolderRow
@@ -341,7 +342,7 @@ function FolderSidebarSection({
           <FolderButton
             count={0}
             icon={getCommonIcon('folderOpen')}
-            iconClosed={getCommonIcon('folderClose')}
+            iconSelected={getCommonIcon('folderClose')}
             id={folder.id}
             isSelected={selectedFolderId === folder.id}
             key={folder.id}
@@ -372,8 +373,9 @@ function EditableFolderRow({
   const [name, setName] = useState(folder.name)
 
   return (
-    <div className="sidebar-folder-editor">
+    <div className="flex mb-2">
       <Input
+        className='w-20'
         aria-label="폴더 이름"
         value={name}
         onBlur={() => void onRenameFolder(folder.id, name)}
@@ -385,6 +387,7 @@ function EditableFolderRow({
         }}
       />
       <Button
+        className=''
         aria-label="위로 이동"
         isDisabled={isFirst}
         isIconOnly
@@ -395,6 +398,7 @@ function EditableFolderRow({
         ↑
       </Button>
       <Button
+        className=''
         aria-label="아래로 이동"
         isDisabled={isLast}
         isIconOnly
@@ -405,6 +409,7 @@ function EditableFolderRow({
         ↓
       </Button>
       <Button
+        className=''
         aria-label="폴더 삭제"
         isIconOnly
         variant="danger"
@@ -420,15 +425,15 @@ function EditableFolderRow({
 function FolderButton({
   count,
   icon,
-  iconClosed,
+  iconSelected,
   id,
   isSelected,
   label,
   onSelect,
 }: {
-  count: number
+  count?: number
   icon: ReactNode
-  iconClosed?: ReactNode
+  iconSelected?: ReactNode
   id: string
   isSelected: boolean
   label: string
@@ -436,14 +441,17 @@ function FolderButton({
 }) {
   return (
     <Button
-      className={`sidebar-item${isSelected ? ' is-active' : ''}`}
+      fullWidth
+      className="sidebar-row"
       variant={isSelected ? 'secondary' : 'ghost'}
       type="button"
       onClick={() => onSelect(id)}
     >
-      <span aria-hidden="true">{isSelected ? icon : iconClosed ?? icon}</span>
+      <span aria-hidden="true">{isSelected ? icon : iconSelected ?? icon}</span>
       <strong>{label}</strong>
-      <em>{count}</em>
+      <Chip size="sm" variant='tertiary'>
+        <Chip.Label>{count}</Chip.Label>
+      </Chip>
     </Button>
   )
 }

@@ -13,24 +13,17 @@
   gap: 12px;
 }
 
-.workflow-run-group h3 {
-  margin: 4px 0 0;
-  color: var(--muted, var(--text-muted));
-  font-size: 0.86rem;
-}
-
-.workflow-run-policy {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 14px;
-  background: var(--surface);
-}
-
-.workflow-run-policy-actors {
+.workflow-run-policy,
+.workflow-run-policy-actors,
+.action-schema-summary,
+.action-schema-columns,
+.action-schema-list,
+.action-input-mapping-editor,
+.transform-config-editor {
   display: flex;
   min-width: 0;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .workflow-name-form,
@@ -45,15 +38,6 @@
   width: min(420px, 100%);
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
-}
-
-.workflow-name-form label {
-  display: grid;
-  min-width: 0;
-  gap: 8px;
-  color: var(--text-muted);
-  font-size: 0.9rem;
-  font-weight: 750;
 }
 
 .workflow-title-row {
@@ -84,44 +68,6 @@
 .task-picker {
   display: grid;
   gap: 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 14px;
-  background: var(--surface);
-  box-shadow: 0 1px 0 rgb(255 255 255 / 40%);
-  transition:
-    border-color 140ms ease,
-    box-shadow 140ms ease,
-    transform 140ms ease;
-}
-
-.workflow-run-card:hover,
-.workflow-run-history-row:hover,
-.action-run-row:hover,
-.artifact-row:hover,
-.task-row:hover,
-.workflow-action-row:hover,
-.action-picker-row:hover,
-.run-event-row:hover,
-.editor-list-item:hover,
-.task-picker:hover {
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow-soft);
-}
-
-.is-edit-locked {
-  border-color: var(--border);
-  background: color-mix(in srgb, var(--surface) 86%, var(--border) 14%);
-}
-
-.is-edit-locked .workflow-action-row {
-  cursor: not-allowed;
-}
-
-.is-edit-locked .task-form,
-.is-edit-locked .workflow-action-list,
-.is-edit-locked .danger-zone {
-  opacity: 0.68;
 }
 
 .workflow-run-card {
@@ -147,63 +93,29 @@
 .action-run-heading strong,
 .task-row-title,
 .task-card-title strong,
-.editor-list-item strong {
-  color: var(--foreground, var(--text));
-  overflow-wrap: anywhere;
-}
-
-.workflow-run-card small,
-.workflow-run-history-row small,
-.action-run-row small,
-.artifact-row small,
-.action-run-heading small,
+.editor-list-item strong,
 .task-row-meta,
 .workflow-action-row small,
 .action-picker-row small,
 .run-event-row small,
 .field-help,
 .editor-list-item span {
-  color: var(--text-muted);
-  font-size: 0.82rem;
-  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
-.action-schema-summary,
-.action-schema-columns,
-.action-schema-list,
-.action-input-mapping-editor,
-.transform-config-editor {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.action-schema-summary {
-  margin-top: 4px;
-}
-
-.action-schema-detail {
+.action-schema-detail,
+.url-section,
+.last-error,
+.workflow-runs,
+.run-events,
+.danger-zone,
+.artifact-list {
   margin-top: 20px;
-  padding-top: 18px;
-  border-top: 1px solid var(--border);
-}
-
-.action-schema-detail h3 {
-  margin: 0 0 12px;
 }
 
 .action-schema-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.action-schema-list {
-  align-content: start;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px;
-  background: var(--surface-muted);
 }
 
 .action-schema-list strong,
@@ -213,9 +125,6 @@
 
 .action-input-mapping-editor {
   grid-column: 1 / -1;
-  margin-top: 4px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
 }
 
 .action-input-mapping-editor label,
@@ -224,36 +133,15 @@
   min-width: min(280px, 100%);
   flex: 1 1 280px;
   gap: 5px;
-  color: var(--text-muted);
-  font-size: 0.78rem;
-  font-weight: 760;
-}
-
-.action-input-mapping-editor select,
-.transform-config-editor select,
-.transform-config-editor input {
-  min-width: 0;
-  height: 34px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0 8px;
-  color: var(--text);
-  background: var(--control-bg);
 }
 
 .transform-config-editor {
   grid-column: 1 / -1;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
 }
 
 .action-picker-section {
   display: grid;
   gap: 8px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px;
-  background: var(--surface-muted);
 }
 
 .action-picker-transform-grid {
@@ -267,20 +155,7 @@
   max-width: 100%;
   min-height: 24px;
   align-items: center;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0 8px;
-  background: var(--surface-muted);
-  color: var(--text-muted);
-  font-size: 0.76rem;
-  font-weight: 750;
   overflow-wrap: anywhere;
-}
-
-.schema-pill-warning {
-  border-color: color-mix(in srgb, #b23b4a 42%, var(--border) 58%);
-  background: color-mix(in srgb, #b23b4a 10%, var(--surface-muted) 90%);
-  color: var(--foreground, var(--text));
 }
 
 .task-row {
@@ -301,45 +176,16 @@
   text-align: left;
 }
 
-.workflow-run-history-row.is-selected {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface) 92%);
-}
-
 .action-run-heading,
 .action-run-row {
   display: grid;
   gap: 6px;
 }
 
-.action-run-heading {
-  padding: 0 2px 2px;
-}
-
-.action-run-row {
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px;
-  background: var(--surface);
-}
-
-.artifact-list {
-  margin-top: 6px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-
+.action-run-row,
 .artifact-row {
-  display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
-  gap: 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px;
-  background: var(--surface);
 }
 
 .collection-list-row {
@@ -376,7 +222,6 @@
   min-height: 34px;
   align-items: center;
   justify-content: center;
-  font-weight: 800;
 }
 
 .display-icon-grid {
@@ -395,7 +240,6 @@
 .display-icon-grid i {
   width: 4px;
   height: 4px;
-  border-radius: 1px;
 }
 
 .display-icon-list {
@@ -407,7 +251,6 @@
 .display-icon-list i {
   width: 16px;
   height: 2px;
-  border-radius: 999px;
 }
 
 .action-picker-backdrop {
@@ -417,7 +260,6 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(16, 24, 36, 0.42);
 }
 
 .action-picker-dialog {
@@ -425,10 +267,6 @@
   width: min(760px, 100%);
   max-height: min(760px, calc(100vh - 48px));
   gap: 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 18px;
-  background: var(--surface);
 }
 
 .action-picker-controls,
@@ -450,54 +288,6 @@
   align-items: center;
 }
 
-.toggle-switch {
-  position: relative;
-  display: inline-block;
-  width: 44px;
-  min-width: 44px;
-  height: 24px;
-  flex: 0 0 44px;
-  line-height: 0;
-}
-
-.toggle-switch input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.toggle-switch span {
-  display: block;
-  position: relative;
-  width: 44px;
-  height: 24px;
-  border-radius: 999px;
-}
-
-.toggle-switch span::after {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  background: var(--surface);
-  content: '';
-  transition: transform 140ms ease;
-}
-
-.toggle-switch input:checked + span {
-  background: var(--accent);
-}
-
-.toggle-switch input:checked + span::after {
-  transform: translateX(20px);
-}
-
 .detail-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -505,23 +295,7 @@
   margin: 18px 0 0;
 }
 
-.detail-list dt {
-  color: var(--text-muted);
-  font-size: 0.78rem;
-  font-weight: 800;
-}
-
 .detail-list dd {
   margin: 5px 0 0;
   overflow-wrap: anywhere;
-}
-
-.url-section,
-.last-error,
-.workflow-runs,
-.run-events,
-.danger-zone {
-  margin-top: 20px;
-  padding-top: 18px;
-  border-top: 1px solid var(--border);
 }

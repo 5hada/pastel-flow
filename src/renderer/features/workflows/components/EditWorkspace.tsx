@@ -50,6 +50,7 @@ import { DetailItem } from '../../../shared/components/DetailItem'
 import { getWorkspaceFolderPathLabel } from '../../../shared/utils/workspaceFolderLabels'
 import { filterByFolder } from '../../../shared/utils/collectionFilters'
 import { WorkflowRunPolicyEditor } from './WorkflowRunPolicyEditor'
+import { AlertDialogButton } from '../../../shared/components/HeroForm'
 
 export type EditWorkspaceProps = {
   actions: ActionDefinition[]
@@ -472,15 +473,11 @@ export function EditWorkspace({
               }}
             />
             <Card className="danger-zone" aria-label="Workflow 삭제">
-              <Button
-                className="danger-button"
+              <AlertDialogButton
                 isDisabled={isSelectedWorkflowLocked}
-                variant="danger"
-                type="button"
-                onClick={() => void onConfirmDeleteWorkflow(selectedWorkflow.id)}
-              >
-                Workflow 삭제
-              </Button>
+                buttonText='Workflow 삭제'
+                onPress={() => void onConfirmDeleteWorkflow(selectedWorkflow.id)}
+              />
             </Card>
         </div>
       </Card>

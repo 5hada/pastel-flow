@@ -123,6 +123,7 @@ export function EditWorkspace({
     selectedCollectionFolderId,
     workspaceFolderAssignments,
   )
+  const canEdit = !(!selectedWorkflow || isSelectedWorkflowLocked)
 
   useEffect(() => {
     if (!selectedWorkflow) {
@@ -153,7 +154,7 @@ export function EditWorkspace({
   async function handleRenameWorkflow(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!selectedWorkflow || isSelectedWorkflowLocked) {
+    if (!canEdit) {
       return
     }
 
@@ -336,9 +337,7 @@ export function EditWorkspace({
               isLocked={isSelectedWorkflowLocked}
               workflow={selectedWorkflow}
               onUpdateRunPolicy={(runPolicy) => {
-                if (!selectedWorkflow || isSelectedWorkflowLocked) {
-                  return
-                }
+                if (!canEdit) { return }
 
                 void onUpdateWorkflow(selectedWorkflow.id, {
                   runPolicy,
@@ -352,9 +351,7 @@ export function EditWorkspace({
               workflow={selectedWorkflow}
               isLocked={isSelectedWorkflowLocked}
               onAddAction={(actionId) => {
-                if (!selectedWorkflow || isSelectedWorkflowLocked) {
-                  return
-                }
+                if (!canEdit) { return }
                 const actionRefs = selectedWorkflow.actionRefs
                 const actionRefId = crypto.randomUUID()
                 void onUpdateWorkflow(selectedWorkflow.id, {
@@ -375,9 +372,7 @@ export function EditWorkspace({
                 })
               }}
               onMoveAction={(actionRefId, direction) => {
-                if (!selectedWorkflow || isSelectedWorkflowLocked) {
-                  return
-                }
+                if (!canEdit) { return }
                 void onUpdateWorkflow(selectedWorkflow.id, {
                   actionRefs: moveWorkflowActionRef(
                     selectedWorkflow.actionRefs,
@@ -387,9 +382,7 @@ export function EditWorkspace({
                 })
               }}
               onReorderActions={(actionRefIds) => {
-                if (!selectedWorkflow || isSelectedWorkflowLocked) {
-                  return
-                }
+                if (!canEdit) { return }
                 void onUpdateWorkflow(selectedWorkflow.id, {
                   actionRefs: reorderWorkflowActionRefs(
                     selectedWorkflow.actionRefs,
@@ -398,9 +391,7 @@ export function EditWorkspace({
                 })
               }}
               onRemoveAction={(actionRefId) => {
-                if (!selectedWorkflow || isSelectedWorkflowLocked) {
-                  return
-                }
+                if (!canEdit) { return }
                 void onUpdateWorkflow(selectedWorkflow.id, {
                   actionRefs: selectedWorkflow.actionRefs.filter(
                     (actionRef) => actionRef.id !== actionRefId,
@@ -408,9 +399,7 @@ export function EditWorkspace({
                 })
               }}
               onUpdateInputMapping={(actionRefId, inputMapping) => {
-                if (!selectedWorkflow || isSelectedWorkflowLocked) {
-                  return
-                }
+                if (!canEdit) { return }
                 void onUpdateWorkflow(selectedWorkflow.id, {
                   actionRefs: selectedWorkflow.actionRefs.map((actionRef) =>
                     actionRef.id === actionRefId
@@ -420,9 +409,7 @@ export function EditWorkspace({
                 })
               }}
               onUpdateRetryPolicy={(actionRefId, retryPolicy) => {
-                if (!selectedWorkflow || isSelectedWorkflowLocked) {
-                  return
-                }
+                if (!canEdit) { return }
                 void onUpdateWorkflow(selectedWorkflow.id, {
                   actionRefs: selectedWorkflow.actionRefs.map((actionRef) =>
                     actionRef.id === actionRefId
@@ -432,9 +419,7 @@ export function EditWorkspace({
                 })
               }}
               onCreateTransformAction={async (mode) => {
-                if (!selectedWorkflow || isSelectedWorkflowLocked) {
-                  return
-                }
+                if (!canEdit) { return }
 
                 const action = await onCreateTransformAction(mode)
                 if (!action) {
@@ -463,9 +448,7 @@ export function EditWorkspace({
                 void onUpdateAction(actionId, { config })
               }}
               onToggleAction={(actionRefId) => {
-                if (!selectedWorkflow || isSelectedWorkflowLocked) {
-                  return
-                }
+                if (!canEdit) { return }
                 void onUpdateWorkflow(selectedWorkflow.id, {
                   actionRefs: selectedWorkflow.actionRefs.map((actionRef) =>
                     actionRef.id === actionRefId

@@ -11,10 +11,6 @@ import type {
   DeveloperVisibilitySettings,
   WorkspaceFolder,
 } from '../../../../shared/settings'
-import {
-  getDeviceExecutionPolicyLabel,
-  getDeviceVisibilityPolicyLabel,
-} from '../../../../shared/devices'
 import type {
   ActionDefinition,
   TransformActionConfig,
@@ -41,12 +37,9 @@ import { WorkflowActionList } from './WorkflowActionList'
 import { CollectionListPanel } from '../../../shared/components/CollectionListPanel'
 import { getCommonIcon } from '../../../shared/assets/icon'
 import {
-  formatDate,
-  getTaskScheduleLabel,
   getTaskStatusLabel,
   getWorkflowRunPolicyLabel,
 } from '../../../shared/utils/viewLabels'
-import { DetailItem } from '../../../shared/components/DetailItem'
 import { getWorkspaceFolderPathLabel } from '../../../shared/utils/workspaceFolderLabels'
 import { filterByFolder } from '../../../shared/utils/collectionFilters'
 import { WorkflowRunPolicyEditor } from './WorkflowRunPolicyEditor'

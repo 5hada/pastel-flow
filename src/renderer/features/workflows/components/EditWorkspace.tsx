@@ -52,6 +52,7 @@ import { filterByFolder } from '../../../shared/utils/collectionFilters'
 import { WorkflowRunPolicyEditor } from './WorkflowRunPolicyEditor'
 import { AlertDialogButton } from '../../../shared/components/AlertDialogButton'
 import { FormPanel } from '../../../shared/components/FormPanel'
+import { WorkflowDetailList } from './WorkflowDetailList'
 
 export type EditWorkspaceProps = {
   actionRuns: ActionRun[]
@@ -493,33 +494,10 @@ export function EditWorkspace({
       </Card>
 
       <Card className="mode-panel" aria-label="선택한 Workflow 상세">
-        <dl className="detail-list">
-          {developerVisibility.showIds ? (
-            <DetailItem label="Workflow ID" value={selectedWorkflow.id} />
-          ) : null}
-          <DetailItem label="Action" value={`${selectedWorkflow.actionRefs.length}개`} />
-          <DetailItem label="예약" value={getTaskScheduleLabel(selectedWorkflow.schedule)} />
-          <DetailItem
-            label="Run policy"
-            value={getWorkflowRunPolicyLabel(selectedWorkflow.runPolicy)}
-          />
-          <DetailItem label="상태" value={getTaskStatusLabel(selectedWorkflow.state.status)} />
-          <DetailItem label="마지막 실행" value={formatDate(selectedWorkflow.state.endedAt).value} />
-          <DetailItem
-            label="마지막 메시지"
-            value={selectedWorkflow.state.lastMessage ?? '아직 없음'}
-          />
-          <DetailItem label="생성 시간" value={formatDate(selectedWorkflow.createdAt).value} />
-          <DetailItem label="수정 시간" value={formatDate(selectedWorkflow.updatedAt).value} />
-          <DetailItem
-            label="표시 정책"
-            value={getDeviceVisibilityPolicyLabel(selectedWorkflow.permissions.visibility)}
-          />
-          <DetailItem
-            label="실행 정책"
-            value={getDeviceExecutionPolicyLabel(selectedWorkflow.permissions.execution)}
-          />
-        </dl>
+        <WorkflowDetailList
+          selectedWorkflow={selectedWorkflow}
+          visibleId={developerVisibility.showIds}
+        />
 
         {selectedWorkflow.state.lastError ? (
           <Card className="last-error" aria-label="마지막 오류">

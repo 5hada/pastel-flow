@@ -16,9 +16,9 @@ function invoke<TResult>(
 }
 
 function subscribe<TPayload>(
-  channel: IpcEventChannel,
-  listener: IpcListener<TPayload>,
-): () => void {
+        channel: IpcEventChannel,
+        listener: IpcListener<TPayload>,
+      ): () => void {
   const wrappedListener = (
     _event: Electron.IpcRendererEvent,
     payload: TPayload,

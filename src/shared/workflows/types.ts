@@ -69,3 +69,19 @@ export type WorkflowState = {
   lastError?: string
   lastMessage?: string
 }
+
+export type CreateWorkflowInput = {
+  name: string
+  actionRefs?: WorkflowDefinition['actionRefs']
+  permissions?: DevicePolicy
+  runPolicy?: WorkflowRunPolicy
+  schedule?: WorkflowSchedule
+  state?: WorkflowState
+}
+
+export type UpdateWorkflowInput = Partial<
+  Pick<
+    WorkflowDefinition,
+    'name' | 'actionRefs' | 'permissions' | 'runPolicy' | 'schedule' | 'state'
+  >
+>

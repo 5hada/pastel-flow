@@ -4,6 +4,7 @@ import { normalizeLinkedDevices } from '../../../shared/devices'
 import type { AppSettingsStore } from '../../settings/store/appSettingsStore'
 import type { DeviceStore } from '../../devices/store/deviceStore'
 import type { WorkflowStore, WorkflowRunEventStore } from '../../workflows/store'
+import type { ActionStore } from '../../actions/actionStore'
 import {
   normalizeSyncExportSnapshot,
   sanitizeActionsForSyncExport,
@@ -31,6 +32,7 @@ export type MockSyncStoreOptions = {
   appSettingsStore: AppSettingsStore
   deviceStore: DeviceStore
   workflowRunEventStore: WorkflowRunEventStore
+  actionStore: ActionStore
   workflowStore: WorkflowStore
   todoStore: TodoStore
 }
@@ -40,6 +42,7 @@ export function createMockSyncStore({
   dataDir,
   deviceStore,
   workflowRunEventStore,
+  actionStore,
   workflowStore,
   todoStore,
 }: MockSyncStoreOptions): MockSyncStore {
@@ -62,7 +65,7 @@ export function createMockSyncStore({
         await Promise.all([
           deviceStore.getCurrentDevice(),
           appSettingsStore.getSnapshot(),
-          workflowStore.listActions(),
+          actionStore.listActions(),
           workflowStore.listWorkflows(),
           todoStore.listTodos({
             includeCompleted: true,
@@ -104,7 +107,7 @@ export function createMockSyncStore({
       const nextSnapshot = snapshot ?? (await readSnapshot(exportPath))
       const normalizedSnapshot = normalizeSyncExportSnapshot(nextSnapshot)
       const [currentActions, currentWorkflows] = await Promise.all([
-        workflowStore.listActions(),
+        actionStore.listActions(),
         workflowStore.listWorkflows(),
       ])
       const currentTodos = await todoStore.listTodos({
@@ -129,10 +132,10 @@ export function createMockSyncStore({
         normalizedSnapshot.linkedDevices,
       )
 
+      await actionStore.replaceActions(mergedActions)
       await Promise.all([
         workflowStore.replaceWorkflows({
-          actions: mergedActions,
-          workflows:mergedWorkflows
+          workflows: mergedWorkflows,
         }),
         todoStore.replaceTodos(mergedTodos),
         appSettingsStore.updateSettings({

@@ -9,6 +9,8 @@ export type {
   TradingBotConfig,
   TransformActionConfig,
   TransformMode,
+  CreateActionInput,
+  UpdateActionInput,
 } from './types'
 export {
   canMapActionField,

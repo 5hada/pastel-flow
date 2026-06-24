@@ -1,30 +1,21 @@
 import { randomUUID } from 'node:crypto'
-import path from 'node:path'
 import {
   defaultDevicePolicy,
   normalizeDevicePolicy,
-  type DevicePolicy
 } from '../../../shared/devices/'
 import {
-  normalizeWorkflowSchedule,
-  normalizeWorkflowRunPolicy,
   defaultWorkflowState,
-  type WorkflowRunPolicy,
-  type WorkflowSchedule,
+  normalizeWorkflowRunPolicy,
+  normalizeWorkflowSchedule,
+  type CreateWorkflowInput,
+  type UpdateWorkflowInput,
   type WorkflowDefinition,
-  type WorkflowState
 } from '../../../shared/workflows'
 import type { ActionDefinition } from '../../../shared/actions'
-import { createAtomicJsonFile } from '../../database/atomicJsonFile'
-
+import type { TaskDefinitionFileStore } from '../../tasks/taskDefinitionFile'
 
 export type WorkflowStore = {
-  getAction(id: string): Promise<ActionDefinition>
-  listActions(): Promise<ActionDefinition[]>
   listWorkflows(): Promise<WorkflowDefinition[]>
-  createAction(input: CreateActionInput): Promise<ActionDefinition>
-  updateAction(id: string, input: UpdateActionInput): Promise<ActionDefinition>
-  deleteAction(id: string): Promise<void>
   createWorkflow(input: CreateWorkflowInput): Promise<WorkflowDefinition>
   updateWorkflow(
     id: string,
@@ -35,159 +26,22 @@ export type WorkflowStore = {
   deleteWorkflow(id: string): Promise<void>
 }
 
-export type CreateActionInput<TConfig = unknown> = {
-  name: string
-  type: ActionDefinition<TConfig>['type']
-  config: TConfig
-  secretRefs?: ActionDefinition<TConfig>['secretRefs']
-  inputSchema?: ActionDefinition<TConfig>['inputSchema']
-  outputSchema?: ActionDefinition<TConfig>['outputSchema']
-}
-
-export type UpdateActionInput<TConfig = unknown> = Partial<
-  Pick<
-    ActionDefinition<TConfig>,
-    'name' | 'type' | 'config' | 'secretRefs' | 'inputSchema' | 'outputSchema'
-  >
->
-
-export type CreateWorkflowInput = {
-  name: string
-  actionRefs?: WorkflowDefinition['actionRefs']
-  permissions?: DevicePolicy
-  runPolicy?: WorkflowRunPolicy
-  schedule?: WorkflowSchedule
-  state?: WorkflowState
-}
-
-export type UpdateWorkflowInput = Partial<
-  Pick<
-    WorkflowDefinition,
-    'name' | 'actionRefs' | 'permissions' | 'runPolicy' | 'schedule' | 'state'
-  >
->
-
 export type ReplaceWorkflowsInput = {
-  actions?: ActionDefinition[]
   workflows?: WorkflowDefinition[]
 }
 export type ReplaceWorkflowDataInput = ReplaceWorkflowsInput
 
 export type WorkflowStoreOptions = {
-  dataDir: string
+  taskFileStore: TaskDefinitionFileStore
 }
 
-type TaskFile = {
-  actions: ActionDefinition[]
-  workflows: WorkflowDefinition[]
-}
-
-export function createWorkflowStore({ dataDir }: WorkflowStoreOptions): WorkflowStore {
-  const tasksFilePath = path.join(dataDir, 'tasks.json')
-  const taskFileStore = createAtomicJsonFile<TaskFile>({
-    filePath: tasksFilePath,
-    defaultValue: () => ({ actions: [], workflows: [] }),
-    normalize: normalizeTaskFile,
-  })
-
-  async function readTaskFile(): Promise<TaskFile> {
-    return taskFileStore.read()
-  }
-
-  async function writeTaskFile(taskFile: TaskFile): Promise<void> {
-    await taskFileStore.write(taskFile)
-  }
-
+export function createWorkflowStore({
+  taskFileStore,
+}: WorkflowStoreOptions): WorkflowStore {
   return {
-    async getAction(id) {
-      const taskFile = await readTaskFile()
-      const action = taskFile.actions.find((currentAction) => currentAction.id === id)
-
-      if (!action) {
-        throw new Error(`Action not found: ${id}`)
-      }
-
-      return action
-    },
-
-    async listActions() {
-      const taskFile = await readTaskFile()
-      return taskFile.actions
-    },
-
     async listWorkflows() {
-      const taskFile = await readTaskFile()
+      const taskFile = await taskFileStore.read()
       return taskFile.workflows
-    },
-
-    async createAction(input) {
-      const now = new Date().toISOString()
-      const action: ActionDefinition = {
-        id: randomUUID(),
-        name: input.name.trim(),
-        type: input.type,
-        config: input.config,
-        secretRefs: input.secretRefs,
-        inputSchema: input.inputSchema,
-        outputSchema: input.outputSchema,
-        createdAt: now,
-        updatedAt: now,
-      }
-      await taskFileStore.update((taskFile) => ({
-        nextValue: {
-          ...taskFile,
-          actions: [...taskFile.actions, action],
-        },
-        result: undefined,
-      }))
-
-      return action
-    },
-
-    async updateAction(id, input) {
-      return taskFileStore.update((taskFile) => {
-        const actionIndex = taskFile.actions.findIndex(
-          (action) => action.id === id,
-        )
-
-        if (actionIndex === -1) {
-          throw new Error(`Action not found: ${id}`)
-        }
-
-        const currentAction = taskFile.actions[actionIndex]
-        const updatedAction: ActionDefinition = {
-          ...currentAction,
-          ...input,
-          name: input.name?.trim() ?? currentAction.name,
-          updatedAt: new Date().toISOString(),
-        }
-        const actions = [...taskFile.actions]
-        actions[actionIndex] = updatedAction
-
-        return {
-          nextValue: {
-            actions,
-            workflows: taskFile.workflows,
-          },
-          result: updatedAction,
-        }
-      })
-    },
-
-    async deleteAction(id) {
-      await taskFileStore.update((taskFile) => ({
-        nextValue: {
-          actions: taskFile.actions.filter((action) => action.id !== id),
-          workflows: taskFile.workflows.map((workflow) => ({
-            ...workflow,
-            actionRefs: workflow.actionRefs.filter(
-              (actionRef) => actionRef.actionId !== id,
-            ),
-            updatedAt: new Date().toISOString(),
-          })),
-        },
-        result: undefined,
-      }))
     },
 
     async createWorkflow(input) {
@@ -271,11 +125,11 @@ export function createWorkflowStore({ dataDir }: WorkflowStoreOptions): Workflow
       })
     },
 
-    async replaceWorkflows(input){
+    async replaceWorkflows(input) {
       await replaceWorkflowFile(input)
     },
 
-    async replaceWorkflowData(input){
+    async replaceWorkflowData(input) {
       await replaceWorkflowFile(input)
     },
 
@@ -303,46 +157,15 @@ export function createWorkflowStore({ dataDir }: WorkflowStoreOptions): Workflow
   }
 
   async function replaceWorkflowFile(input: ReplaceWorkflowsInput): Promise<void> {
-    const nextFile = normalizeTaskFile({
-      actions: input.actions ?? [],
+    const currentFile = await taskFileStore.read()
+    const nextFile = {
+      actions: currentFile.actions,
       workflows: input.workflows ?? [],
-    })
+    }
     for (const workflow of nextFile.workflows) {
       assertWorkflowActionRefsExist(workflow.actionRefs, nextFile.actions)
     }
-    await writeTaskFile(nextFile)
-  }
-}
-
-function normalizeTaskFile(value: unknown): TaskFile {
-  const candidate = value as Partial<TaskFile>
-  const actions = Array.isArray(candidate.actions) ? candidate.actions : []
-  const workflows = Array.isArray(candidate.workflows)
-    ? candidate.workflows.map(normalizeStoredWorkflow)
-    : []
-
-  return {
-    actions,
-    workflows,
-  }
-}
-
-function normalizeStoredWorkflow(
-  workflow: WorkflowDefinition,
-): WorkflowDefinition {
-  return {
-    ...workflow,
-    name:
-      typeof workflow.name === 'string' && workflow.name.trim()
-        ? workflow.name.trim()
-        : 'Untitled Workflow',
-    actionRefs: normalizeWorkflowActionRefs(
-      Array.isArray(workflow.actionRefs) ? workflow.actionRefs : [],
-    ),
-    permissions: normalizeDevicePolicy(workflow.permissions),
-    runPolicy: normalizeWorkflowRunPolicy(workflow.runPolicy),
-    schedule: normalizeWorkflowSchedule(workflow.schedule),
-    state: workflow.state ?? defaultWorkflowState,
+    await taskFileStore.write(nextFile)
   }
 }
 
@@ -360,7 +183,10 @@ function normalizeWorkflowActionRefs(
   actionRefs: WorkflowDefinition['actionRefs'],
 ): WorkflowDefinition['actionRefs'] {
   return actionRefs
-    .filter((actionRef) => typeof actionRef.actionId === 'string' && actionRef.actionId)
+    .filter(
+      (actionRef) =>
+        typeof actionRef.actionId === 'string' && actionRef.actionId,
+    )
     .map((actionRef, index) => ({
       id: actionRef.id || randomUUID(),
       actionId: actionRef.actionId,
@@ -415,6 +241,8 @@ function assertWorkflowActionRefsExist(
   )
 
   if (missingActionRef) {
-    throw new Error(`Workflow Action 참조를 찾지 못했습니다: ${missingActionRef.actionId}`)
+    throw new Error(
+      `Workflow Action 참조를 찾지 못했습니다: ${missingActionRef.actionId}`,
+    )
   }
 }

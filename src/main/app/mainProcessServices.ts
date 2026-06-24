@@ -1,5 +1,6 @@
 import { ipcMain, safeStorage } from 'electron'
 import { createActionAdapterRegistry } from '../actions/adapters/actionAdapterRegistry'
+import { createActionStore } from '../actions/actionStore'
 import { browserAdapter } from '../actions/adapters/browserAdapter'
 import {
   disposeBrowserActionGroupRuntime,
@@ -36,6 +37,8 @@ import { createWorkflowRunEventStore } from '../workflows/store/workflowRunEvent
 import { createWorkflowRunStore } from '../workflows/store/workflowRunStore'
 import { createWorkflowStore } from '../workflows/store/workflowStore'
 import { createWorkflowRunner } from '../workflows/workflowRunner'
+import { createTaskDefinitionFile } from '../tasks/taskDefinitionFile'
+import { createObservedActionStore } from './actionStoreEvents'
 import { applyLoginItemSettings } from './loginItems'
 import { createObservedWorkflowStore } from './workflowStoreEvents'
 import { resetStaleRunningWorkflows } from './workflowStartup'
@@ -61,8 +64,14 @@ export async function initializeMainProcessServices(
     dataDir,
   })
   const currentDevice = await deviceStore.getCurrentDevice()
-  const workflowStore = createObservedWorkflowStore(createWorkflowStore({
+  const taskFileStore = createTaskDefinitionFile({
     dataDir,
+  })
+  const actionStore = createObservedActionStore(createActionStore({
+    taskFileStore,
+  }))
+  const workflowStore = createObservedWorkflowStore(createWorkflowStore({
+    taskFileStore,
   }))
   await resetStaleRunningWorkflows(workflowStore)
 
@@ -124,6 +133,7 @@ export async function initializeMainProcessServices(
     deviceStore,
     todoStore,
     workflowRunEventStore,
+    actionStore,
     workflowStore,
   })
   const workflowRunner = createWorkflowRunner({
@@ -134,6 +144,7 @@ export async function initializeMainProcessServices(
     workflowRunEventStore,
     workflowRunStore,
     workflowArtifactWriter,
+    actionStore,
     workflowStore,
     urlGroupStore,
     urlGroupItemRunStore,
@@ -149,12 +160,13 @@ export async function initializeMainProcessServices(
     ipcMain,
     toolModuleStore,
     toolModuleRunner,
-    workflowStore,
+    actionStore,
   )
   registerTodoIpc(ipcMain, todoStore)
   registerUrlGroupIpc(ipcMain, urlGroupStore)
   registerWorkflowIpc(
     ipcMain,
+    actionStore,
     workflowStore,
     workflowRunner,
     workflowRunEventStore,

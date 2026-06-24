@@ -86,3 +86,19 @@ export type TransformActionConfig = {
   path?: string
   separator?: string
 }
+
+export type CreateActionInput<TConfig = unknown> = {
+  name: string
+  type: ActionDefinition<TConfig>['type']
+  config: TConfig
+  secretRefs?: ActionDefinition<TConfig>['secretRefs']
+  inputSchema?: ActionDefinition<TConfig>['inputSchema']
+  outputSchema?: ActionDefinition<TConfig>['outputSchema']
+}
+
+export type UpdateActionInput<TConfig = unknown> = Partial<
+  Pick<
+    ActionDefinition<TConfig>,
+    'name' | 'type' | 'config' | 'secretRefs' | 'inputSchema' | 'outputSchema'
+  >
+>

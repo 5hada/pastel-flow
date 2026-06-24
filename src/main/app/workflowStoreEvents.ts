@@ -11,20 +11,6 @@ export function createObservedWorkflowStore(workflowStore: WorkflowStore): Workf
 
   return {
     ...workflowStore,
-    async createAction(input) {
-      const action = await workflowStore.createAction(input)
-      broadcast(ipcEventChannels.actions.changed, action)
-      return action
-    },
-    async updateAction(id, input) {
-      const action = await workflowStore.updateAction(id, input)
-      broadcast(ipcEventChannels.actions.changed, action)
-      return action
-    },
-    async deleteAction(id) {
-      await workflowStore.deleteAction(id)
-      broadcast(ipcEventChannels.actions.deleted, id)
-    },
     async createWorkflow(input) {
       const workflow = await workflowStore.createWorkflow(input)
       broadcast(ipcEventChannels.workflows.changed, workflow)

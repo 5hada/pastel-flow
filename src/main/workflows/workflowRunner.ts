@@ -14,6 +14,7 @@ import {
 } from '../../shared/actions'
 import type { AppSettingsStore } from '../settings/store/appSettingsStore'
 import type { ActionAdapterRegistry } from '../actions/adapters/actionAdapterRegistry'
+import type { ActionStore } from '../actions/actionStore'
 import type { WorkflowRunEventStore } from './store/workflowRunEventStore'
 import type { WorkflowStore } from './store/workflowStore'
 import type { ToolModuleRunner } from '../tools/runner/toolModuleRunner'
@@ -41,6 +42,7 @@ export type RunWorkflowOptions = {
 }
 
 export type WorkflowRunnerOptions = {
+  actionStore: ActionStore
   workflowStore: WorkflowStore
   adapterRegistry: ActionAdapterRegistry
   appSettingsStore: AppSettingsStore
@@ -55,6 +57,7 @@ export type WorkflowRunnerOptions = {
 }
 
 export function createWorkflowRunner({
+  actionStore,
   adapterRegistry,
   appSettingsStore,
   dataDir,
@@ -133,7 +136,7 @@ export function createWorkflowRunner({
           return workflow
         }
         getRunnableActionRefs(workflow)
-        const actions = await workflowStore.listActions()
+        const actions = await actionStore.listActions()
         const mappingValidation = validateWorkflowInputMappings(workflow, actions)
         if (!mappingValidation.ok) {
           throw new Error(mappingValidation.errors.join('\n'))
@@ -149,6 +152,7 @@ export function createWorkflowRunner({
           workflowRunEventStore,
           workflowRunStore,
           workflowArtifactWriter,
+          actionStore,
           workflowStore,
           urlGroupStore,
           urlGroupItemRunStore,
@@ -160,7 +164,7 @@ export function createWorkflowRunner({
     },
     async stopWorkflow(id) {
       const workflow = await getWorkflow(id)
-      const actions = await workflowStore.listActions()
+      const actions = await actionStore.listActions()
       const actionMap = new Map(actions.map((action) => [action.id, action]))
 
       for (const actionRef of getRunnableActionRefs(workflow)) {
@@ -184,7 +188,7 @@ export function createWorkflowRunner({
           throw error
         })
         if (stopResult && 'config' in stopResult && stopResult.config) {
-          await workflowStore.updateAction(action.id, {
+          await actionStore.updateAction(action.id, {
             config: stopResult.config,
           })
         }
@@ -238,6 +242,7 @@ async function runActionWorkflow(
     workflowRunEventStore: WorkflowRunEventStore
     workflowRunStore: WorkflowRunStore
     workflowArtifactWriter: WorkflowArtifactWriter
+    actionStore: ActionStore
     workflowStore: WorkflowStore
     urlGroupStore: UrlGroupStore
     urlGroupItemRunStore: UrlGroupItemRunStore
@@ -344,7 +349,7 @@ async function runActionWorkflow(
               dataDir: context.dataDir,
               appSettings: appSettingsSnapshot.settings,
               async updateConfig(config) {
-                await context.workflowStore.updateAction(action.id, { config })
+                await context.actionStore.updateAction(action.id, { config })
               },
               async updateState(state) {
                 const runtimeState = state as Partial<ActionRuntimeState>

@@ -9,13 +9,13 @@ import type { ActionIOField } from '../../../shared/actions'
 import type { ToolModuleField } from '../../../shared/tools'
 import type { ToolModuleRunner } from '../runner/toolModuleRunner'
 import type { ToolModuleStore } from '../store/toolModuleStore'
-import type { WorkflowStore } from '../../workflows/store/workflowStore'
+import type { ActionStore } from '../../actions/actionStore'
 
 export function registerToolModuleIpc(
   ipcMain: IpcMain,
   toolModuleStore: ToolModuleStore,
   toolModuleRunner: ToolModuleRunner,
-  workflowStore: WorkflowStore,
+  actionStore: ActionStore,
 ): void {
   ipcMain.handle(ipcRequestChannels.tools.list, () => toolModuleStore.listTools())
   ipcMain.handle(ipcRequestChannels.tools.registerFolder, async (event) => {
@@ -35,7 +35,7 @@ export function registerToolModuleIpc(
       result.filePaths[0],
     )
     const registeredTools = [registeredTool]
-    await syncToolActionsWithManifests(registeredTools, workflowStore)
+    await syncToolActionsWithManifests(registeredTools, actionStore)
 
     return registeredTools
   })
@@ -49,7 +49,7 @@ export function registerToolModuleIpc(
   )
   ipcMain.handle(ipcRequestChannels.tools.createAction, async (_event, toolId, inputDefaults) => {
     const tool = await toolModuleStore.getTool(assertString(toolId, 'Tool ID'))
-    return workflowStore.createAction({
+    return actionStore.createAction({
       name: tool.manifest.name,
       type: 'tool_action',
       config: {
@@ -68,10 +68,10 @@ export function registerToolModuleIpc(
 
 async function syncToolActionsWithManifests(
   tools: Awaited<ReturnType<ToolModuleStore['registerToolRootFromPath']>>,
-  workflowStore: WorkflowStore,
+  actionStore: ActionStore,
 ): Promise<void> {
   const toolById = new Map(tools.map((tool) => [tool.id, tool]))
-  const actions = await workflowStore.listActions()
+  const actions = await actionStore.listActions()
 
   await Promise.all(
     actions.flatMap((action) => {
@@ -87,7 +87,7 @@ async function syncToolActionsWithManifests(
         return []
       }
 
-      return workflowStore.updateAction(action.id, {
+      return actionStore.updateAction(action.id, {
         config: {
           ...action.config,
           version: tool.manifest.version,

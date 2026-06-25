@@ -24,6 +24,7 @@ export default function App() {
           onActions: app.openActionMode,
           onWorkflows: app.openWorkflowMode,
           onUrlGroups: app.openUrlGroupsMode,
+          onScraps: app.openScrapsMode,
           onTodos: app.openTodosMode,
           onTools: app.openToolsMode,
           onSettings: app.openSettingsMode,
@@ -57,6 +58,7 @@ export default function App() {
             selectedToolId={app.selectedToolId}
             selectedWorkflowId={app.selectedWorkflowId}
             toolModules={app.toolModules}
+            scraps={app.scraps}
             todos={app.todos}
             urlGroups={app.urlGroups}
             workflows={app.workflows}
@@ -78,6 +80,9 @@ export default function App() {
               }
               if (app.workspaceMode === 'urlGroups') {
                 app.setSelectedUrlGroupId(null)
+              }
+              if (app.workspaceMode === 'scraps') {
+                app.setSelectedScrapId(null)
               }
             }}
             onCreateFolder={app.createWorkspaceFolder}

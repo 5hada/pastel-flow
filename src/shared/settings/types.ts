@@ -16,6 +16,7 @@ export type WorkflowListDisplayMode = 'grid' | 'list'
 
 export type WorkspaceFolderScope =
   | 'actions'
+  | 'scraps'
   | 'todos'
   | 'tools'
   | 'urlGroups'

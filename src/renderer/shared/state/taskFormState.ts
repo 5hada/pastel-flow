@@ -56,6 +56,7 @@ export type WorkspaceMode =
   | 'actions'
   | 'workflows'
   | 'urlGroups'
+  | 'scraps'
   | 'todos'
   | 'tools'
   | 'settings'

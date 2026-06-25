@@ -82,6 +82,14 @@ export function getActionTypeLabel(actionType: ActionDefinition['type']): string
       return 'Transform Action'
     case 'tool_action':
       return 'Tool Action'
+    case 'webhook_action':
+      return 'Webhook Action'
+    case 'scrap_action':
+      return 'Scrap Action'
+    case 'database_action':
+      return 'Database Action'
+    case 'macro_action':
+      return 'Macro Action'
   }
 }
 
@@ -221,6 +229,8 @@ export function getWorkspaceModeLabel(workspaceMode: WorkspaceMode): string {
       return 'Workflow'
     case 'urlGroups':
       return 'URL Groups'
+    case 'scraps':
+      return 'Scraps'
     case 'todos':
       return 'Todos'
     case 'tools':

@@ -1,9 +1,13 @@
 import type {
   DayOfWeek,
+  WorkflowEdge,
+  WorkflowEdgeTransform,
+  WorkflowGraph,
   WorkflowRunPolicy,
   WorkflowSchedule,
   WorkflowScheduleMode,
   WorkflowState,
+  WorkflowNode,
 } from './types'
 import type { WorkflowRunActorType } from '../runStatus'
 
@@ -69,6 +73,120 @@ export function normalizeWorkflowRunPolicy(
     : undefined
 }
 
+export function normalizeWorkflowGraph(value: unknown): WorkflowGraph | undefined {
+  if (!isRecord(value)) {
+    return undefined
+  }
+
+  const nodes = Array.isArray(value.nodes)
+    ? value.nodes.flatMap(normalizeWorkflowNode)
+    : []
+  const edges = Array.isArray(value.edges)
+    ? value.edges.flatMap(normalizeWorkflowEdge)
+    : []
+
+  if (nodes.length === 0 && edges.length === 0) {
+    return undefined
+  }
+
+  return {
+    nodes,
+    edges,
+    viewport: normalizeWorkflowViewport(value.viewport),
+  }
+}
+
+function normalizeWorkflowNode(value: unknown): WorkflowNode[] {
+  if (!isRecord(value) || !isNonEmptyString(value.id) || !isNonEmptyString(value.actionId)) {
+    return []
+  }
+
+  return [
+    {
+      id: value.id.trim(),
+      actionId: value.actionId.trim(),
+      label: optionalString(value.label),
+      position: normalizeWorkflowNodePosition(value.position),
+      configOverrides: isRecord(value.configOverrides)
+        ? value.configOverrides
+        : undefined,
+      enabled: value.enabled !== false,
+    },
+  ]
+}
+
+function normalizeWorkflowEdge(value: unknown): WorkflowEdge[] {
+  if (!isRecord(value) || !isNonEmptyString(value.id)) {
+    return []
+  }
+
+  const from = normalizeWorkflowPortRef(value.from)
+  const to = normalizeWorkflowPortRef(value.to)
+  if (!from || !to) {
+    return []
+  }
+
+  return [
+    {
+      id: value.id.trim(),
+      from,
+      to,
+      transform: normalizeWorkflowEdgeTransform(value.transform),
+      enabled: value.enabled !== false,
+    },
+  ]
+}
+
+function normalizeWorkflowPortRef(value: unknown): WorkflowEdge['from'] | undefined {
+  if (!isRecord(value) || !isNonEmptyString(value.nodeId) || !isNonEmptyString(value.portId)) {
+    return undefined
+  }
+
+  return {
+    nodeId: value.nodeId.trim(),
+    portId: value.portId.trim(),
+    path: optionalString(value.path),
+  }
+}
+
+function normalizeWorkflowEdgeTransform(
+  value: unknown,
+): WorkflowEdge['transform'] {
+  if (!isRecord(value) || !isWorkflowEdgeTransformMode(value.mode)) {
+    return undefined
+  }
+
+  return {
+    mode: value.mode,
+    config: isRecord(value.config) ? value.config : undefined,
+  }
+}
+
+function normalizeWorkflowNodePosition(value: unknown): WorkflowNode['position'] {
+  if (!isRecord(value)) {
+    return { x: 0, y: 0 }
+  }
+
+  return {
+    x: normalizeFiniteNumber(value.x, 0),
+    y: normalizeFiniteNumber(value.y, 0),
+  }
+}
+
+function normalizeWorkflowViewport(
+  value: unknown,
+): WorkflowGraph['viewport'] {
+  if (!isRecord(value)) {
+    return undefined
+  }
+
+  return {
+    x: normalizeFiniteNumber(value.x, 0),
+    y: normalizeFiniteNumber(value.y, 0),
+    zoom: normalizeFiniteNumber(value.zoom, 1),
+  }
+}
+
 function normalizeScheduleInterval(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return defaultWorkflowSchedule.intervalMinutes
@@ -102,6 +220,17 @@ function normalizeDaysOfWeek(value: unknown): DayOfWeek[] | undefined {
 
 function isWorkflowScheduleMode(value: unknown): value is WorkflowScheduleMode {
   return value === 'interval' || value === 'daily' || value === 'weekly'
+}
+
+function isWorkflowEdgeTransformMode(
+  value: unknown,
+): value is WorkflowEdgeTransform['mode'] {
+  return (
+    value === 'none' ||
+    value === 'auto' ||
+    value === 'json_path' ||
+    value === 'template'
+  )
 }
 
 function normalizeWorkflowRunActors(
@@ -145,4 +274,20 @@ function normalizeMaxRunsPerHour(value: unknown): number | undefined {
 
   const normalizedValue = Math.floor(numericValue)
   return normalizedValue > 0 ? Math.min(normalizedValue, 10_000) : undefined
+}
+
+function normalizeFiniteNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }

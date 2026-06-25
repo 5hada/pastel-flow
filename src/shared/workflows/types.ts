@@ -41,10 +41,54 @@ export type WorkflowInputMappingSource = {
   path?: string
 }
 
+export type WorkflowNodePosition = {
+  x: number
+  y: number
+}
+
+export type WorkflowNode = {
+  id: string
+  actionId: string
+  label?: string
+  position: WorkflowNodePosition
+  configOverrides?: Record<string, unknown>
+  enabled: boolean
+}
+
+export type WorkflowPortRef = {
+  nodeId: string
+  portId: string
+  path?: string
+}
+
+export type WorkflowEdgeTransform = {
+  mode: 'none' | 'auto' | 'json_path' | 'template'
+  config?: Record<string, unknown>
+}
+
+export type WorkflowEdge = {
+  id: string
+  from: WorkflowPortRef
+  to: WorkflowPortRef
+  transform?: WorkflowEdgeTransform
+  enabled: boolean
+}
+
+export type WorkflowGraph = {
+  nodes: WorkflowNode[]
+  edges: WorkflowEdge[]
+  viewport?: {
+    x: number
+    y: number
+    zoom: number
+  }
+}
+
 export type WorkflowDefinition = {
   id: string
   name: string
   actionRefs: WorkflowActionRef[]
+  graph?: WorkflowGraph
   permissions: DevicePolicy
   runPolicy?: WorkflowRunPolicy
   schedule?: WorkflowSchedule
@@ -73,6 +117,7 @@ export type WorkflowState = {
 export type CreateWorkflowInput = {
   name: string
   actionRefs?: WorkflowDefinition['actionRefs']
+  graph?: WorkflowGraph
   permissions?: DevicePolicy
   runPolicy?: WorkflowRunPolicy
   schedule?: WorkflowSchedule
@@ -82,6 +127,12 @@ export type CreateWorkflowInput = {
 export type UpdateWorkflowInput = Partial<
   Pick<
     WorkflowDefinition,
-    'name' | 'actionRefs' | 'permissions' | 'runPolicy' | 'schedule' | 'state'
+    | 'name'
+    | 'actionRefs'
+    | 'graph'
+    | 'permissions'
+    | 'runPolicy'
+    | 'schedule'
+    | 'state'
   >
 >

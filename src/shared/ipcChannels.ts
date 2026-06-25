@@ -28,6 +28,13 @@ export const ipcRequestChannels = {
     update: 'todos:update',
     delete: 'todos:delete',
   },
+  scraps: {
+    list: 'scraps:list',
+    search: 'scraps:search',
+    create: 'scraps:create',
+    update: 'scraps:update',
+    delete: 'scraps:delete',
+  },
   externalBridge: {
     getSchema: 'external-bridge:get-schema',
   },

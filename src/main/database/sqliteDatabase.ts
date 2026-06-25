@@ -285,4 +285,38 @@ const migrations: Array<{
         .run()
     },
   },
+  {
+    id: '008_create_scraps',
+    up(database) {
+      database
+        .prepare(
+          `
+          CREATE TABLE scraps (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            source TEXT NOT NULL,
+            status TEXT NOT NULL,
+            collection_ids TEXT NOT NULL,
+            tags TEXT NOT NULL,
+            summary TEXT,
+            document TEXT,
+            search_index TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          )
+          `,
+        )
+        .run()
+      database
+        .prepare(
+          'CREATE INDEX scraps_status_updated_idx ON scraps (status, updated_at DESC)',
+        )
+        .run()
+      database
+        .prepare(
+          'CREATE INDEX scraps_updated_idx ON scraps (updated_at DESC)',
+        )
+        .run()
+    },
+  },
 ]

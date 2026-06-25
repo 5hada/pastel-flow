@@ -6,6 +6,8 @@ import type {
 import type {
   ActionDefinition,
   ActionIOField,
+  DatabaseActionConfig,
+  ScrapActionConfig,
   TransformActionConfig,
 } from './types'
 
@@ -60,6 +62,27 @@ export function getActionInputSchema(
       return getTransformInputSchema(action.config as Partial<TransformActionConfig>)
     case 'tool_action':
       return []
+    case 'webhook_action':
+      return [
+        {
+          id: 'payload',
+          name: 'Payload',
+          type: 'json',
+          required: true,
+        },
+      ]
+    case 'scrap_action':
+      return getScrapInputSchema(action.config as Partial<ScrapActionConfig>)
+    case 'database_action':
+      return getDatabaseInputSchema(action.config as Partial<DatabaseActionConfig>)
+    case 'macro_action':
+      return [
+        {
+          id: 'input',
+          name: 'Input',
+          type: 'json',
+        },
+      ]
   }
 }
 
@@ -99,6 +122,82 @@ export function getActionOutputSchema(
       return getTransformOutputSchema(action.config as Partial<TransformActionConfig>)
     case 'tool_action':
       return []
+    case 'webhook_action':
+      return [
+        {
+          id: 'response',
+          name: 'Response',
+          type: 'json',
+        },
+      ]
+    case 'scrap_action':
+      return getScrapOutputSchema(action.config as Partial<ScrapActionConfig>)
+    case 'database_action':
+      return getDatabaseOutputSchema(action.config as Partial<DatabaseActionConfig>)
+    case 'macro_action':
+      return [
+        {
+          id: 'output',
+          name: 'Output',
+          type: 'json',
+        },
+      ]
+  }
+}
+
+function getScrapInputSchema(
+  config: Partial<ScrapActionConfig>,
+): ActionIOField[] {
+  switch (config.mode) {
+    case 'ingest':
+      return [{ id: 'source', name: 'Source', type: 'json', required: true }]
+    case 'classify':
+      return [{ id: 'scrap', name: 'Scrap', type: 'scrap', required: true }]
+    case 'search':
+      return [{ id: 'query', name: 'Query', type: 'json', required: true }]
+    case 'update':
+      return [{ id: 'scrap', name: 'Scrap', type: 'scrap', required: true }]
+    default:
+      return []
+  }
+}
+
+function getScrapOutputSchema(
+  config: Partial<ScrapActionConfig>,
+): ActionIOField[] {
+  switch (config.mode) {
+    case 'search':
+      return [{ id: 'results', name: 'Results', type: 'scrap[]' }]
+    case 'classify':
+      return [{ id: 'classification', name: 'Classification', type: 'json' }]
+    case 'ingest':
+    case 'update':
+    default:
+      return [{ id: 'scrap', name: 'Scrap', type: 'scrap' }]
+  }
+}
+
+function getDatabaseInputSchema(
+  config: Partial<DatabaseActionConfig>,
+): ActionIOField[] {
+  switch (config.mode) {
+    case 'upsert':
+      return [{ id: 'record', name: 'Record', type: 'json', required: true }]
+    case 'query':
+    default:
+      return [{ id: 'query', name: 'Query', type: 'json', required: true }]
+  }
+}
+
+function getDatabaseOutputSchema(
+  config: Partial<DatabaseActionConfig>,
+): ActionIOField[] {
+  switch (config.mode) {
+    case 'upsert':
+      return [{ id: 'record', name: 'Record', type: 'json' }]
+    case 'query':
+    default:
+      return [{ id: 'rows', name: 'Rows', type: 'json' }]
   }
 }
 
@@ -219,6 +318,10 @@ export function canMapActionField(
   source: ActionIOField,
   target: ActionIOField,
 ): boolean {
+  if (source.type === 'any' || target.type === 'any') {
+    return true
+  }
+
   if (source.type === target.type) {
     return true
   }
@@ -230,7 +333,11 @@ export function canMapActionField(
     (source.type === 'string[]' && target.type === 'json') ||
     (source.type === 'url[]' && target.type === 'json') ||
     (source.type === 'file' && target.type === 'string') ||
-    (source.type === 'image' && target.type === 'string')
+    (source.type === 'image' && target.type === 'string') ||
+    (source.type === 'scrap' && target.type === 'json') ||
+    (source.type === 'scrap[]' && target.type === 'json') ||
+    (source.type === 'document' && target.type === 'json') ||
+    (source.type === 'chunk[]' && target.type === 'json')
   )
 }
 

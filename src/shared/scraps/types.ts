@@ -1,51 +1,37 @@
+import type { ScrapCollection } from './collectionTypes'
+import type { ScrapDocument } from './documentTypes'
+import type { ScrapIndex } from './indexTypes'
+import type { CreateScrapSourceInput, ScrapSource } from './sourceTypes'
 
-
-export type ScrapType = 
-    |   'url'
-    |   'file'
-    |   'memo'
-    |   'text'
-
+export type ScrapStatus =
+  | 'inbox'
+  | 'processing'
+  | 'classified'
+  | 'archived'
+  | 'dismissed'
 
 export type ScrapItem = {
-    id: string
-    title: string
-    date: string
-    type: ScrapType
-    meta: ScrapMeta
-    status: ScrapStatus
+  id: string
+  title: string
+  source: ScrapSource
+  status: ScrapStatus
+  collectionIds: string[]
+  tags: string[]
+  summary?: string
+  document?: ScrapDocument
+  index?: ScrapIndex
+  createdAt: string
+  updatedAt: string
 }
 
-
-export type ScrapStatus = 
-    |   'inbox'
-    |   'processing'
-    |   'classified'
-    |   'archived'
-    |   'dismissed'
-
-
-export type ScrapMeta = 
-    |   ScrapUrlMeta
-    |   ScrapFileMeta
-    |   ScrapMemoMeta
-    |   ScrapTextMeta
-
-export type ScrapUrlMeta = {
-    content: string
-    // urlType: UrlType
+export type CreateScrapInput = {
+  title?: string
+  source: CreateScrapSourceInput
+  status?: ScrapStatus
+  collectionIds?: ScrapCollection['id'][]
+  tags?: string[]
 }
 
-export type ScrapFileMeta = {
-    path: string
-    // extension: ExtensionType
-}
-
-export type ScrapMemoMeta = {
-    content: string
-}
-
-export type ScrapTextMeta = {
-    content: string
-    source: string | unknown
-}
+export type UpdateScrapInput = Partial<
+  Pick<ScrapItem, 'title' | 'status' | 'collectionIds' | 'tags' | 'summary'>
+>

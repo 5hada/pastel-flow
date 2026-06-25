@@ -274,6 +274,10 @@ export function getTaskTypeForActionType(
     case 'transform_action':
       return 'transform'
     case 'tool_action':
+    case 'webhook_action':
+    case 'scrap_action':
+    case 'database_action':
+    case 'macro_action':
       return null
   }
 }

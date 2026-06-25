@@ -37,6 +37,7 @@ export function AppHeader({
         currentMode={modeTogglesProps.currentMode}
         onActions={modeTogglesProps.onActions}
         onRun={modeTogglesProps.onRun}
+        onScraps={modeTogglesProps.onScraps}
         onSettings={modeTogglesProps.onSettings}
         onTodos={modeTogglesProps.onTodos}
         onTools={modeTogglesProps.onTools}

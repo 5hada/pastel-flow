@@ -7,6 +7,7 @@ import {
 import type { ActionDefinition, ActionIOField, ActionType } from './actions'
 import {
   defaultWorkflowState,
+  normalizeWorkflowGraph,
   normalizeWorkflowRunPolicy,
   normalizeWorkflowSchedule,
   type WorkflowActionRef,
@@ -189,6 +190,7 @@ function normalizeSyncWorkflow(value: unknown): SyncWorkflowDefinition {
     id: value.id.trim(),
     name: value.name.trim(),
     actionRefs: normalizeWorkflowActionRefs(value.actionRefs),
+    graph: normalizeWorkflowGraph(value.graph),
     permissions: normalizeDevicePolicy(
       isRecord(value.permissions) ? value.permissions : undefined,
     ),
@@ -366,10 +368,14 @@ function sanitizeActionConfig(
     case 'tool_action':
       return sanitizeToolActionConfig(config)
     case 'crawler_action':
+    case 'database_action':
     case 'discord_dry_run_action':
+    case 'macro_action':
     case 'notion_dry_run_action':
+    case 'scrap_action':
     case 'trading_dry_run_action':
     case 'transform_action':
+    case 'webhook_action':
       return config
   }
 }
@@ -497,7 +503,11 @@ function isActionType(value: unknown): value is ActionType {
     value === 'notion_dry_run_action' ||
     value === 'trading_dry_run_action' ||
     value === 'transform_action' ||
-    value === 'tool_action'
+    value === 'tool_action' ||
+    value === 'webhook_action' ||
+    value === 'scrap_action' ||
+    value === 'database_action' ||
+    value === 'macro_action'
   )
 }
 
@@ -516,7 +526,15 @@ function isActionIoFieldType(value: unknown): value is ActionIOField['type'] {
     value === 'image' ||
     value === 'image[]' ||
     value === 'url' ||
-    value === 'url[]'
+    value === 'url[]' ||
+    value === 'scrap' ||
+    value === 'scrap[]' ||
+    value === 'scrap_collection' ||
+    value === 'document' ||
+    value === 'document[]' ||
+    value === 'chunk' ||
+    value === 'chunk[]' ||
+    value === 'any'
   )
 }
 

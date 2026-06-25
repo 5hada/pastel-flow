@@ -5,6 +5,7 @@ import {
 } from '../../../shared/devices/'
 import {
   defaultWorkflowState,
+  normalizeWorkflowGraph,
   normalizeWorkflowRunPolicy,
   normalizeWorkflowSchedule,
   type CreateWorkflowInput,
@@ -54,6 +55,7 @@ export function createWorkflowStore({
           id: randomUUID(),
           name: normalizeWorkflowName(input.name),
           actionRefs,
+          graph: normalizeWorkflowGraph(input.graph),
           permissions: normalizeDevicePolicy(
             input.permissions ?? defaultDevicePolicy,
           ),
@@ -99,6 +101,10 @@ export function createWorkflowStore({
               ? currentWorkflow.name
               : normalizeWorkflowName(input.name),
           actionRefs,
+          graph:
+            input.graph === undefined
+              ? currentWorkflow.graph
+              : normalizeWorkflowGraph(input.graph),
           permissions: input.permissions
             ? normalizeDevicePolicy(input.permissions)
             : currentWorkflow.permissions,

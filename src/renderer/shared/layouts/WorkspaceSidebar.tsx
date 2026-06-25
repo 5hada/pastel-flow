@@ -7,6 +7,7 @@ import type {
   WorkspaceFolder,
   WorkspaceFolderScope,
 } from '../../../shared/settings'
+import type { ScrapItem } from '../../../shared/scraps'
 import type { TodoItem } from '../../../shared/todos'
 import type { RegisteredToolModule } from '../../../shared/tools'
 import type { UrlGroup } from '../../../shared/urlGroups'
@@ -31,6 +32,7 @@ export type WorkspaceSidebarProps = {
   selectedToolId: string | null
   selectedWorkflowId: string | null
   selectedActionId: string | null
+  scraps: ScrapItem[]
   toolModules: RegisteredToolModule[]
   todos: TodoItem[]
   urlGroups: UrlGroup[]
@@ -54,6 +56,7 @@ export function WorkspaceSidebar({
   selectedCategory,
   selectedCollectionFolderId,
   selectedSettingsCategory,
+  scraps,
   todos,
   toolModules,
   urlGroups,
@@ -73,6 +76,7 @@ export function WorkspaceSidebar({
   ).length
   const countMap: Record<WorkspaceMode,number> = {
   'actions': visibleActionCount,
+  'scraps': scraps.length,
   'todos': todos.length,
   'tools':toolModules.length,
   'urlGroups':urlGroups.length,

@@ -54,6 +54,7 @@ export const commonIcons = {
   search: <Magnifier/>,
   secret: <ShieldKeyhole/>,
   settings: <Gear/>,
+  scraps: <Database/>,
   starred: <Star/>,
   tools: <Hammer/>,
   todos: <Calendar/>,

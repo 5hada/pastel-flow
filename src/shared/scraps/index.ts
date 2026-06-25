@@ -1,1 +1,5 @@
 export * from './types'
+export * from './sourceTypes'
+export * from './documentTypes'
+export * from './indexTypes'
+export * from './collectionTypes'

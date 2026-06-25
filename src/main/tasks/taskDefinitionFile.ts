@@ -3,6 +3,7 @@ import path from 'node:path'
 import type { ActionDefinition } from '../../shared/actions'
 import {
   defaultWorkflowState,
+  normalizeWorkflowGraph,
   normalizeWorkflowRunPolicy,
   normalizeWorkflowSchedule,
   type WorkflowDefinition,
@@ -59,6 +60,7 @@ function normalizeStoredWorkflow(
     actionRefs: normalizeWorkflowActionRefs(
       Array.isArray(workflow.actionRefs) ? workflow.actionRefs : [],
     ),
+    graph: normalizeWorkflowGraph(workflow.graph),
     permissions: normalizeDevicePolicy(workflow.permissions),
     runPolicy: normalizeWorkflowRunPolicy(workflow.runPolicy),
     schedule: normalizeWorkflowSchedule(workflow.schedule),

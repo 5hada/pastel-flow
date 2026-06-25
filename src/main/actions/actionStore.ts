@@ -45,6 +45,8 @@ export function createActionStore({
         id: randomUUID(),
         name: normalizeActionName(input.name),
         type: input.type,
+        capability: input.capability,
+        version: input.version,
         config: input.config,
         secretRefs: input.secretRefs,
         inputSchema: input.inputSchema,

@@ -3,6 +3,7 @@ import type { WorkspaceMode } from '../../state/taskFormState'
 import { ActionsWorkspace } from '../../../features/actions/ActionsWorkspace'
 import { RunWorkspace } from '../../../features/run/RunWorkspace'
 import { SettingsWorkspace } from '../../../features/settings/SettingsWorkspace'
+import { ScrapsWorkspace } from '../../../features/scraps/ScrapsWorkspace'
 import { TodosWorkspace } from '../../../features/todos/TodosWorkspace'
 import { ToolsWorkspace } from '../../../features/tools/ToolsWorkspace'
 import { UrlGroupsWorkspace } from '../../../features/urlGroups/UrlGroupsWorkspace'
@@ -134,6 +135,28 @@ export const workspaceTemplates: WorkspaceTemplate[] = [
       }
 
       return <UrlGroupsWorkspace {...props} />
+    },
+  },
+  {
+    type: 'scraps',
+    render(context: WorkspaceContext) {
+      const props = {
+        isLoading: context.isLoading,
+        scraps: filterByFolder(
+          context.scraps,
+          context.selectedCollectionFolderId,
+          context.appSettings.workspaceFolderAssignments,
+        ),
+        selectedCollectionFolderId: context.selectedCollectionFolderId,
+        selectedScrapId: context.selectedScrapId,
+        workspaceFolders: context.appSettings.workspaceFolders,
+        onCreateScrap: context.handleCreateScrap,
+        onDeleteScrap: context.handleDeleteScrap,
+        onSelectScrap: context.setSelectedScrapId,
+        onUpdateScrap: context.handleUpdateScrap,
+      }
+
+      return <ScrapsWorkspace {...props} />
     },
   },
   {

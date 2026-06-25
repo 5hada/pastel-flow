@@ -7,6 +7,7 @@ import {
   initializeBrowserActionGroupRuntime,
 } from '../browsers/browserActionGroupRuntime'
 import { crawlerAdapter } from '../actions/adapters/crawlerAdapter'
+import { createScrapAdapter } from '../actions/adapters/scrapAdapter'
 import { transformAdapter } from '../actions/adapters/transformAdapter'
 import {
   discordBotAdapter,
@@ -16,6 +17,8 @@ import {
 import { createDeviceStore } from '../devices/store/deviceStore'
 import { registerSecretIpc } from '../secrets/ipc/secretIpc'
 import { createSecretStore } from '../secrets/store/secretStore'
+import { registerScrapIpc } from '../scraps/ipc/scrapIpc'
+import { createScrapStore } from '../scraps/scrapStore'
 import { registerAppSettingsIpc } from '../settings/ipc/appSettingsIpc'
 import { createAppSettingsStore } from '../settings/store/appSettingsStore'
 import { registerSyncIpc } from '../sync/ipc/syncIpc'
@@ -103,6 +106,9 @@ export async function initializeMainProcessServices(
   const todoStore = createTodoStore({
     database,
   })
+  const scrapStore = createScrapStore({
+    database,
+  })
   const workflowArtifactWriter = createWorkflowArtifactWriter({
     artifactStore: workflowArtifactStore,
     dataDir,
@@ -125,6 +131,7 @@ export async function initializeMainProcessServices(
     notionSyncAdapter,
     tradingBotAdapter,
     transformAdapter,
+    createScrapAdapter({ scrapStore }),
   ])
   await initializeBrowserActionGroupRuntime(dataDir)
   const mockSyncStore = createMockSyncStore({
@@ -163,6 +170,7 @@ export async function initializeMainProcessServices(
     actionStore,
   )
   registerTodoIpc(ipcMain, todoStore)
+  registerScrapIpc(ipcMain, scrapStore)
   registerUrlGroupIpc(ipcMain, urlGroupStore)
   registerWorkflowIpc(
     ipcMain,

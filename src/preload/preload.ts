@@ -99,6 +99,23 @@ const pastelFlowApi = {
       return invoke(ipcRequestChannels.todos.delete, id)
     },
   },
+  scraps: {
+    list(input?: unknown) {
+      return invoke(ipcRequestChannels.scraps.list, input)
+    },
+    search(query: unknown) {
+      return invoke(ipcRequestChannels.scraps.search, query)
+    },
+    create(input: unknown) {
+      return invoke(ipcRequestChannels.scraps.create, input)
+    },
+    update(id: string, input: unknown) {
+      return invoke(ipcRequestChannels.scraps.update, id, input)
+    },
+    delete(id: string) {
+      return invoke(ipcRequestChannels.scraps.delete, id)
+    },
+  },
   externalBridge: {
     getSchema() {
       return invoke(ipcRequestChannels.externalBridge.getSchema)

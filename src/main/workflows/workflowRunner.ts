@@ -318,17 +318,9 @@ async function runActionWorkflow(
         })
         const appSettingsSnapshot = await context.appSettingsStore.getSnapshot()
         const actionWithMappedInput =
-          action.type === 'transform_action'
-            ? {
-                ...action,
-                config: {
-                  ...(isRecord(action.config) ? action.config : {}),
-                  input: resolveInputMapping(actionRef.inputMapping, outputScope),
-                },
-              }
-            : action.type === 'browser_action'
-              ? await resolveBrowserActionUrlGroup(action, context.urlGroupStore)
-              : action
+          action.type === 'browser_action'
+            ? await resolveBrowserActionUrlGroup(action, context.urlGroupStore)
+            : resolveActionInputMapping(action, actionRef.inputMapping, outputScope)
         await createBrowserUrlGroupItemRuns({
           action,
           actionRunId: actionRun.id,
@@ -881,6 +873,34 @@ function resolveInputMapping(
         source.path ? readDotPath(outputValue, source.path) : outputValue,
       ]
     }),
+  )
+}
+
+function resolveActionInputMapping(
+  action: ActionDefinition,
+  inputMapping: WorkflowInputMapping | undefined,
+  outputScope: Record<string, unknown>,
+): ActionDefinition {
+  if (!inputMapping || !canReceiveMappedInput(action.type)) {
+    return action
+  }
+
+  return {
+    ...action,
+    config: {
+      ...(isRecord(action.config) ? action.config : {}),
+      input: resolveInputMapping(inputMapping, outputScope),
+    },
+  }
+}
+
+function canReceiveMappedInput(actionType: ActionDefinition['type']): boolean {
+  return (
+    actionType === 'transform_action' ||
+    actionType === 'scrap_action' ||
+    actionType === 'database_action' ||
+    actionType === 'webhook_action' ||
+    actionType === 'macro_action'
   )
 }
 

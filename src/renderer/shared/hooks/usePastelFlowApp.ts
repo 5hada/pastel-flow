@@ -3,6 +3,7 @@ import type { WorkflowDefinition } from '../../../shared/workflows'
 import { useActionWorkflowData } from '../../features/actions/hooks/useActionWorkflowData'
 import { useAppSettingsData } from '../../features/settings/hooks/useAppSettingsData'
 import { useSecretsData } from '../../features/secrets/hooks/useSecretsData'
+import { useScrapsData } from '../../features/scraps/hooks/useScrapsData'
 import { useSyncData } from '../../features/sync/hooks/useSyncData'
 import { useTodosData } from '../../features/todos/hooks/useTodosData'
 import { useToolModulesData } from '../../features/tools/hooks/useToolModulesData'
@@ -74,6 +75,7 @@ export function usePastelFlowApp() {
     actionWorkflow.loadActionWorkflowData,
   )
   const todos = useTodosData(setErrorMessage)
+  const scraps = useScrapsData(setErrorMessage)
   const urlGroups = useUrlGroupsData(setErrorMessage)
   const sync = useSyncData({
     loadAppSettings: settings.loadAppSettings,
@@ -88,6 +90,7 @@ export function usePastelFlowApp() {
     void secrets.loadSecrets()
     void secrets.loadSecretStorageStatus()
     void sync.loadSyncStatus()
+    void scraps.loadScraps()
     void todos.loadTodos()
     void tools.loadToolModules()
     void urlGroups.loadUrlGroups()
@@ -145,6 +148,7 @@ export function usePastelFlowApp() {
   async function reloadWorkspaceData() {
     await Promise.all([
       actionWorkflow.loadActionWorkflowData(),
+      scraps.loadScraps(),
       todos.loadTodos(),
       tools.loadToolModules(),
       urlGroups.loadUrlGroups(),
@@ -182,6 +186,13 @@ export function usePastelFlowApp() {
     urlGroups.setSelectedUrlGroupId(null)
     setWorkspaceMode('urlGroups')
     void urlGroups.loadUrlGroups()
+  }
+
+  function openScrapsMode() {
+    setSelectedCollectionFolderId('all')
+    scraps.setSelectedScrapId(null)
+    setWorkspaceMode('scraps')
+    void scraps.loadScraps()
   }
 
   function openTodosMode() {
@@ -514,6 +525,7 @@ export function usePastelFlowApp() {
     selectedCollectionFolderId,
     selectedSettingsCategory,
     selectedToolId: tools.selectedToolId,
+    selectedScrapId: scraps.selectedScrapId,
     selectedWorkflowId: actionWorkflow.selectedWorkflowId,
     settingsErrorMessage: settings.settingsErrorMessage,
     settingsForm: settings.settingsForm,
@@ -529,6 +541,8 @@ export function usePastelFlowApp() {
     urlGroupItemRuns,
     selectedWorkflowRunId,
     toolInputValues: tools.toolInputValues,
+    scraps: scraps.scraps,
+    scrapSearchResults: scraps.scrapSearchResults,
     todos: todos.todos,
     selectedTodoId: todos.selectedTodoId,
     todoSortMode,
@@ -579,6 +593,7 @@ export function usePastelFlowApp() {
     openActionMode,
     openCategory,
     openRunMode,
+    openScrapsMode,
     openSettingsMode,
     openTodosMode,
     openToolsMode,
@@ -593,6 +608,7 @@ export function usePastelFlowApp() {
     setSecretForm: secrets.setSecretForm,
     setSelectedActionId: actionWorkflow.setSelectedActionId,
     setSelectedCollectionFolderId,
+    setSelectedScrapId: scraps.setSelectedScrapId,
     setSelectedSettingsCategory,
     setSelectedToolId: tools.setSelectedToolId,
     setSelectedTodoId: todos.setSelectedTodoId,
@@ -605,14 +621,18 @@ export function usePastelFlowApp() {
     setToolRunResult: tools.setToolRunResult,
     createWorkspaceFolder,
     handleCreateTodo: todos.createTodo,
+    handleCreateScrap: scraps.createScrap,
     handleCreateUrlGroup: urlGroups.createUrlGroup,
     handleDeleteTodo: todos.deleteTodo,
+    handleDeleteScrap: scraps.deleteScrap,
     handleDeleteUrlGroup: urlGroups.deleteUrlGroup,
     handleIncludeCompletedTodosChange(value: boolean) {
       todos.setIncludeCompletedTodos(value)
       void todos.loadTodos({ includeCompleted: value })
     },
     handleUpdateTodo: todos.updateTodo,
+    handleUpdateScrap: scraps.updateScrap,
+    handleSearchScraps: scraps.searchScraps,
     handleUpdateUrlGroup: urlGroups.updateUrlGroup,
     deleteWorkspaceFolder,
     moveWorkspaceFolder,
